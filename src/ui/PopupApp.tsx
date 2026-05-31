@@ -1,9 +1,12 @@
-import { useEffect, useReducer } from "preact/hooks";
+import { useEffect, useReducer, useState } from "preact/hooks";
 
+import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
 import type { RuntimeResponse, ScanSummary } from "../core/messages";
+import type { BatchExportSuccess, BatchListSuccess } from "../core/messages";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 import { createFileBlob } from "../utils/blob";
 import { ActionBar } from "./components/ActionBar";
+import { BatchExport } from "./components/BatchExport";
 import { CompletenessReport } from "./components/CompletenessReport";
 import { ExportOptionsForm } from "./components/ExportOptionsForm";
 import { PopupFooter } from "./components/PopupFooter";
@@ -12,6 +15,8 @@ import { PreviewPanel } from "./components/PreviewPanel";
 import { ScanControls } from "./components/ScanControls";
 import {
   buildCancelScanRequest,
+  buildBatchExportRequest,
+  buildBatchListRequest,
   buildCopyMarkdownRequest,
   buildClearSelectionRequest,
   buildDownloadRequest,
@@ -36,6 +41,11 @@ interface PopupExportSuccess {
 
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
+  const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
+  const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
+  const [batchStatus, setBatchStatus] = useState("Batch export is idle.");
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions = state.completeness !== undefined && !busy;
 
@@ -102,6 +112,55 @@ export function PopupApp() {
     }
   }
 
+  async function handleLoadBatchCandidates() {
+    setBatchBusy(true);
+    setBatchStatus("Looking for open AI chat tabs...");
+    setBatchResults([]);
+
+    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+
+    if (response.ok) {
+      setBatchCandidates(response.value.tabs);
+      setBatchSelectedTabIds([]);
+      setBatchStatus(`Found ${response.value.tabs.length} open AI chat tab(s).`);
+    } else {
+      setBatchStatus(response.error.message);
+    }
+
+    setBatchBusy(false);
+  }
+
+  function handleToggleBatchTab(tabId: number) {
+    setBatchSelectedTabIds((selected) =>
+      selected.includes(tabId)
+        ? selected.filter((candidate) => candidate !== tabId)
+        : [...selected, tabId]
+    );
+  }
+
+  async function handleBatchExport() {
+    if (batchSelectedTabIds.length === 0) {
+      setBatchStatus("Select at least one open tab.");
+      return;
+    }
+
+    setBatchBusy(true);
+    setBatchStatus("Exporting selected tabs locally...");
+
+    const response = await sendRuntimeMessage<BatchExportSuccess>(
+      buildBatchExportRequest(state, batchSelectedTabIds)
+    );
+
+    if (response.ok) {
+      setBatchResults(response.value.results);
+      setBatchStatus(`Saved ${response.value.zipFilename}.`);
+    } else {
+      setBatchStatus(response.error.message);
+    }
+
+    setBatchBusy(false);
+  }
+
   async function runExportAction(request: ReturnType<typeof buildDownloadRequest>) {
     dispatch({ type: "export_started" });
 
@@ -151,6 +210,16 @@ export function PopupApp() {
         onScopeChange={(scope) => dispatch({ scope, type: "set_scope" })}
         onStartSelection={handleStartSelection}
         options={state.options}
+      />
+      <BatchExport
+        busy={batchBusy || busy}
+        candidates={batchCandidates}
+        onExportSelected={handleBatchExport}
+        onLoadCandidates={handleLoadBatchCandidates}
+        onToggleTab={handleToggleBatchTab}
+        results={batchResults}
+        selectedTabIds={batchSelectedTabIds}
+        status={batchStatus}
       />
       <PreviewPanel messages={getScopedPreviewMessages(state)} />
       {state.errorMessage ? <p className="error-text">{state.errorMessage}</p> : null}

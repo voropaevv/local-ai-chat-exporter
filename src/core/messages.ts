@@ -1,10 +1,13 @@
 import type { ExportOptions, SerializedExportError } from "./export-options";
+import type { BatchCandidateTab, BatchManifestResult } from "./batch";
 import type { CompletenessReport, ChatRole } from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
 export const POPUP_SCAN_MESSAGE = "local-ai-chat-exporter/scan-current-tab";
 export const POPUP_CANCEL_SCAN_MESSAGE = "local-ai-chat-exporter/cancel-scan";
 export const POPUP_EXPORT_MESSAGE = "local-ai-chat-exporter/export-current-tab";
+export const POPUP_BATCH_LIST_MESSAGE = "local-ai-chat-exporter/list-open-chat-tabs";
+export const POPUP_BATCH_EXPORT_MESSAGE = "local-ai-chat-exporter/export-open-chat-tabs";
 export const POPUP_START_SELECTION_MESSAGE = "local-ai-chat-exporter/start-selection";
 export const POPUP_CLEAR_SELECTION_MESSAGE = "local-ai-chat-exporter/clear-selection";
 export const CONTENT_SCAN_MESSAGE = "local-ai-chat-exporter/content-scan";
@@ -44,6 +47,16 @@ export interface PopupExportRequest {
   readonly download?: boolean;
   readonly options?: Partial<ExportOptions>;
   readonly returnFiles?: boolean;
+}
+
+export interface PopupBatchListRequest {
+  readonly type: typeof POPUP_BATCH_LIST_MESSAGE;
+}
+
+export interface PopupBatchExportRequest {
+  readonly options?: Partial<ExportOptions>;
+  readonly tabIds: readonly number[];
+  readonly type: typeof POPUP_BATCH_EXPORT_MESSAGE;
 }
 
 export interface PopupStartSelectionRequest {
@@ -87,6 +100,16 @@ export interface PopupExportSuccess {
 }
 
 export type ContentExportSuccess = PopupExportSuccess;
+
+export interface BatchListSuccess {
+  readonly tabs: readonly BatchCandidateTab[];
+}
+
+export interface BatchExportSuccess {
+  readonly downloaded: readonly string[];
+  readonly results: readonly BatchManifestResult[];
+  readonly zipFilename: string;
+}
 
 export type RuntimeResponse<T> =
   | {

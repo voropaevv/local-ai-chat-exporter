@@ -2,10 +2,14 @@ import type { ExportOptions } from "../../core/export-options";
 import type { RedactionPreset, RedactionSettings } from "../../core/redaction";
 import {
   POPUP_CANCEL_SCAN_MESSAGE,
+  POPUP_BATCH_EXPORT_MESSAGE,
+  POPUP_BATCH_LIST_MESSAGE,
   POPUP_CLEAR_SELECTION_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
   POPUP_START_SELECTION_MESSAGE,
+  type PopupBatchExportRequest,
+  type PopupBatchListRequest,
   type PopupCancelScanRequest,
   type PopupClearSelectionRequest,
   type PopupExportRequest,
@@ -245,6 +249,21 @@ export function buildStartSelectionRequest(): PopupStartSelectionRequest {
 
 export function buildClearSelectionRequest(): PopupClearSelectionRequest {
   return { type: POPUP_CLEAR_SELECTION_MESSAGE };
+}
+
+export function buildBatchListRequest(): PopupBatchListRequest {
+  return { type: POPUP_BATCH_LIST_MESSAGE };
+}
+
+export function buildBatchExportRequest(
+  state: PopupState,
+  tabIds: readonly number[]
+): PopupBatchExportRequest {
+  return {
+    options: buildExportOptions(state, ["md", "json"]),
+    tabIds,
+    type: POPUP_BATCH_EXPORT_MESSAGE
+  };
 }
 
 export function buildDownloadRequest(state: PopupState): PopupExportRequest {

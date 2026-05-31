@@ -1,5 +1,14 @@
 import { strToU8, zipSync } from "fflate";
 
+import {
+  createBatchEntryBase,
+  createBatchManifest,
+  createBatchRootDirectory,
+  type BatchExportFailure,
+  type BatchExportResult,
+  type BatchExportSuccess,
+  type BatchManifestFile
+} from "../core/batch";
 import type { ConversationExport } from "../core/schema";
 import {
   createRenderedFile,
@@ -49,6 +58,78 @@ export function renderZip(
   }
 
   return createRenderedFile(conversation, "zip", "application/zip", zipSync(zipEntries), options);
+}
+
+export interface BatchZipInput {
+  readonly exportedAt: string;
+  readonly results: readonly BatchZipResult[];
+}
+
+export type BatchZipResult =
+  | (Omit<BatchExportSuccess, "files"> & {
+      readonly files: readonly RenderedFile<string | Uint8Array>[];
+    })
+  | BatchExportFailure;
+
+export function renderBatchZip(input: BatchZipInput): RenderedFile<Uint8Array> {
+  const rootDirectory = createBatchRootDirectory(input.exportedAt);
+  const zipEntries: Record<string, Uint8Array> = {};
+  const manifestResults = createBatchZipManifestResults(input.results);
+
+  input.results.forEach((result, index) => {
+    if (result.status === "failed") {
+      return;
+    }
+
+    const manifestResult = manifestResults[index];
+
+    if (manifestResult.status === "failed") {
+      return;
+    }
+
+    result.files.forEach((file, fileIndex) => {
+      zipEntries[`${rootDirectory}/${manifestResult.files[fileIndex].filename}`] = toUint8Array(
+        file.bytes
+      );
+    });
+  });
+  const manifest = createBatchManifest({
+    exportedAt: input.exportedAt,
+    results: manifestResults,
+    rootDirectory
+  });
+
+  zipEntries[`${rootDirectory}/manifest.json`] = strToU8(`${JSON.stringify(manifest, null, 2)}\n`);
+
+  return {
+    bytes: zipSync(zipEntries),
+    encoding: "binary",
+    filename: `${rootDirectory}.zip`,
+    format: "zip",
+    mimeType: "application/zip"
+  };
+}
+
+export function createBatchZipManifestResults(
+  results: readonly BatchZipResult[]
+): readonly BatchExportResult[] {
+  return results.map((result, index) => {
+    if (result.status === "failed") {
+      return result;
+    }
+
+    const base = createBatchEntryBase(result.tab, index);
+    const files = result.files.map((file) => ({
+      filename: `${base}.${file.format}`,
+      format: file.format,
+      mimeType: file.mimeType
+    })) satisfies readonly BatchManifestFile[];
+
+    return {
+      ...result,
+      files
+    };
+  });
 }
 
 function resolveZipFormats(

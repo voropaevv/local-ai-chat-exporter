@@ -4,6 +4,8 @@ import {
   serializeExportError
 } from "../../src/core/export-options";
 import {
+  POPUP_BATCH_EXPORT_MESSAGE,
+  POPUP_BATCH_LIST_MESSAGE,
   CONTENT_CANCEL_SCAN_MESSAGE,
   CONTENT_CLEAR_SELECTION_MESSAGE,
   CONTENT_EXPORT_MESSAGE,
@@ -19,6 +21,10 @@ import {
   type ContentExportSuccess,
   type ContentScanRequest,
   type ContentStartSelectionRequest,
+  type BatchExportSuccess,
+  type BatchListSuccess,
+  type PopupBatchExportRequest,
+  type PopupBatchListRequest,
   type PopupClearSelectionRequest,
   type PopupCancelScanRequest,
   type PopupExportRequest,
@@ -29,6 +35,7 @@ import {
   type ScanSummary
 } from "../../src/core/messages";
 import { downloadRenderedFiles } from "../../src/utils/download";
+import { handlePopupBatchExportRequest, handlePopupBatchListRequest } from "./batch";
 
 const CONTENT_SCRIPT_FILE = "content/main.js";
 
@@ -53,9 +60,17 @@ async function handlePopupRequest(
     | PopupScanRequest
     | PopupCancelScanRequest
     | PopupExportRequest
+    | PopupBatchListRequest
+    | PopupBatchExportRequest
     | PopupStartSelectionRequest
     | PopupClearSelectionRequest
-): Promise<ScanSummary | PopupExportSuccess | { readonly cancelled: true }> {
+): Promise<
+  | ScanSummary
+  | PopupExportSuccess
+  | BatchListSuccess
+  | BatchExportSuccess
+  | { readonly cancelled: true }
+> {
   if (request.type === POPUP_SCAN_MESSAGE) {
     return handlePopupScanRequest();
   }
@@ -70,6 +85,14 @@ async function handlePopupRequest(
 
   if (request.type === POPUP_CLEAR_SELECTION_MESSAGE) {
     return handlePopupSelectionMessage({ type: CONTENT_CLEAR_SELECTION_MESSAGE });
+  }
+
+  if (request.type === POPUP_BATCH_LIST_MESSAGE) {
+    return handlePopupBatchListRequest();
+  }
+
+  if (request.type === POPUP_BATCH_EXPORT_MESSAGE) {
+    return handlePopupBatchExportRequest(request);
   }
 
   return handlePopupExportRequest(request);
@@ -226,6 +249,8 @@ function isPopupRequest(
   | PopupScanRequest
   | PopupCancelScanRequest
   | PopupExportRequest
+  | PopupBatchListRequest
+  | PopupBatchExportRequest
   | PopupStartSelectionRequest
   | PopupClearSelectionRequest {
   return (
@@ -233,6 +258,8 @@ function isPopupRequest(
     (message.type === POPUP_SCAN_MESSAGE ||
       message.type === POPUP_CANCEL_SCAN_MESSAGE ||
       message.type === POPUP_EXPORT_MESSAGE ||
+      message.type === POPUP_BATCH_LIST_MESSAGE ||
+      message.type === POPUP_BATCH_EXPORT_MESSAGE ||
       message.type === POPUP_START_SELECTION_MESSAGE ||
       message.type === POPUP_CLEAR_SELECTION_MESSAGE)
   );

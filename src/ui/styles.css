@@ -449,6 +449,34 @@ legend {
   list-style: none;
 }
 
+.batch-tab-list,
+.batch-result-list {
+  display: grid;
+  max-height: 150px;
+  gap: 8px;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.batch-tab-list li,
+.batch-result-list li {
+  min-width: 0;
+  border: 1px solid #e4eaf0;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfe;
+  color: #33424c;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.batch-tab-list .check-row {
+  font-weight: 560;
+}
+
 .preview-item {
   display: grid;
   gap: 5px;

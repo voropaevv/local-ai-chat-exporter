@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 
 import type { ConversationExport, ExportedMessage } from "../../../src/core/schema";
 import { renderConversationFiles } from "../../../src/core/export-options";
-import { renderZip } from "../../../src/renderers/zip";
+import { renderBatchZip, renderZip, type BatchZipResult } from "../../../src/renderers/zip";
 
 function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage {
   return {
@@ -91,5 +91,104 @@ describe("renderZip", () => {
 
     expect(rendered.format).toBe("zip");
     expect(rendered.filename).toBe("ZIP-Export.zip");
+  });
+});
+
+describe("renderBatchZip", () => {
+  test("bundles selected tab exports under a dated root and records failures", () => {
+    const results: readonly BatchZipResult[] = [
+      {
+        files: [
+          {
+            bytes: "# First\n",
+            encoding: "utf-8",
+            filename: "ignored.md",
+            format: "md",
+            mimeType: "text/markdown;charset=utf-8"
+          },
+          {
+            bytes: '{"title":"First"}\n',
+            encoding: "utf-8",
+            filename: "ignored.json",
+            format: "json",
+            mimeType: "application/json;charset=utf-8"
+          }
+        ],
+        messageCount: 2,
+        status: "success",
+        tab: {
+          id: 1,
+          platform: "chatgpt",
+          platformLabel: "ChatGPT",
+          title: "First chat",
+          url: "https://chatgpt.com/c/one"
+        },
+        warnings: []
+      },
+      {
+        error: "Cannot inject content script.",
+        status: "failed",
+        tab: {
+          id: 2,
+          platform: "chatgpt",
+          platformLabel: "ChatGPT",
+          title: "Second chat",
+          url: "https://chatgpt.com/c/two"
+        },
+        warnings: ["Skipped after failure"]
+      }
+    ];
+
+    const rendered = renderBatchZip({
+      exportedAt: "2026-05-31T10:20:30.000Z",
+      results
+    });
+    const zip = unzipSync(rendered.bytes);
+    const names = Object.keys(zip).sort();
+    const manifest = JSON.parse(
+      strFromU8(zip["local-ai-chat-export-2026-05-31/manifest.json"])
+    ) as { readonly results: readonly { readonly status: string; readonly error?: string }[] };
+
+    expect(rendered.filename).toBe("local-ai-chat-export-2026-05-31.zip");
+    expect(names).toEqual([
+      "local-ai-chat-export-2026-05-31/chatgpt-first-chat-1.json",
+      "local-ai-chat-export-2026-05-31/chatgpt-first-chat-1.md",
+      "local-ai-chat-export-2026-05-31/manifest.json"
+    ]);
+    expect(strFromU8(zip["local-ai-chat-export-2026-05-31/chatgpt-first-chat-1.md"])).toBe(
+      "# First\n"
+    );
+    expect(manifest.results).toEqual([
+      {
+        files: [
+          {
+            filename: "chatgpt-first-chat-1.md",
+            format: "md",
+            mimeType: "text/markdown;charset=utf-8"
+          },
+          {
+            filename: "chatgpt-first-chat-1.json",
+            format: "json",
+            mimeType: "application/json;charset=utf-8"
+          }
+        ],
+        messageCount: 2,
+        platform: "chatgpt",
+        status: "success",
+        tabId: 1,
+        title: "First chat",
+        url: "https://chatgpt.com/c/one",
+        warnings: []
+      },
+      {
+        error: "Cannot inject content script.",
+        platform: "chatgpt",
+        status: "failed",
+        tabId: 2,
+        title: "Second chat",
+        url: "https://chatgpt.com/c/two",
+        warnings: ["Skipped after failure"]
+      }
+    ]);
   });
 });
