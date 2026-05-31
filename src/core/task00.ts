@@ -14,9 +14,9 @@ export interface Task00OptionsPlaceholder {
 export function getTask00PopupState(): Task00PopupState {
   return {
     extensionName: "Local AI Chat Exporter",
-    platformStatus: "Platform detection arrives in Task 07.",
-    scanButtonLabel: "Scan conversation",
-    canScanConversation: false,
+    platformStatus: "Ready to export the current supported chat tab.",
+    scanButtonLabel: "Export Markdown",
+    canScanConversation: true,
     privacyNote: "100% local processing. No telemetry, trackers, remote logging, or remote servers."
   };
 }

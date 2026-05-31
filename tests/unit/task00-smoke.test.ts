@@ -33,13 +33,13 @@ describe("Task 00 scaffold", () => {
     expect(manifest.host_permissions).toBeUndefined();
   });
 
-  test("keeps the Task 00 popup in a local-only disabled scan state", () => {
+  test("exposes a local-only popup export action after the download pipeline is wired", () => {
     const state = getTask00PopupState();
 
     expect(state.extensionName).toBe("Local AI Chat Exporter");
-    expect(state.platformStatus).toBe("Platform detection arrives in Task 07.");
-    expect(state.scanButtonLabel).toBe("Scan conversation");
-    expect(state.canScanConversation).toBe(false);
+    expect(state.platformStatus).toBe("Ready to export the current supported chat tab.");
+    expect(state.scanButtonLabel).toBe("Export Markdown");
+    expect(state.canScanConversation).toBe(true);
     expect(state.privacyNote).toContain("100% local");
     expect(state.privacyNote).toContain("No telemetry");
   });
