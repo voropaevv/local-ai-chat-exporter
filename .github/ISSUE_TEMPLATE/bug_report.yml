@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a bug in the exporter
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and expected behavior.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Vivaldi
+        - Brave
+        - Edge
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: AI platform
+      options:
+        - ChatGPT
+        - Claude
+        - Gemini
+        - Perplexity
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console logs or completeness warnings
+      description: Remove private content before posting.

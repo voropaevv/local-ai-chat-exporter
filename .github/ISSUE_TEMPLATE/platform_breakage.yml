@@ -1,0 +1,42 @@
+name: Platform UI breakage
+description: Report that an AI platform changed its UI and export broke
+title: "[Platform breakage]: "
+labels: ["platform-breakage", "adapter"]
+body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - ChatGPT
+        - Claude
+        - Gemini
+        - Perplexity
+        - NotebookLM
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: "Vivaldi 7.x / Chrome 1xx"
+    validations:
+      required: true
+  - type: textarea
+    id: missing
+    attributes:
+      label: What is missing or broken?
+      description: Example: assistant messages missing, first message missing, code blocks broken.
+    validations:
+      required: true
+  - type: textarea
+    id: completeness
+    attributes:
+      label: Completeness report
+      description: Paste the extension's warning/status. Remove private text.
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Sanitized fixture or screenshot
+      description: Optional. Remove private content before posting.

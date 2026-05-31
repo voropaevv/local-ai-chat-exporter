@@ -1,0 +1,14 @@
+name: CI placeholder
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: echo "Task 15 will replace this with full pnpm CI after scaffold exists."
