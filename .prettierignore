@@ -1,0 +1,8 @@
+dist/
+release/*.zip
+release/*.sha256
+node_modules/
+coverage/
+playwright-report/
+test-results/
+pnpm-lock.yaml
