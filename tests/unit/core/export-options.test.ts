@@ -96,7 +96,7 @@ describe("renderConversationFiles", () => {
       makeOptions({ formats: ["json"], redact: true, scope: "assistant_only" })
     );
 
-    const exported = JSON.parse(files[0].bytes) as ConversationExport;
+    const exported = JSON.parse(expectTextBytes(files[0].bytes)) as ConversationExport;
 
     expect(exported.messageCount).toBe(1);
     expect(exported.messages[0]).toMatchObject({
@@ -125,7 +125,7 @@ describe("renderConversationFiles", () => {
       })
     );
 
-    const exported = JSON.parse(files[0].bytes) as ConversationExport;
+    const exported = JSON.parse(expectTextBytes(files[0].bytes)) as ConversationExport;
 
     expect(exported.sourceUrl).toBe("");
     expect(exported.title).toBeUndefined();
@@ -148,3 +148,9 @@ describe("renderConversationFiles", () => {
     );
   });
 });
+
+function expectTextBytes(bytes: string | Uint8Array): string {
+  expect(typeof bytes).toBe("string");
+
+  return bytes as string;
+}

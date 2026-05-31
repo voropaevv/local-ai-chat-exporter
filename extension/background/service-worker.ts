@@ -21,7 +21,7 @@ interface PopupExportRequest {
 interface ContentExportSuccess {
   readonly clipboardError?: SerializedExportError;
   readonly downloaded: readonly string[];
-  readonly files?: readonly RenderedFile[];
+  readonly files?: readonly RenderedFile<string | Uint8Array>[];
   readonly messageCount: number;
   readonly warnings: readonly string[];
 }

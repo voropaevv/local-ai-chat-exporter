@@ -9,8 +9,8 @@ import type {
 } from "./schema";
 import {
   renderers,
-  type LocalRendererFormat,
   type MarkdownProfile,
+  type RenderedBytes,
   type RenderedFile
 } from "../renderers";
 
@@ -49,8 +49,6 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   filenameTemplate: "{datetime}_{platform}_{title}.{format}"
 };
 
-const LOCAL_RENDERER_FORMATS = new Set<ExportFormat>(["md", "txt", "json", "csv", "html"]);
-
 export class ExportPipelineError extends Error {
   readonly code: ExportErrorCode;
   readonly causeValue?: unknown;
@@ -78,7 +76,7 @@ export function normalizeExportOptions(options: Partial<ExportOptions> = {}): Ex
 export function renderConversationFiles(
   conversation: ConversationExport,
   options: Partial<ExportOptions> = {}
-): readonly RenderedFile[] {
+): readonly RenderedFile<RenderedBytes>[] {
   const normalizedOptions = normalizeExportOptions(options);
   const preparedConversation = prepareConversationForExport(conversation, normalizedOptions);
 
@@ -90,16 +88,10 @@ export function renderConversationFiles(
   }
 
   return normalizedOptions.formats.map((format) => {
-    if (!isLocalRendererFormat(format)) {
-      throw new ExportPipelineError(
-        "unsupported_format",
-        `The ${format.toUpperCase()} renderer is not available in this build step.`
-      );
-    }
-
     return renderers[format](preparedConversation, {
       filenameTemplate: normalizedOptions.filenameTemplate,
-      markdownProfile: normalizedOptions.markdownProfile
+      markdownProfile: normalizedOptions.markdownProfile,
+      zipFormats: normalizedOptions.formats.filter((candidate) => candidate !== "zip")
     });
   });
 }
@@ -268,8 +260,4 @@ function createPreview(value: string): string {
 
 function redactIfNeeded(value: string, redact: boolean): string {
   return redactText(value, { enabled: redact });
-}
-
-function isLocalRendererFormat(format: ExportFormat): format is LocalRendererFormat {
-  return LOCAL_RENDERER_FORMATS.has(format);
 }

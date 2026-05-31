@@ -402,7 +402,17 @@ describe("renderHtml", () => {
 });
 
 describe("renderer registry", () => {
-  test("exports the first five local renderers", () => {
-    expect(Object.keys(renderers).sort()).toEqual(["csv", "html", "json", "md", "txt"]);
+  test("exports local renderers for all supported v1 formats", () => {
+    expect(Object.keys(renderers).sort()).toEqual([
+      "csv",
+      "docx",
+      "html",
+      "json",
+      "md",
+      "pdf",
+      "png",
+      "txt",
+      "zip"
+    ]);
   });
 });

@@ -22,7 +22,7 @@ export type ChatRole = (typeof CHAT_ROLES)[number];
 
 export type CompletenessStatus = (typeof COMPLETENESS_STATUSES)[number];
 
-export type ExportFormat = "md" | "txt" | "json" | "csv" | "html" | "pdf" | "docx" | "zip";
+export type ExportFormat = "md" | "txt" | "json" | "csv" | "html" | "pdf" | "docx" | "zip" | "png";
 
 export interface ExportedCodeBlock {
   readonly language?: string;

@@ -47,7 +47,7 @@ interface LocalDownloadUrl {
 }
 
 export async function downloadRenderedFiles(
-  files: readonly RenderedFile[],
+  files: readonly RenderedFile<string | Uint8Array>[],
   environment: DownloadEnvironment = {}
 ): Promise<DownloadResult> {
   const downloaded: string[] = [];
@@ -61,7 +61,7 @@ export async function downloadRenderedFiles(
 }
 
 export async function downloadRenderedFile(
-  file: RenderedFile,
+  file: RenderedFile<string | Uint8Array>,
   environment: DownloadEnvironment = {}
 ): Promise<void> {
   try {
@@ -99,7 +99,10 @@ export async function canUseChromeDownloads(
   });
 }
 
-function downloadWithAnchor(file: RenderedFile, environment: DownloadEnvironment): void {
+function downloadWithAnchor(
+  file: RenderedFile<string | Uint8Array>,
+  environment: DownloadEnvironment
+): void {
   const documentRef = environment.document ?? getCurrentDocument();
 
   if (documentRef === undefined) {
@@ -122,7 +125,7 @@ function downloadWithAnchor(file: RenderedFile, environment: DownloadEnvironment
 }
 
 async function downloadWithChrome(
-  file: RenderedFile,
+  file: RenderedFile<string | Uint8Array>,
   environment: DownloadEnvironment
 ): Promise<void> {
   const downloads = environment.chrome?.downloads;
@@ -159,7 +162,7 @@ async function downloadWithChrome(
 }
 
 function createLocalDownloadUrl(
-  file: RenderedFile,
+  file: RenderedFile<string | Uint8Array>,
   objectUrlApi: ObjectUrlApi | undefined
 ): LocalDownloadUrl {
   if (objectUrlApi !== undefined) {
@@ -172,9 +175,22 @@ function createLocalDownloadUrl(
   }
 
   return {
-    href: `data:${file.mimeType},${encodeURIComponent(file.bytes)}`,
+    href:
+      typeof file.bytes === "string"
+        ? `data:${file.mimeType},${encodeURIComponent(file.bytes)}`
+        : `data:${file.mimeType};base64,${bytesToBase64(file.bytes)}`,
     revoke: () => undefined
   };
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
 }
 
 function getCurrentDocument(): Pick<Document, "body" | "createElement"> | undefined {

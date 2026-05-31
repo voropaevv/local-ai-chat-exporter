@@ -26,7 +26,7 @@ export interface ClipboardResult {
 }
 
 export async function copyRenderedFileToClipboard(
-  files: readonly RenderedFile[],
+  files: readonly RenderedFile<string | Uint8Array>[],
   environment: ClipboardEnvironment = {}
 ): Promise<ClipboardResult> {
   const file = findClipboardFile(files);
@@ -71,8 +71,17 @@ export async function copyTextToClipboard(
   throw new ExportPipelineError("clipboard_failed", "Clipboard copy failed.", writeError);
 }
 
-function findClipboardFile(files: readonly RenderedFile[]): RenderedFile | undefined {
-  return files.find((file) => file.format === "md") ?? files.find((file) => file.format === "txt");
+function findClipboardFile(
+  files: readonly RenderedFile<string | Uint8Array>[]
+): RenderedFile | undefined {
+  return (
+    files.find(
+      (file): file is RenderedFile => file.format === "md" && typeof file.bytes === "string"
+    ) ??
+    files.find(
+      (file): file is RenderedFile => file.format === "txt" && typeof file.bytes === "string"
+    )
+  );
 }
 
 function copyWithDocument(text: string, documentRef: ClipboardDocument): boolean {
