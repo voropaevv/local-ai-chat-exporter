@@ -106,7 +106,7 @@ describe("redactText", () => {
       "Email admin@example.com, call +1 (415) 555-2671, key FAKE_OPENAI_KEY_FOR_TESTS_ONLY, bearer Bearer FAKE_BEARER_TOKEN_FOR_TESTS_ONLY.";
 
     expect(redactText(input, { enabled: true })).toBe(
-      "Email [REDACTED_EMAIL], call [REDACTED_PHONE], key [REDACTED_TOKEN], bearer Bearer [REDACTED_TOKEN]."
+      "Email [REDACTED_EMAIL], call [REDACTED_PHONE], key [REDACTED_SECRET], bearer Bearer [REDACTED_SECRET]."
     );
   });
 

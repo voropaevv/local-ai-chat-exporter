@@ -38,6 +38,13 @@ button:disabled {
   cursor: not-allowed;
 }
 
+textarea:disabled,
+input:disabled,
+select:disabled {
+  background: #eef2f5;
+  color: #7d8a94;
+}
+
 a {
   color: #0b63ce;
   text-decoration: none;
@@ -165,6 +172,12 @@ legend {
 
 .button-row > button {
   flex: 1;
+}
+
+.compact-action {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .privacy-badge,
@@ -335,15 +348,79 @@ legend {
 }
 
 .field-row input,
-.field-row select {
+.field-row select,
+.field-row textarea {
   width: 100%;
-  min-height: 34px;
   border: 1px solid #c9d4de;
   border-radius: 8px;
   background: #ffffff;
   color: #172026;
-  padding: 0 9px;
   font-size: 12px;
+}
+
+.field-row input,
+.field-row select {
+  min-height: 34px;
+  padding: 0 9px;
+}
+
+.field-row textarea {
+  min-height: 96px;
+  padding: 9px;
+  resize: vertical;
+}
+
+.privacy-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #23313a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.permission-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.permission-list div {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid #e4eaf0;
+  padding-top: 10px;
+}
+
+.permission-list div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.permission-list dt {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: #172026;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.permission-list dt strong {
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #e8f5f2;
+  color: #0f5f59;
+  font-size: 11px;
+}
+
+.permission-list dd,
+.status-text {
+  color: #52616b;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .scope-panel {

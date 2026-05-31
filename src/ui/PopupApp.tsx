@@ -1,4 +1,4 @@
-import { useReducer } from "preact/hooks";
+import { useEffect, useReducer } from "preact/hooks";
 
 import type { RuntimeResponse, ScanSummary } from "../core/messages";
 import type { RenderedBytes, RenderedFile } from "../renderers";
@@ -22,6 +22,7 @@ import {
   getScopedPreviewMessages,
   popupReducer
 } from "./state/popup-state";
+import { readStoredRedactionSettings } from "./redaction-storage";
 
 interface PopupExportSuccess {
   readonly clipboardError?: {
@@ -37,6 +38,24 @@ export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions = state.completeness !== undefined && !busy;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    readStoredRedactionSettings()
+      .then((redaction) => {
+        if (!cancelled) {
+          dispatch({ redaction, type: "set_redaction_settings" });
+        }
+      })
+      .catch(() => {
+        // Export still works with default off redaction if extension storage is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleScan() {
     dispatch({ type: "scan_started" });

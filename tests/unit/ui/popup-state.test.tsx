@@ -112,6 +112,24 @@ describe("popup state", () => {
     });
   });
 
+  test("builds export requests with stored custom redaction settings", () => {
+    const state = popupReducer(createInitialPopupState(), {
+      redaction: {
+        customPatterns: ["ACME-\\d+"],
+        preset: "custom"
+      },
+      type: "set_redaction_settings"
+    });
+
+    expect(buildDownloadRequest(state).options).toMatchObject({
+      redact: true,
+      redaction: {
+        customPatterns: ["ACME-\\d+"],
+        preset: "custom"
+      }
+    });
+  });
+
   test("builds range requests and reflects scoped preview messages", () => {
     const scanned = popupReducer(createInitialPopupState(), {
       scan: {

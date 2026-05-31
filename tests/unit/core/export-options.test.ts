@@ -93,7 +93,12 @@ describe("renderConversationFiles", () => {
           ]
         })
       ]),
-      makeOptions({ formats: ["json"], redact: true, scope: "assistant_only" })
+      makeOptions({
+        formats: ["json"],
+        redaction: { customPatterns: [], preset: "strict" },
+        redact: true,
+        scope: "assistant_only"
+      })
     );
 
     const exported = JSON.parse(expectTextBytes(files[0].bytes)) as ConversationExport;
@@ -103,10 +108,10 @@ describe("renderConversationFiles", () => {
       id: "assistant-1",
       index: 0,
       role: "assistant",
-      text: "Email [REDACTED_EMAIL] and use key [REDACTED_TOKEN].",
-      markdown: "Email [REDACTED_EMAIL] and use key [REDACTED_TOKEN]."
+      text: "Email [REDACTED_EMAIL] and use key [REDACTED_SECRET].",
+      markdown: "Email [REDACTED_EMAIL] and use key [REDACTED_SECRET]."
     });
-    expect(exported.messages[0].codeBlocks[0]?.code).toBe("[REDACTED_TOKEN]\n");
+    expect(exported.messages[0].codeBlocks[0]?.code).toBe("[REDACTED_SECRET]\n");
   });
 
   test("can remove optional metadata and completeness details from rendered exports", () => {

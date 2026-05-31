@@ -1,4 +1,9 @@
-import { redactText } from "./redaction";
+import {
+  DEFAULT_REDACTION_SETTINGS,
+  normalizeRedactionSettings,
+  redactText,
+  type RedactionSettings
+} from "./redaction";
 import { filterMessagesByScope, type SelectionRange, type SelectionScope } from "./selection";
 import type {
   CompletenessReport,
@@ -32,6 +37,7 @@ export interface ExportOptions {
   readonly includeMetadata: boolean;
   readonly includeCompletenessReport: boolean;
   readonly redact: boolean;
+  readonly redaction: RedactionSettings;
   readonly filenameTemplate: string;
   readonly range?: SelectionRange;
 }
@@ -48,6 +54,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   includeMetadata: true,
   includeCompletenessReport: true,
   redact: false,
+  redaction: DEFAULT_REDACTION_SETTINGS,
   filenameTemplate: "{datetime}_{platform}_{title}.{format}"
 };
 
@@ -64,6 +71,10 @@ export class ExportPipelineError extends Error {
 }
 
 export function normalizeExportOptions(options: Partial<ExportOptions> = {}): ExportOptions {
+  const redaction = normalizeRedactionSettings(
+    options.redaction ?? { enabled: options.redact ?? DEFAULT_EXPORT_OPTIONS.redact }
+  );
+
   return {
     ...DEFAULT_EXPORT_OPTIONS,
     ...options,
@@ -71,7 +82,9 @@ export function normalizeExportOptions(options: Partial<ExportOptions> = {}): Ex
     filenameTemplate:
       options.filenameTemplate !== undefined && options.filenameTemplate.trim().length > 0
         ? options.filenameTemplate
-        : DEFAULT_EXPORT_OPTIONS.filenameTemplate
+        : DEFAULT_EXPORT_OPTIONS.filenameTemplate,
+    redact: redaction.preset !== "off",
+    redaction
   };
 }
 
@@ -128,20 +141,20 @@ function prepareConversationForExport(
   return {
     schemaVersion: conversation.schemaVersion,
     platform: conversation.platform,
-    platformLabel: redactIfNeeded(conversation.platformLabel, options.redact),
+    platformLabel: redactIfNeeded(conversation.platformLabel, options.redaction),
     sourceUrl: options.includeMetadata
-      ? redactIfNeeded(conversation.sourceUrl, options.redact)
+      ? redactIfNeeded(conversation.sourceUrl, options.redaction)
       : "",
     ...(options.includeMetadata && conversation.title !== undefined
-      ? { title: redactIfNeeded(conversation.title, options.redact) }
+      ? { title: redactIfNeeded(conversation.title, options.redaction) }
       : {}),
     ...(options.includeMetadata && conversation.conversationId !== undefined
-      ? { conversationId: redactIfNeeded(conversation.conversationId, options.redact) }
+      ? { conversationId: redactIfNeeded(conversation.conversationId, options.redaction) }
       : {}),
     exportedAt: conversation.exportedAt,
     messageCount: messages.length,
     completeness: options.includeCompletenessReport
-      ? prepareCompleteness(conversation.completeness, messages, options.redact)
+      ? prepareCompleteness(conversation.completeness, messages, options.redaction)
       : createHiddenCompleteness(messages.length),
     messages
   };
@@ -153,43 +166,50 @@ function prepareMessage(
   options: ExportOptions
 ): ExportedMessage {
   return {
-    id: redactIfNeeded(message.id, options.redact),
+    id: redactIfNeeded(message.id, options.redaction),
     index,
     role: message.role,
-    authorLabel: redactIfNeeded(message.authorLabel, options.redact),
-    text: redactIfNeeded(message.text, options.redact),
+    authorLabel: redactIfNeeded(message.authorLabel, options.redaction),
+    text: redactIfNeeded(message.text, options.redaction),
     ...(message.markdown !== undefined
-      ? { markdown: redactIfNeeded(message.markdown, options.redact) }
+      ? { markdown: redactIfNeeded(message.markdown, options.redaction) }
       : {}),
-    ...(message.html !== undefined ? { html: redactIfNeeded(message.html, options.redact) } : {}),
-    codeBlocks: message.codeBlocks.map((codeBlock) => prepareCodeBlock(codeBlock, options.redact)),
-    images: message.images.map((image) => prepareImageRef(image, options.redact)),
+    ...(message.html !== undefined
+      ? { html: redactIfNeeded(message.html, options.redaction) }
+      : {}),
+    codeBlocks: message.codeBlocks.map((codeBlock) =>
+      prepareCodeBlock(codeBlock, options.redaction)
+    ),
+    images: message.images.map((image) => prepareImageRef(image, options.redaction)),
     ...(options.includeMetadata && message.createdAt !== undefined
-      ? { createdAt: redactIfNeeded(message.createdAt, options.redact) }
+      ? { createdAt: redactIfNeeded(message.createdAt, options.redaction) }
       : {}),
     ...(options.includeMetadata && message.model !== undefined
-      ? { model: redactIfNeeded(message.model, options.redact) }
+      ? { model: redactIfNeeded(message.model, options.redaction) }
       : {}),
     metadata: options.includeMetadata ? { ...message.metadata } : {}
   };
 }
 
-function prepareCodeBlock(codeBlock: ExportedCodeBlock, redact: boolean): ExportedCodeBlock {
+function prepareCodeBlock(
+  codeBlock: ExportedCodeBlock,
+  redaction: RedactionSettings
+): ExportedCodeBlock {
   return {
     ...(codeBlock.language !== undefined
-      ? { language: redactIfNeeded(codeBlock.language, redact) }
+      ? { language: redactIfNeeded(codeBlock.language, redaction) }
       : {}),
-    code: redactIfNeeded(codeBlock.code, redact)
+    code: redactIfNeeded(codeBlock.code, redaction)
   };
 }
 
-function prepareImageRef(image: ExportedImageRef, redact: boolean): ExportedImageRef {
+function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings): ExportedImageRef {
   return {
-    ...(image.alt !== undefined ? { alt: redactIfNeeded(image.alt, redact) } : {}),
-    ...(image.src !== undefined ? { src: redactIfNeeded(image.src, redact) } : {}),
+    ...(image.alt !== undefined ? { alt: redactIfNeeded(image.alt, redaction) } : {}),
+    ...(image.src !== undefined ? { src: redactIfNeeded(image.src, redaction) } : {}),
     ...(image.dataUri !== undefined ? { dataUri: image.dataUri } : {}),
     ...(image.localFilename !== undefined
-      ? { localFilename: redactIfNeeded(image.localFilename, redact) }
+      ? { localFilename: redactIfNeeded(image.localFilename, redaction) }
       : {}),
     ...(image.width !== undefined ? { width: image.width } : {}),
     ...(image.height !== undefined ? { height: image.height } : {})
@@ -199,20 +219,20 @@ function prepareImageRef(image: ExportedImageRef, redact: boolean): ExportedImag
 function prepareCompleteness(
   completeness: CompletenessReport,
   messages: readonly ExportedMessage[],
-  redact: boolean
+  redaction: RedactionSettings
 ): CompletenessReport {
   return {
     ...completeness,
     messageCount: messages.length,
     firstMessagePreview:
-      messages.length > 0 ? redactIfNeeded(createPreview(messages[0].text), redact) : undefined,
+      messages.length > 0 ? redactIfNeeded(createPreview(messages[0].text), redaction) : undefined,
     lastMessagePreview:
       messages.length > 0
-        ? redactIfNeeded(createPreview(messages[messages.length - 1].text), redact)
+        ? redactIfNeeded(createPreview(messages[messages.length - 1].text), redaction)
         : undefined,
-    warnings: completeness.warnings.map((warning) => redactIfNeeded(warning, redact)),
+    warnings: completeness.warnings.map((warning) => redactIfNeeded(warning, redaction)),
     platformWarnings: completeness.platformWarnings.map((warning) =>
-      redactIfNeeded(warning, redact)
+      redactIfNeeded(warning, redaction)
     )
   };
 }
@@ -234,6 +254,6 @@ function createPreview(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 160);
 }
 
-function redactIfNeeded(value: string, redact: boolean): string {
-  return redactText(value, { enabled: redact });
+function redactIfNeeded(value: string, redaction: RedactionSettings): string {
+  return redactText(value, redaction);
 }

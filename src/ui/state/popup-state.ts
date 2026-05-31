@@ -1,4 +1,5 @@
 import type { ExportOptions } from "../../core/export-options";
+import type { RedactionPreset, RedactionSettings } from "../../core/redaction";
 import {
   POPUP_CANCEL_SCAN_MESSAGE,
   POPUP_CLEAR_SELECTION_MESSAGE,
@@ -27,6 +28,8 @@ export interface PopupOptionsState {
   readonly rangeEndIndex: number;
   readonly rangeStartIndex: number;
   readonly redact: boolean;
+  readonly redactionCustomPatterns: readonly string[];
+  readonly redactionPreset: RedactionPreset;
   readonly scope: ExportOptions["scope"];
 }
 
@@ -57,6 +60,8 @@ export type PopupAction =
   | { readonly type: "set_filename_template"; readonly filenameTemplate: string }
   | { readonly type: "set_include_metadata"; readonly includeMetadata: boolean }
   | { readonly type: "set_redact"; readonly redact: boolean }
+  | { readonly type: "set_redaction_settings"; readonly redaction: RedactionSettings }
+  | { readonly type: "set_redaction_preset"; readonly redactionPreset: RedactionPreset }
   | { readonly type: "set_range_start"; readonly rangeStartIndex: number }
   | { readonly type: "set_range_end"; readonly rangeEndIndex: number };
 
@@ -69,6 +74,8 @@ const DEFAULT_OPTIONS: PopupOptionsState = {
   rangeEndIndex: 1,
   rangeStartIndex: 1,
   redact: false,
+  redactionCustomPatterns: [],
+  redactionPreset: "off",
   scope: "all"
 };
 
@@ -169,7 +176,33 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         options: { ...state.options, includeMetadata: action.includeMetadata }
       };
     case "set_redact":
-      return { ...state, options: { ...state.options, redact: action.redact } };
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          redact: action.redact,
+          redactionPreset: action.redact ? "strict" : "off"
+        }
+      };
+    case "set_redaction_settings":
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          redact: action.redaction.preset !== "off",
+          redactionCustomPatterns: [...action.redaction.customPatterns],
+          redactionPreset: action.redaction.preset
+        }
+      };
+    case "set_redaction_preset":
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          redact: action.redactionPreset !== "off",
+          redactionPreset: action.redactionPreset
+        }
+      };
     case "set_range_start":
       return {
         ...state,
@@ -248,6 +281,11 @@ export function buildExportOptions(
   state: PopupState,
   formats: readonly ExportFormat[] = state.options.formats
 ): ExportOptions {
+  const redactionPreset =
+    state.options.redactionPreset === "off" && state.options.redact
+      ? "strict"
+      : state.options.redactionPreset;
+
   return {
     filenameTemplate: state.options.filenameTemplate,
     formats: [...formats],
@@ -263,6 +301,10 @@ export function buildExportOptions(
         }
       : {}),
     redact: state.options.redact,
+    redaction: {
+      customPatterns: [...state.options.redactionCustomPatterns],
+      preset: redactionPreset
+    },
     scope: state.options.scope
   };
 }
