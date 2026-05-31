@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <body>
+    <main data-testid="conversation">
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="user" data-message-id="malformed-user-1">
+          <div class="markdown"><p>Readable prompt with broken nesting.</p></div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-2">
+        <div data-message-id="missing-role">
+          <div class="markdown"><p>This node has no role and should be ignored.</p></div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-3">
+        <div data-message-author-role="assistant" data-message-id="malformed-assistant-1">
+          <div class="markdown">
+            <p>Readable answer survives malformed DOM.</p>
+            <button>Copy</button>
+          </div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-4">
+        <div data-message-author-role="assistant" data-message-id="empty-assistant">
+          <div class="markdown"><button>Only noise</button></div>
+        </div>
+      </article>
+    </main>
+  </body>
+</html>

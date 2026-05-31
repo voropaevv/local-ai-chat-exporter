@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+  <body>
+    <main data-testid="conversation">
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="user" data-message-id="long-user-1">
+          <div class="markdown"><p>First prompt in a long conversation.</p></div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-2">
+        <div data-message-author-role="assistant" data-message-id="long-assistant-1">
+          <div class="markdown"><p>First assistant answer must be preserved.</p></div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-2-recycled">
+        <div data-message-author-role="assistant" data-message-id="long-assistant-1">
+          <div class="markdown"><p>First assistant answer must be preserved.</p></div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-3">
+        <div data-message-author-role="user" data-message-id="long-user-2">
+          <div class="markdown"><p>Second prompt after virtualization.</p></div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-4">
+        <div data-message-author-role="assistant" data-message-id="long-assistant-2">
+          <div class="markdown"><p>Second assistant answer must be preserved.</p></div>
+        </div>
+      </article>
+      <article data-testid="conversation-turn-5">
+        <div data-message-author-role="assistant" data-message-id="long-assistant-3">
+          <div class="markdown"><p>Final assistant answer must be preserved.</p></div>
+        </div>
+      </article>
+    </main>
+  </body>
+</html>
