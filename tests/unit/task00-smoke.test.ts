@@ -28,7 +28,8 @@ describe("Task 00 scaffold", () => {
       "https://chat.openai.com/*",
       "https://claude.ai/*",
       "https://gemini.google.com/*",
-      "https://www.perplexity.ai/*"
+      "https://www.perplexity.ai/*",
+      "https://notebooklm.google.com/*"
     ]);
     expect(manifest.host_permissions).toBeUndefined();
   });

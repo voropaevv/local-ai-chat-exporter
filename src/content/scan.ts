@@ -2,9 +2,20 @@ import {
   collectChatGptConversation,
   type ChatGptScrollCollectorOptions
 } from "../adapters/chatgpt/scroll-collector";
-import { detectChatGpt } from "../adapters/chatgpt/detect";
+import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
+import type { PlatformAdapter } from "../adapters/types";
+import { buildCompletenessReport } from "../core/completeness";
 import { ExportPipelineError } from "../core/export-options";
+import { normalizeMessagesWithStats } from "../core/normalize";
 import type { ConversationExport } from "../core/schema";
+
+export interface ConversationScanOptions extends Omit<ChatGptScrollCollectorOptions, "document"> {
+  readonly document?: Document;
+  readonly exportedAt?: string;
+  readonly hostname?: string;
+  readonly href?: string;
+  readonly title?: string;
+}
 
 export async function scanCurrentChatGptConversation(
   options: Omit<ChatGptScrollCollectorOptions, "document"> = {}
@@ -16,15 +27,28 @@ export async function scanCurrentChatGptConversation(
 }
 
 export async function scanCurrentConversationExport(
-  options: Omit<ChatGptScrollCollectorOptions, "document"> = {}
+  options: ConversationScanOptions = {}
 ): Promise<ConversationExport> {
-  const rootDocument = getCurrentDocument();
+  const rootDocument = options.document ?? getCurrentDocument();
+  const hostname = options.hostname ?? getCurrentHostname();
+  const href = options.href ?? getCurrentHref();
+  const title = options.title ?? getCurrentTitle(rootDocument);
+  const adapter = getBestAdapter({ document: rootDocument, hostname });
 
-  if (!detectChatGpt({ document: rootDocument, hostname: getCurrentHostname() })) {
+  if (adapter === null) {
     throw new ExportPipelineError(
       "unsupported_platform",
-      "This page is not a supported AI chat conversation."
+      `This page is not a supported AI chat conversation. Supported platforms: ${getSupportedPlatformLabels().join(", ")}.`
     );
+  }
+
+  if (adapter.id !== "chatgpt") {
+    return scanVisibleAdapterConversation(adapter, {
+      exportedAt: options.exportedAt,
+      href,
+      rootDocument,
+      title
+    });
   }
 
   const result = await collectChatGptConversation({
@@ -42,16 +66,63 @@ export async function scanCurrentConversationExport(
 
   return {
     schemaVersion: "1.0",
-    platform: "chatgpt",
-    platformLabel: "ChatGPT",
-    sourceUrl: getCurrentHref(),
-    title: getCurrentTitle(rootDocument),
-    conversationId: getConversationId(getCurrentHref()),
-    exportedAt: new Date().toISOString(),
+    platform: adapter.id,
+    platformLabel: adapter.label,
+    sourceUrl: href,
+    title,
+    conversationId: getConversationId(href),
+    exportedAt: options.exportedAt ?? new Date().toISOString(),
     messageCount: result.messages.length,
     completeness: result.completeness,
     messages: result.messages
   };
+}
+
+function scanVisibleAdapterConversation(
+  adapter: PlatformAdapter,
+  input: {
+    readonly exportedAt?: string;
+    readonly href: string;
+    readonly rootDocument: Document;
+    readonly title?: string;
+  }
+): ConversationExport {
+  const normalized = normalizeMessagesWithStats(adapter.extractVisibleMessages(input.rootDocument));
+  const messages = normalized.messages;
+
+  if (messages.length === 0) {
+    throw new ExportPipelineError("no_messages_found", "No messages were found on this page.");
+  }
+
+  const completeness = buildCompletenessReport({
+    duplicateCount: normalized.duplicateCount,
+    messages,
+    platformWarnings: buildAdapterWarnings(adapter),
+    reachedBottom: false,
+    reachedTop: false,
+    scrollSteps: 0,
+    virtualized: true
+  });
+
+  return {
+    schemaVersion: "1.0",
+    platform: adapter.id,
+    platformLabel: adapter.label,
+    sourceUrl: input.href,
+    title: input.title,
+    conversationId: getConversationId(input.href),
+    exportedAt: input.exportedAt ?? new Date().toISOString(),
+    messageCount: messages.length,
+    completeness,
+    messages
+  };
+}
+
+function buildAdapterWarnings(adapter: PlatformAdapter): readonly string[] {
+  return [
+    ...(adapter.experimentalWarning !== undefined ? [adapter.experimentalWarning] : []),
+    ...adapter.limitations
+  ];
 }
 
 function getCurrentDocument(): Document {

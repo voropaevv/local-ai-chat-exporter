@@ -98,6 +98,22 @@ describe("buildCompletenessReport", () => {
       }).status
     ).toBe("unknown");
   });
+
+  test("keeps platform warnings separate from scan warnings", () => {
+    const messages = normalizeMessages([{ role: "assistant", text: "Visible answer" }]);
+    const report = buildCompletenessReport({
+      duplicateCount: 0,
+      messages,
+      platformWarnings: ["Experimental platform support."],
+      reachedBottom: true,
+      reachedTop: true,
+      scanWarnings: ["Scan needed a fallback selector."],
+      scrollSteps: 0
+    });
+
+    expect(report.warnings).toEqual(["Scan needed a fallback selector."]);
+    expect(report.platformWarnings).toEqual(["Experimental platform support."]);
+  });
 });
 
 describe("redactText", () => {

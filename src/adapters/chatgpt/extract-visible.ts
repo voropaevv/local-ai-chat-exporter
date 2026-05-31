@@ -3,12 +3,18 @@ import { normalizeRole } from "../../core/normalize";
 import { stableHash } from "../../utils/hash";
 import type { PlatformAdapter } from "../types";
 import { cleanChatGptNode } from "./clean-chatgpt-node";
-import { detectChatGpt } from "./detect";
+import { CHAT_GPT_HOSTNAMES, detectChatGpt } from "./detect";
 import { chatGptSelectors } from "./selectors";
 
 export const chatGptAdapter: PlatformAdapter = {
   id: "chatgpt",
   label: "ChatGPT",
+  hostnames: CHAT_GPT_HOSTNAMES,
+  selectors: {
+    content: chatGptSelectors.markdownBody,
+    message: chatGptSelectors.messageByRole
+  },
+  limitations: [],
   detect: detectChatGpt,
   extractVisibleMessages: extractVisibleChatGptMessages
 };

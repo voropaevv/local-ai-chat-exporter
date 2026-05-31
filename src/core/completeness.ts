@@ -53,7 +53,7 @@ function determineStatus(
 }
 
 function buildWarnings(input: BuildCompletenessReportInput): string[] {
-  const warnings = [...input.platformWarnings, ...(input.scanWarnings ?? [])];
+  const warnings = [...(input.scanWarnings ?? [])];
 
   if (!input.reachedTop) {
     warnings.push("Scanner did not confirm the top of the conversation.");
