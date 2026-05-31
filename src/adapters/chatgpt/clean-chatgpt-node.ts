@@ -1,6 +1,12 @@
 import type { ExportedCodeBlock, ExportedImageRef } from "../../core/schema";
 import { cleanText } from "../../utils/text";
-import { chatGptSelectors } from "./selectors";
+import { extractCodeBlocks } from "./extract-code";
+import { extractImageRefs } from "./extract-images";
+import { isSafeHref, normalizeInlineText, renderMarkdownLink } from "./extract-links";
+import { extractChatGptTables, tableElementToMarkdown } from "./extract-tables";
+
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
 
 const REMOVABLE_SELECTORS = [
   "button",
@@ -49,13 +55,16 @@ export function cleanChatGptNode(messageElement: Element): CleanedChatGptNode {
   removeUiArtifacts(clonedElement);
   sanitizeElementTree(clonedElement);
 
-  const text = cleanText(clonedElement.textContent ?? "");
+  const codeBlocks = extractCodeBlocks(messageElement);
+  const images = extractImageRefs(messageElement);
+  const text = cleanText(renderPlainText(clonedElement, codeBlocks));
+  const markdown = renderMarkdownFromElement(clonedElement, codeBlocks, images);
 
   return {
-    codeBlocks: extractCodeBlocks(messageElement),
+    codeBlocks,
     html: clonedElement.innerHTML.trim(),
-    images: extractImageRefs(messageElement),
-    markdown: text,
+    images,
+    markdown,
     text
   };
 }
@@ -84,6 +93,11 @@ function sanitizeElementTree(root: Element): void {
         return;
       }
 
+      if (name === "href" && !isSafeHref(attribute.value)) {
+        element.removeAttribute(attribute.name);
+        return;
+      }
+
       if (element.tagName.toLocaleLowerCase() === "img" && (name === "src" || name === "srcset")) {
         element.removeAttribute(attribute.name);
       }
@@ -91,67 +105,304 @@ function sanitizeElementTree(root: Element): void {
   });
 }
 
-function extractCodeBlocks(messageElement: Element): readonly ExportedCodeBlock[] {
-  return Array.from(messageElement.querySelectorAll(chatGptSelectors.codeBlocks))
-    .filter((element) => {
-      return element.tagName.toLocaleLowerCase() !== "pre" || !element.querySelector("code");
-    })
-    .map((element) => {
-      const code = cleanText(element.textContent ?? "", { preserveCodeWhitespace: true });
-      const language = extractLanguage(element);
+function renderPlainText(
+  root: Element,
+  codeBlocks: readonly ExportedCodeBlock[],
+  state: { codeBlockIndex: number } = { codeBlockIndex: 0 }
+): string {
+  const blocks = Array.from(root.childNodes)
+    .map((node) => renderPlainTextNode(node, codeBlocks, state))
+    .filter((block) => block.length > 0);
 
-      return {
-        ...(language ? { language } : {}),
-        code
-      };
-    })
-    .filter((codeBlock) => codeBlock.code.length > 0);
+  return blocks.join("\n\n");
 }
 
-function extractLanguage(element: Element): string | undefined {
-  const explicitLanguage =
-    element.getAttribute("data-language") ??
-    element.closest("[data-language]")?.getAttribute("data-language") ??
-    element.getAttribute("lang");
-
-  if (explicitLanguage) {
-    return explicitLanguage.trim();
+function renderPlainTextNode(
+  node: ChildNode,
+  codeBlocks: readonly ExportedCodeBlock[],
+  state: { codeBlockIndex: number }
+): string {
+  if (node.nodeType === TEXT_NODE) {
+    return normalizeInlineText(node.textContent ?? "");
   }
 
-  for (const className of Array.from(element.classList)) {
-    const match = /^language-([A-Za-z0-9_+-]+)$/.exec(className);
-    if (match) {
-      return match[1];
-    }
+  if (node.nodeType !== ELEMENT_NODE) {
+    return "";
   }
 
-  return undefined;
+  const element = node as Element;
+  const tagName = element.tagName.toLocaleLowerCase();
+
+  if (tagName === "br") {
+    return "\n";
+  }
+
+  if (tagName === "pre") {
+    const codeBlock = codeBlocks[state.codeBlockIndex];
+    state.codeBlockIndex += 1;
+    return codeBlock?.code.replace(/\n*$/g, "") ?? cleanText(element.textContent ?? "");
+  }
+
+  if (tagName === "table") {
+    return extractChatGptTables(element)
+      .flatMap((table) => table.rows.map((row) => row.join("\t")))
+      .join("\n");
+  }
+
+  if (tagName === "img") {
+    return renderPlainImageRef(element);
+  }
+
+  if (tagName === "p" || isInlineElement(tagName)) {
+    return renderPlainInlineChildren(element);
+  }
+
+  return renderPlainText(element, codeBlocks, state);
 }
 
-function extractImageRefs(messageElement: Element): readonly ExportedImageRef[] {
-  return Array.from(messageElement.querySelectorAll("img"))
-    .map((image) => {
-      const src = image.getAttribute("src") ?? undefined;
-      const width = parsePositiveInteger(image.getAttribute("width"));
-      const height = parsePositiveInteger(image.getAttribute("height"));
-      const alt = image.getAttribute("alt") ?? undefined;
+function renderPlainInlineChildren(element: Element): string {
+  return Array.from(element.childNodes)
+    .map(renderPlainInlineNode)
+    .join("")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
 
-      return {
-        ...(alt ? { alt } : {}),
-        ...(src?.startsWith("data:") ? { dataUri: src } : {}),
-        ...(src && !src.startsWith("data:") ? { src } : {}),
-        ...(width ? { width } : {}),
-        ...(height ? { height } : {})
-      };
+function renderPlainInlineNode(node: ChildNode): string {
+  if (node.nodeType === TEXT_NODE) {
+    return (node.textContent ?? "").replace(/\s+/g, " ");
+  }
+
+  if (node.nodeType !== ELEMENT_NODE) {
+    return "";
+  }
+
+  const element = node as Element;
+  const tagName = element.tagName.toLocaleLowerCase();
+
+  if (tagName === "br") {
+    return "\n";
+  }
+
+  if (tagName === "img") {
+    return renderPlainImageRef(element);
+  }
+
+  return renderPlainInlineChildren(element);
+}
+
+function renderMarkdownFromElement(
+  root: Element,
+  codeBlocks: readonly ExportedCodeBlock[],
+  images: readonly ExportedImageRef[]
+): string {
+  const state = { codeBlockIndex: 0, imageIndex: 0 };
+  const blocks = Array.from(root.childNodes)
+    .map((node) => renderMarkdownBlockNode(node, codeBlocks, images, state))
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+
+  return blocks.join("\n\n").trim();
+}
+
+function renderMarkdownBlockNode(
+  node: ChildNode,
+  codeBlocks: readonly ExportedCodeBlock[],
+  images: readonly ExportedImageRef[],
+  state: { codeBlockIndex: number; imageIndex: number }
+): string {
+  if (node.nodeType === TEXT_NODE) {
+    return normalizeInlineText(node.textContent ?? "");
+  }
+
+  if (node.nodeType !== ELEMENT_NODE) {
+    return "";
+  }
+
+  const element = node as Element;
+  const tagName = element.tagName.toLocaleLowerCase();
+
+  if (tagName === "p") {
+    return renderMarkdownInlineChildren(element, images, state);
+  }
+
+  if (tagName === "br") {
+    return "\n";
+  }
+
+  if (tagName === "pre") {
+    const codeBlock = codeBlocks[state.codeBlockIndex];
+    state.codeBlockIndex += 1;
+    return codeBlock ? renderMarkdownCodeBlock(codeBlock) : renderMarkdownCodeFallback(element);
+  }
+
+  if (tagName === "table") {
+    return tableElementToMarkdown(element);
+  }
+
+  if (tagName === "img") {
+    const image = images[state.imageIndex];
+    state.imageIndex += 1;
+    return image ? renderMarkdownImageRef(image) : renderPlainImageRef(element);
+  }
+
+  if (tagName === "ul" || tagName === "ol") {
+    return renderMarkdownList(element);
+  }
+
+  if (isInlineElement(tagName)) {
+    return renderMarkdownInlineChildren(element, images, state);
+  }
+
+  return Array.from(element.childNodes)
+    .map((child) => renderMarkdownBlockNode(child, codeBlocks, images, state))
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0)
+    .join("\n\n");
+}
+
+function renderMarkdownInlineChildren(
+  element: Element,
+  images: readonly ExportedImageRef[],
+  state: { imageIndex: number }
+): string {
+  return Array.from(element.childNodes)
+    .map((child) => renderMarkdownInlineNode(child, images, state))
+    .join("")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function renderMarkdownInlineNode(
+  node: ChildNode,
+  images: readonly ExportedImageRef[],
+  state: { imageIndex: number }
+): string {
+  if (node.nodeType === TEXT_NODE) {
+    return (node.textContent ?? "").replace(/\s+/g, " ");
+  }
+
+  if (node.nodeType !== ELEMENT_NODE) {
+    return "";
+  }
+
+  const element = node as Element;
+  const tagName = element.tagName.toLocaleLowerCase();
+
+  if (tagName === "br") {
+    return "\n";
+  }
+
+  if (tagName === "a") {
+    return renderMarkdownLink(
+      renderMarkdownInlineChildren(element, images, state),
+      element.getAttribute("href")
+    );
+  }
+
+  if (tagName === "code") {
+    return renderInlineCode(element.textContent ?? "");
+  }
+
+  if (tagName === "img") {
+    const image = images[state.imageIndex];
+    state.imageIndex += 1;
+    return image ? renderMarkdownImageRef(image) : renderPlainImageRef(element);
+  }
+
+  return renderMarkdownInlineChildren(element, images, state);
+}
+
+function renderMarkdownList(element: Element): string {
+  return Array.from(element.children)
+    .filter((child) => child.tagName.toLocaleLowerCase() === "li")
+    .map((child, index) => {
+      const marker = element.tagName.toLocaleLowerCase() === "ol" ? `${index + 1}.` : "-";
+      return `${marker} ${cleanText(child.textContent ?? "")}`;
     })
-    .filter((imageRef) => Boolean(imageRef.src ?? imageRef.dataUri));
+    .join("\n");
 }
 
-function parsePositiveInteger(value: string | null): number | undefined {
-  if (value === null || value.trim().length === 0) {
-    return undefined;
+function renderMarkdownCodeBlock(codeBlock: ExportedCodeBlock): string {
+  const fence = createFence(codeBlock.code);
+  const language = normalizeFenceLanguage(codeBlock.language);
+  const code = codeBlock.code.replace(/\n*$/g, "");
+
+  return `${fence}${language}\n${code}\n${fence}`;
+}
+
+function renderMarkdownCodeFallback(element: Element): string {
+  return renderMarkdownCodeBlock({
+    code: cleanText(element.textContent ?? "", { preserveCodeWhitespace: true })
+  });
+}
+
+function renderInlineCode(input: string): string {
+  const normalized = input.replace(/\s+/g, " ").trim();
+  const fence = normalized.includes("`") ? "``" : "`";
+
+  return normalized.length > 0 ? `${fence}${normalized}${fence}` : "";
+}
+
+function createFence(code: string): string {
+  const matches = code.match(/`+/g) ?? [];
+  const longestRun = matches.reduce((longest, run) => Math.max(longest, run.length), 2);
+
+  return "`".repeat(Math.max(3, longestRun + 1));
+}
+
+function normalizeFenceLanguage(language: string | undefined): string {
+  if (language === undefined) {
+    return "";
   }
 
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  return language.replace(/[^A-Za-z0-9_-]/g, "").trim();
+}
+
+function renderMarkdownImageRef(image: ExportedImageRef): string {
+  const label = image.alt?.trim() || "Image";
+  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const dimensions = renderImageDimensions(image);
+
+  if (source && image.dataUri === undefined && isSafeHref(source)) {
+    return `Image: [${label}](${source})${dimensions}`;
+  }
+
+  return `Image: ${label}${source ? ` (${source})` : ""}${dimensions}`;
+}
+
+function renderPlainImageRef(element: Element): string {
+  const alt = element.getAttribute("alt")?.trim() || "Image";
+  return `Image: ${alt}`;
+}
+
+function renderImageDimensions(image: ExportedImageRef): string {
+  if (image.width === undefined || image.height === undefined) {
+    return "";
+  }
+
+  return ` (${image.width}x${image.height})`;
+}
+
+function isInlineElement(tagName: string): boolean {
+  return [
+    "a",
+    "abbr",
+    "b",
+    "code",
+    "em",
+    "i",
+    "kbd",
+    "mark",
+    "small",
+    "span",
+    "strong",
+    "sub",
+    "sup",
+    "time"
+  ].includes(tagName);
 }

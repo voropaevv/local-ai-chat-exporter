@@ -1,4 +1,9 @@
-import type { ConversationExport, ExportedCodeBlock, ExportedMessage } from "../core/schema";
+import type {
+  ConversationExport,
+  ExportedCodeBlock,
+  ExportedImageRef,
+  ExportedMessage
+} from "../core/schema";
 import {
   createRenderedFile,
   MARKDOWN_PROFILES,
@@ -73,12 +78,14 @@ function renderFrontmatterWarnings(warnings: readonly string[]): readonly string
 
 function renderMessageMarkdown(message: ExportedMessage): string {
   const body = normalizeMarkdown(message.markdown ?? message.text);
+  const imageRefs = renderImageRefs(message.images, body);
+  const bodyWithImages = [body, imageRefs].filter(Boolean).join("\n\n");
 
-  if (message.codeBlocks.length === 0 || containsFence(body)) {
-    return body;
+  if (message.codeBlocks.length === 0 || containsFence(bodyWithImages)) {
+    return bodyWithImages;
   }
 
-  return [body, ...message.codeBlocks.map(renderCodeBlock)].filter(Boolean).join("\n\n");
+  return [bodyWithImages, ...message.codeBlocks.map(renderCodeBlock)].filter(Boolean).join("\n\n");
 }
 
 function renderCodeBlock(codeBlock: ExportedCodeBlock): string {
@@ -102,6 +109,59 @@ function containsFence(markdown: string): boolean {
 
 function normalizeMarkdown(value: string): string {
   return value.replace(/\r\n?/g, "\n").trim();
+}
+
+function renderImageRefs(images: readonly ExportedImageRef[], body: string): string {
+  const refs = images
+    .filter((image) => !isImageAlreadyReferenced(image, body))
+    .map(renderImageRef)
+    .filter((line) => line.length > 0);
+
+  if (refs.length === 0) {
+    return "";
+  }
+
+  return ["Images:", ...refs.map((ref) => `- ${ref}`)].join("\n");
+}
+
+function renderImageRef(image: ExportedImageRef): string {
+  const label = escapeMarkdownText(image.alt?.trim() || "Image");
+  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const dimensions = renderDimensions(image);
+
+  if (source && image.dataUri === undefined && isSafeMarkdownHref(source)) {
+    return `[${label}](${source})${dimensions}`;
+  }
+
+  return `${label}${source ? ` (${source})` : ""}${dimensions}`;
+}
+
+function isImageAlreadyReferenced(image: ExportedImageRef, body: string): boolean {
+  const source = image.src ?? image.localFilename ?? image.dataUri;
+  return source !== undefined && body.includes(source);
+}
+
+function renderDimensions(image: ExportedImageRef): string {
+  if (image.width === undefined || image.height === undefined) {
+    return "";
+  }
+
+  return ` (${image.width}x${image.height})`;
+}
+
+function escapeMarkdownText(input: string): string {
+  return input.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
+}
+
+function isSafeMarkdownHref(input: string): boolean {
+  try {
+    const parsed = new URL(input);
+    return (
+      parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeFenceLanguage(language: string | undefined): string {

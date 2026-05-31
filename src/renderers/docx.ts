@@ -1,6 +1,11 @@
 import { strToU8, zipSync } from "fflate";
 
-import type { ConversationExport, ExportedCodeBlock, ExportedMessage } from "../core/schema";
+import type {
+  ConversationExport,
+  ExportedCodeBlock,
+  ExportedImageRef,
+  ExportedMessage
+} from "../core/schema";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -45,12 +50,18 @@ function renderDocumentXml(conversation: ConversationExport): string {
 }
 
 function renderMessage(message: ExportedMessage): readonly string[] {
+  const bodyParagraphs =
+    message.markdown !== undefined
+      ? extractMarkdownParagraphs(message.markdown)
+      : splitParagraphs(message.text);
+
   return [
     renderParagraph(`${message.index + 1}. ${message.authorLabel}`, "Heading1"),
     renderParagraph(`Role: ${message.role}${message.model ? ` | Model: ${message.model}` : ""}`),
     ...renderMarkdownTables(message.markdown),
-    ...splitParagraphs(message.text).map((paragraph) => renderParagraph(paragraph)),
-    ...message.codeBlocks.map(renderCodeBlock)
+    ...bodyParagraphs.map((paragraph) => renderParagraph(paragraph)),
+    ...message.codeBlocks.map(renderCodeBlock),
+    ...renderImageRefs(message.images)
   ];
 }
 
@@ -100,6 +111,55 @@ function renderMarkdownTables(markdown: string | undefined): readonly string[] {
   }
 
   return tables;
+}
+
+function extractMarkdownParagraphs(markdown: string): readonly string[] {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const paragraphs: string[] = [];
+  let currentParagraph: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (line.startsWith("```")) {
+      flushParagraph(paragraphs, currentParagraph);
+      currentParagraph = [];
+      index += 1;
+
+      while (index < lines.length && !lines[index].startsWith("```")) {
+        index += 1;
+      }
+
+      index += index < lines.length ? 1 : 0;
+      continue;
+    }
+
+    if (isTableStart(lines, index)) {
+      flushParagraph(paragraphs, currentParagraph);
+      currentParagraph = [];
+      index += 2;
+
+      while (index < lines.length && lines[index].trim().startsWith("|")) {
+        index += 1;
+      }
+
+      continue;
+    }
+
+    if (line.trim().length === 0) {
+      flushParagraph(paragraphs, currentParagraph);
+      currentParagraph = [];
+      index += 1;
+      continue;
+    }
+
+    currentParagraph.push(stripInlineMarkdown(line));
+    index += 1;
+  }
+
+  flushParagraph(paragraphs, currentParagraph);
+  return paragraphs;
 }
 
 function renderTable(rows: readonly (readonly string[])[]): string {
@@ -162,6 +222,46 @@ function splitParagraphs(text: string): readonly string[] {
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph.length > 0);
+}
+
+function renderImageRefs(images: readonly ExportedImageRef[]): readonly string[] {
+  if (images.length === 0) {
+    return [];
+  }
+
+  return [
+    renderParagraph("Images", "Heading2"),
+    ...images.map((image) => renderParagraph(renderImageRef(image)))
+  ];
+}
+
+function renderImageRef(image: ExportedImageRef): string {
+  const label = image.alt?.trim() || "Image";
+  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const dimensions =
+    image.width !== undefined && image.height !== undefined
+      ? ` (${image.width}x${image.height})`
+      : "";
+
+  return `Image: ${label}${source ? ` - ${source}` : ""}${dimensions}`;
+}
+
+function flushParagraph(paragraphs: string[], lines: readonly string[]): void {
+  const paragraph = lines.join("\n").trim();
+
+  if (paragraph.length > 0) {
+    paragraphs.push(paragraph);
+  }
+}
+
+function stripInlineMarkdown(input: string): string {
+  return input
+    .replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, "$1 ($2)")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1");
 }
 
 function renderParagraph(text: string, style?: string): string {

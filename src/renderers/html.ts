@@ -1,4 +1,9 @@
-import type { ConversationExport, ExportedCodeBlock, ExportedMessage } from "../core/schema";
+import type {
+  ConversationExport,
+  ExportedCodeBlock,
+  ExportedImageRef,
+  ExportedMessage
+} from "../core/schema";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const HTML_CSS = `:root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -14,6 +19,11 @@ a { color: #0969da; }
 .warnings { border: 1px solid #f0c36d; background: #fff8c5; padding: 12px 16px; margin: 16px 0; }
 .message { border-top: 1px solid #d8dee4; padding: 22px 0; }
 .message-meta { color: #57606a; font-size: 0.92rem; margin-bottom: 12px; }
+.image-refs { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
+.image-refs h3 { font-size: 0.95rem; margin: 0 0 8px; }
+.image-refs ul { margin: 0; padding-left: 20px; }
+.image-refs li { overflow-wrap: anywhere; }
+.image-refs img { display: block; height: auto; max-width: min(100%, 640px); }
 pre { background: #f6f8fa; border: 1px solid #d8dee4; overflow: auto; padding: 12px; }
 code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
 table { border-collapse: collapse; display: block; margin: 12px 0; overflow-x: auto; width: 100%; }
@@ -111,15 +121,18 @@ function renderMessageMeta(message: ExportedMessage): string {
 }
 
 function renderMessageBody(message: ExportedMessage): string {
+  const imageRefs = renderImageRefs(message.images);
+  let body: string;
+
   if (message.html !== undefined && message.html.trim().length > 0) {
-    return sanitizeMessageHtml(message.html);
+    body = sanitizeMessageHtml(message.html);
+  } else if (message.markdown !== undefined && message.markdown.trim().length > 0) {
+    body = markdownToHtml(message.markdown, message.codeBlocks);
+  } else {
+    body = textToHtml(message.text, message.codeBlocks);
   }
 
-  if (message.markdown !== undefined && message.markdown.trim().length > 0) {
-    return markdownToHtml(message.markdown, message.codeBlocks);
-  }
-
-  return textToHtml(message.text, message.codeBlocks);
+  return `${body}${imageRefs}`;
 }
 
 function sanitizeMessageHtml(input: string): string {
@@ -150,20 +163,16 @@ function neutralizeUnsafeUrls(input: string): string {
     /\s(href|src)=("|')([^"']*)\2/gi,
     (_match: string, attributeName: string, quote: string, attributeValue: string) => {
       const normalizedAttribute = attributeName.toLocaleLowerCase();
-      const normalizedValue = attributeValue.trim().toLocaleLowerCase();
 
-      if (
-        normalizedValue.startsWith("javascript:") ||
-        normalizedValue.startsWith("data:text/html")
-      ) {
-        return ` ${normalizedAttribute}="#"`;
+      if (normalizedAttribute === "href") {
+        return ` href=${quote}${safeHref(attributeValue)}${quote}`;
       }
 
-      if (normalizedAttribute === "src" && /^https?:\/\//i.test(normalizedValue)) {
-        return "";
+      if (normalizedAttribute === "src" && isSafeDataImage(attributeValue)) {
+        return ` src=${quote}${escapeAttribute(attributeValue)}${quote}`;
       }
 
-      return ` ${normalizedAttribute}=${quote}${attributeValue}${quote}`;
+      return "";
     }
   );
 }
@@ -241,6 +250,51 @@ function textToHtml(text: string, codeBlocks: readonly ExportedCodeBlock[]): str
   );
 
   return blocks.join("");
+}
+
+function renderImageRefs(images: readonly ExportedImageRef[]): string {
+  if (images.length === 0) {
+    return "";
+  }
+
+  return `<section class="image-refs" aria-label="Image references"><h3>Images</h3><ul>${images
+    .map((image) => `<li>${renderImageRef(image)}</li>`)
+    .join("")}</ul></section>`;
+}
+
+function renderImageRef(image: ExportedImageRef): string {
+  const label = escapeHtml(image.alt?.trim() || "Image");
+  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const dimensions = renderDimensions(image);
+
+  if (image.dataUri !== undefined && isSafeDataImage(image.dataUri)) {
+    return `<figure><img src="${escapeAttribute(image.dataUri)}" alt="${escapeAttribute(
+      image.alt ?? "Image"
+    )}"${renderImageSizeAttributes(image)}>${dimensions ? `<figcaption>${dimensions}</figcaption>` : ""}</figure>`;
+  }
+
+  if (source !== undefined && isSafeHrefValue(source)) {
+    return `${label}: <a href="${safeHref(source)}" rel="noreferrer">${escapeHtml(
+      source
+    )}</a>${dimensions}`;
+  }
+
+  return `${label}${source ? `: ${escapeHtml(source)}` : ""}${dimensions}`;
+}
+
+function renderDimensions(image: ExportedImageRef): string {
+  if (image.width === undefined || image.height === undefined) {
+    return "";
+  }
+
+  return ` (${image.width}x${image.height})`;
+}
+
+function renderImageSizeAttributes(image: ExportedImageRef): string {
+  const width = image.width !== undefined ? ` width="${image.width}"` : "";
+  const height = image.height !== undefined ? ` height="${image.height}"` : "";
+
+  return `${width}${height}`;
 }
 
 function parseFencedCode(
@@ -364,11 +418,20 @@ function escapeAttribute(input: string): string {
 }
 
 function safeHref(input: string): string {
-  const normalized = input.trim().toLocaleLowerCase();
+  return isSafeHrefValue(input) ? escapeAttribute(input) : "#";
+}
 
-  if (!normalized.startsWith("https://") && !normalized.startsWith("http://")) {
-    return "#";
+function isSafeHrefValue(input: string): boolean {
+  try {
+    const parsed = new URL(input);
+    return (
+      parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:"
+    );
+  } catch {
+    return false;
   }
+}
 
-  return escapeAttribute(input);
+function isSafeDataImage(input: string): boolean {
+  return /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(input.trim());
 }

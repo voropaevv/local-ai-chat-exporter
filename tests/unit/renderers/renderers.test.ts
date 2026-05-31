@@ -346,6 +346,11 @@ describe("renderHtml", () => {
       .warnings { border: 1px solid #f0c36d; background: #fff8c5; padding: 12px 16px; margin: 16px 0; }
       .message { border-top: 1px solid #d8dee4; padding: 22px 0; }
       .message-meta { color: #57606a; font-size: 0.92rem; margin-bottom: 12px; }
+      .image-refs { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
+      .image-refs h3 { font-size: 0.95rem; margin: 0 0 8px; }
+      .image-refs ul { margin: 0; padding-left: 20px; }
+      .image-refs li { overflow-wrap: anywhere; }
+      .image-refs img { display: block; height: auto; max-width: min(100%, 640px); }
       pre { background: #f6f8fa; border: 1px solid #d8dee4; overflow: auto; padding: 12px; }
       code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
       table { border-collapse: collapse; display: block; margin: 12px 0; overflow-x: auto; width: 100%; }

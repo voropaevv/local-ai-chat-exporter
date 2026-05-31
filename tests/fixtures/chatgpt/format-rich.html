@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <body>
+    <main data-testid="conversation">
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant" data-message-id="rich-msg-1">
+          <p>
+            Review the
+            <a href="https://example.com/docs?topic=exports&amp;safe=1">export docs</a>
+            and keep inline math \(a^2 + b^2 = c^2\).
+          </p>
+          <div class="markdown">
+            <table>
+              <thead>
+                <tr>
+                  <th>Format</th>
+                  <th>Use</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Markdown</td>
+                  <td>Archive</td>
+                </tr>
+                <tr>
+                  <td>HTML</td>
+                  <td>Print</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <pre data-language="ts"><button>Copy code</button><code>  const value = "&lt;tag&gt;";
+
+  console.log(value);
+</code></pre>
+          <p>Display math stays raw: $$E = mc^2$$.</p>
+          <img
+            alt="Architecture diagram"
+            height="360"
+            src="https://example.com/diagram.png"
+            width="640"
+          />
+        </div>
+      </article>
+    </main>
+  </body>
+</html>
