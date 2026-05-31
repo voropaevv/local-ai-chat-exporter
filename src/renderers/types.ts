@@ -1,9 +1,7 @@
 import type { ConversationExport, ExportFormat } from "../core/schema";
+import type { MarkdownProfile } from "./markdown-profiles";
 import { renderFilenameTemplate } from "../utils/filename-template";
-
-export const MARKDOWN_PROFILES = ["default", "obsidian", "github", "gitbook"] as const;
-
-export type MarkdownProfile = (typeof MARKDOWN_PROFILES)[number];
+export { MARKDOWN_PROFILES, type MarkdownProfile } from "./markdown-profiles";
 
 export type LocalRendererFormat = Extract<
   ExportFormat,

@@ -150,7 +150,13 @@ describe("renderMarkdown", () => {
   });
 
   test("supports all configured markdown profiles", () => {
-    const profiles: readonly MarkdownProfile[] = ["default", "obsidian", "github", "gitbook"];
+    const profiles: readonly MarkdownProfile[] = [
+      "default",
+      "obsidian",
+      "github",
+      "gitbook",
+      "research-log"
+    ];
 
     for (const profile of profiles) {
       expect(renderMarkdown(makeConversation(), { markdownProfile: profile }).bytes).toContain(

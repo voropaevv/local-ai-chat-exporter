@@ -2,6 +2,7 @@ import type { ExportOptions } from "../../core/export-options";
 import type { ExportFormat } from "../../core/schema";
 import type { MarkdownProfile } from "../../renderers";
 import { POPUP_FORMATS, type PopupOptionsState } from "../state/popup-state";
+import { MarkdownProfileSelector } from "./MarkdownProfileSelector";
 import { ScopeSelector } from "./ScopeSelector";
 
 interface ExportOptionsFormProps {
@@ -59,20 +60,7 @@ export function ExportOptionsForm({
         scope={options.scope}
       />
 
-      <label className="field-row">
-        <span>Markdown profile</span>
-        <select
-          onChange={(event) =>
-            onMarkdownProfileChange(event.currentTarget.value as MarkdownProfile)
-          }
-          value={options.markdownProfile}
-        >
-          <option value="default">Default</option>
-          <option value="obsidian">Obsidian</option>
-          <option value="github">GitHub</option>
-          <option value="gitbook">GitBook</option>
-        </select>
-      </label>
+      <MarkdownProfileSelector onChange={onMarkdownProfileChange} value={options.markdownProfile} />
 
       <label className="field-row">
         <span>Filename template</span>
