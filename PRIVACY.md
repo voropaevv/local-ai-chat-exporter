@@ -2,9 +2,11 @@
 
 Local AI Chat Exporter processes conversation content locally in your browser only after you explicitly click an export action.
 
+Task 00 does not scan or export conversations yet. It only provides the extension scaffold, popup placeholder, options placeholder, and local build tooling.
+
 ## What data is processed
 
-The extension reads the visible AI chat conversation in the active browser tab in order to generate local export files.
+Future exporter tasks will read the visible AI chat conversation in the active browser tab in order to generate local export files.
 
 ## What data is collected
 

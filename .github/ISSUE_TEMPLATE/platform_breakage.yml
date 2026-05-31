@@ -27,7 +27,7 @@ body:
     id: missing
     attributes:
       label: What is missing or broken?
-      description: Example: assistant messages missing, first message missing, code blocks broken.
+      description: "Example: assistant messages missing, first message missing, code blocks broken."
     validations:
       required: true
   - type: textarea

@@ -17,6 +17,8 @@ pnpm check
 - Do not add telemetry, remote code, or remote rendering.
 - Update privacy/security docs if data handling changes.
 - Update fixtures when platform UI changes.
+- Run `pnpm check` before review.
+- Run `pnpm package` when packaging or release files change.
 
 ## Adding an adapter
 
