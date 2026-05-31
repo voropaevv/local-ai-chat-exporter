@@ -9,6 +9,7 @@ import { zipSync } from "fflate";
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const distDir = resolve(projectRoot, "dist");
 const releaseDir = resolve(projectRoot, "release");
+const zipEntryDate = new Date("1980-01-01T00:00:00.000Z");
 
 async function collectFiles(directory) {
   const entries = await readdir(directory);
@@ -55,7 +56,12 @@ async function main() {
 
   for (const file of files) {
     const archivePath = relative(distDir, file).split("\\").join("/");
-    zipEntries[archivePath] = new Uint8Array(await readFile(file));
+    zipEntries[archivePath] = [
+      new Uint8Array(await readFile(file)),
+      {
+        mtime: zipEntryDate
+      }
+    ];
   }
 
   await mkdir(releaseDir, { recursive: true });
