@@ -1,11 +1,15 @@
 import type { ExportOptions } from "../../core/export-options";
 import {
   POPUP_CANCEL_SCAN_MESSAGE,
+  POPUP_CLEAR_SELECTION_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
+  POPUP_START_SELECTION_MESSAGE,
   type PopupCancelScanRequest,
+  type PopupClearSelectionRequest,
   type PopupExportRequest,
   type PopupScanRequest,
+  type PopupStartSelectionRequest,
   type PreviewMessage,
   type ScanSummary
 } from "../../core/messages";
@@ -20,6 +24,8 @@ export interface PopupOptionsState {
   readonly includeMetadata: boolean;
   readonly includeCompletenessReport: boolean;
   readonly markdownProfile: MarkdownProfile;
+  readonly rangeEndIndex: number;
+  readonly rangeStartIndex: number;
   readonly redact: boolean;
   readonly scope: ExportOptions["scope"];
 }
@@ -50,7 +56,9 @@ export type PopupAction =
   | { readonly type: "set_markdown_profile"; readonly markdownProfile: MarkdownProfile }
   | { readonly type: "set_filename_template"; readonly filenameTemplate: string }
   | { readonly type: "set_include_metadata"; readonly includeMetadata: boolean }
-  | { readonly type: "set_redact"; readonly redact: boolean };
+  | { readonly type: "set_redact"; readonly redact: boolean }
+  | { readonly type: "set_range_start"; readonly rangeStartIndex: number }
+  | { readonly type: "set_range_end"; readonly rangeEndIndex: number };
 
 const DEFAULT_OPTIONS: PopupOptionsState = {
   filenameTemplate: "{datetime}_{platform}_{title}.{format}",
@@ -58,6 +66,8 @@ const DEFAULT_OPTIONS: PopupOptionsState = {
   includeMetadata: true,
   includeCompletenessReport: true,
   markdownProfile: "default",
+  rangeEndIndex: 1,
+  rangeStartIndex: 1,
   redact: false,
   scope: "all"
 };
@@ -160,6 +170,16 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       };
     case "set_redact":
       return { ...state, options: { ...state.options, redact: action.redact } };
+    case "set_range_start":
+      return {
+        ...state,
+        options: { ...state.options, rangeStartIndex: action.rangeStartIndex }
+      };
+    case "set_range_end":
+      return {
+        ...state,
+        options: { ...state.options, rangeEndIndex: action.rangeEndIndex }
+      };
   }
 }
 
@@ -184,6 +204,14 @@ export function buildScanRequest(): PopupScanRequest {
 
 export function buildCancelScanRequest(): PopupCancelScanRequest {
   return { type: POPUP_CANCEL_SCAN_MESSAGE };
+}
+
+export function buildStartSelectionRequest(): PopupStartSelectionRequest {
+  return { type: POPUP_START_SELECTION_MESSAGE };
+}
+
+export function buildClearSelectionRequest(): PopupClearSelectionRequest {
+  return { type: POPUP_CLEAR_SELECTION_MESSAGE };
 }
 
 export function buildDownloadRequest(state: PopupState): PopupExportRequest {
@@ -226,7 +254,40 @@ export function buildExportOptions(
     includeCompletenessReport: state.options.includeCompletenessReport,
     includeMetadata: state.options.includeMetadata,
     markdownProfile: state.options.markdownProfile,
+    ...(state.options.scope === "range"
+      ? {
+          range: {
+            endIndex: Math.max(0, state.options.rangeEndIndex - 1),
+            startIndex: Math.max(0, state.options.rangeStartIndex - 1)
+          }
+        }
+      : {}),
     redact: state.options.redact,
     scope: state.options.scope
   };
+}
+
+export function getScopedPreviewMessages(state: PopupState): readonly PreviewMessage[] {
+  const messages = state.previewMessages;
+
+  if (state.options.scope === "user_only") {
+    return messages.filter((message) => message.role === "user");
+  }
+
+  if (state.options.scope === "assistant_only") {
+    return messages.filter((message) => message.role === "assistant");
+  }
+
+  if (state.options.scope === "selected") {
+    return messages.filter((message) => message.selected === true);
+  }
+
+  if (state.options.scope === "range") {
+    const startIndex = Math.max(0, state.options.rangeStartIndex - 1);
+    const endIndex = Math.max(0, state.options.rangeEndIndex - 1);
+
+    return messages.filter((message) => message.index >= startIndex && message.index <= endIndex);
+  }
+
+  return messages;
 }

@@ -346,6 +346,17 @@ legend {
   font-size: 12px;
 }
 
+.scope-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.range-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
 .inline-link {
   font-size: 12px;
   font-weight: 700;

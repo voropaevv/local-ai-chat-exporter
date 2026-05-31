@@ -5,18 +5,26 @@ import {
 } from "../../src/core/export-options";
 import {
   CONTENT_CANCEL_SCAN_MESSAGE,
+  CONTENT_CLEAR_SELECTION_MESSAGE,
   CONTENT_EXPORT_MESSAGE,
   CONTENT_SCAN_MESSAGE,
+  CONTENT_START_SELECTION_MESSAGE,
   POPUP_CANCEL_SCAN_MESSAGE,
+  POPUP_CLEAR_SELECTION_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
+  POPUP_START_SELECTION_MESSAGE,
+  type ContentClearSelectionRequest,
   type ContentExportRequest,
   type ContentExportSuccess,
   type ContentScanRequest,
+  type ContentStartSelectionRequest,
+  type PopupClearSelectionRequest,
   type PopupCancelScanRequest,
   type PopupExportRequest,
   type PopupExportSuccess,
   type PopupScanRequest,
+  type PopupStartSelectionRequest,
   type RuntimeResponse,
   type ScanSummary
 } from "../../src/core/messages";
@@ -41,7 +49,12 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 });
 
 async function handlePopupRequest(
-  request: PopupScanRequest | PopupCancelScanRequest | PopupExportRequest
+  request:
+    | PopupScanRequest
+    | PopupCancelScanRequest
+    | PopupExportRequest
+    | PopupStartSelectionRequest
+    | PopupClearSelectionRequest
 ): Promise<ScanSummary | PopupExportSuccess | { readonly cancelled: true }> {
   if (request.type === POPUP_SCAN_MESSAGE) {
     return handlePopupScanRequest();
@@ -49,6 +62,14 @@ async function handlePopupRequest(
 
   if (request.type === POPUP_CANCEL_SCAN_MESSAGE) {
     return handlePopupCancelScanRequest();
+  }
+
+  if (request.type === POPUP_START_SELECTION_MESSAGE) {
+    return handlePopupSelectionMessage({ type: CONTENT_START_SELECTION_MESSAGE });
+  }
+
+  if (request.type === POPUP_CLEAR_SELECTION_MESSAGE) {
+    return handlePopupSelectionMessage({ type: CONTENT_CLEAR_SELECTION_MESSAGE });
   }
 
   return handlePopupExportRequest(request);
@@ -78,6 +99,18 @@ async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: tru
   await sendContentMessage<{ readonly cancelled: true }>(tabId, {
     type: CONTENT_CANCEL_SCAN_MESSAGE
   });
+
+  return { cancelled: true };
+}
+
+async function handlePopupSelectionMessage(
+  request: ContentStartSelectionRequest | ContentClearSelectionRequest
+): Promise<{ readonly cancelled: true }> {
+  const tab = await getActiveTab();
+  const tabId = requireTabId(tab);
+
+  await ensureContentScript(tabId);
+  await sendContentMessage<{ readonly cancelled: boolean }>(tabId, request);
 
   return { cancelled: true };
 }
@@ -172,6 +205,8 @@ async function sendContentMessage<T>(
   request:
     | ContentScanRequest
     | ContentExportRequest
+    | ContentStartSelectionRequest
+    | ContentClearSelectionRequest
     | { readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE }
 ): Promise<RuntimeResponse<T>> {
   try {
@@ -187,12 +222,19 @@ async function sendContentMessage<T>(
 
 function isPopupRequest(
   message: unknown
-): message is PopupScanRequest | PopupCancelScanRequest | PopupExportRequest {
+): message is
+  | PopupScanRequest
+  | PopupCancelScanRequest
+  | PopupExportRequest
+  | PopupStartSelectionRequest
+  | PopupClearSelectionRequest {
   return (
     isRecord(message) &&
     (message.type === POPUP_SCAN_MESSAGE ||
       message.type === POPUP_CANCEL_SCAN_MESSAGE ||
-      message.type === POPUP_EXPORT_MESSAGE)
+      message.type === POPUP_EXPORT_MESSAGE ||
+      message.type === POPUP_START_SELECTION_MESSAGE ||
+      message.type === POPUP_CLEAR_SELECTION_MESSAGE)
   );
 }
 

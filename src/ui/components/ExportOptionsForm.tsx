@@ -2,24 +2,33 @@ import type { ExportOptions } from "../../core/export-options";
 import type { ExportFormat } from "../../core/schema";
 import type { MarkdownProfile } from "../../renderers";
 import { POPUP_FORMATS, type PopupOptionsState } from "../state/popup-state";
+import { ScopeSelector } from "./ScopeSelector";
 
 interface ExportOptionsFormProps {
   readonly onFilenameTemplateChange: (value: string) => void;
   readonly onFormatToggle: (format: ExportFormat) => void;
+  readonly onClearSelection: () => void;
   readonly onIncludeMetadataChange: (value: boolean) => void;
   readonly onMarkdownProfileChange: (value: MarkdownProfile) => void;
+  readonly onRangeEndChange: (value: number) => void;
+  readonly onRangeStartChange: (value: number) => void;
   readonly onRedactChange: (value: boolean) => void;
   readonly onScopeChange: (value: ExportOptions["scope"]) => void;
+  readonly onStartSelection: () => void;
   readonly options: PopupOptionsState;
 }
 
 export function ExportOptionsForm({
+  onClearSelection,
   onFilenameTemplateChange,
   onFormatToggle,
   onIncludeMetadataChange,
   onMarkdownProfileChange,
+  onRangeEndChange,
+  onRangeStartChange,
   onRedactChange,
   onScopeChange,
+  onStartSelection,
   options
 }: ExportOptionsFormProps) {
   return (
@@ -39,18 +48,16 @@ export function ExportOptionsForm({
         ))}
       </fieldset>
 
-      <label className="field-row">
-        <span>Scope</span>
-        <select
-          onChange={(event) => onScopeChange(event.currentTarget.value as ExportOptions["scope"])}
-          value={options.scope}
-        >
-          <option value="all">All messages</option>
-          <option value="selected">Selected messages</option>
-          <option value="user_only">User only</option>
-          <option value="assistant_only">Assistant only</option>
-        </select>
-      </label>
+      <ScopeSelector
+        onClearSelection={onClearSelection}
+        onRangeEndChange={onRangeEndChange}
+        onRangeStartChange={onRangeStartChange}
+        onScopeChange={onScopeChange}
+        onStartSelection={onStartSelection}
+        rangeEndIndex={options.rangeEndIndex}
+        rangeStartIndex={options.rangeStartIndex}
+        scope={options.scope}
+      />
 
       <label className="field-row">
         <span>Markdown profile</span>

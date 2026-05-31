@@ -5,15 +5,20 @@ import type { RenderedBytes, RenderedFile } from "../renderers";
 export const POPUP_SCAN_MESSAGE = "local-ai-chat-exporter/scan-current-tab";
 export const POPUP_CANCEL_SCAN_MESSAGE = "local-ai-chat-exporter/cancel-scan";
 export const POPUP_EXPORT_MESSAGE = "local-ai-chat-exporter/export-current-tab";
+export const POPUP_START_SELECTION_MESSAGE = "local-ai-chat-exporter/start-selection";
+export const POPUP_CLEAR_SELECTION_MESSAGE = "local-ai-chat-exporter/clear-selection";
 export const CONTENT_SCAN_MESSAGE = "local-ai-chat-exporter/content-scan";
 export const CONTENT_CANCEL_SCAN_MESSAGE = "local-ai-chat-exporter/content-cancel-scan";
 export const CONTENT_EXPORT_MESSAGE = "local-ai-chat-exporter/content-export";
+export const CONTENT_START_SELECTION_MESSAGE = "local-ai-chat-exporter/content-start-selection";
+export const CONTENT_CLEAR_SELECTION_MESSAGE = "local-ai-chat-exporter/content-clear-selection";
 
 export interface PreviewMessage {
   readonly index: number;
   readonly role: ChatRole;
   readonly authorLabel: string;
   readonly text: string;
+  readonly selected?: boolean;
 }
 
 export interface ScanSummary {
@@ -41,6 +46,14 @@ export interface PopupExportRequest {
   readonly returnFiles?: boolean;
 }
 
+export interface PopupStartSelectionRequest {
+  readonly type: typeof POPUP_START_SELECTION_MESSAGE;
+}
+
+export interface PopupClearSelectionRequest {
+  readonly type: typeof POPUP_CLEAR_SELECTION_MESSAGE;
+}
+
 export interface ContentScanRequest {
   readonly type: typeof CONTENT_SCAN_MESSAGE;
 }
@@ -55,6 +68,14 @@ export interface ContentExportRequest {
   readonly delivery: "anchor" | "return_files";
   readonly download?: boolean;
   readonly options: Partial<ExportOptions>;
+}
+
+export interface ContentStartSelectionRequest {
+  readonly type: typeof CONTENT_START_SELECTION_MESSAGE;
+}
+
+export interface ContentClearSelectionRequest {
+  readonly type: typeof CONTENT_CLEAR_SELECTION_MESSAGE;
 }
 
 export interface PopupExportSuccess {

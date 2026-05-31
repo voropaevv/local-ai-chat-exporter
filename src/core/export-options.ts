@@ -1,4 +1,5 @@
 import { redactText } from "./redaction";
+import { filterMessagesByScope, type SelectionRange, type SelectionScope } from "./selection";
 import type {
   CompletenessReport,
   ConversationExport,
@@ -14,7 +15,7 @@ import {
   type RenderedFile
 } from "../renderers";
 
-export type ExportScope = "all" | "selected" | "user_only" | "assistant_only";
+export type ExportScope = SelectionScope;
 
 export type ExportErrorCode =
   | "unsupported_platform"
@@ -32,6 +33,7 @@ export interface ExportOptions {
   readonly includeCompletenessReport: boolean;
   readonly redact: boolean;
   readonly filenameTemplate: string;
+  readonly range?: SelectionRange;
 }
 
 export interface SerializedExportError {
@@ -118,9 +120,10 @@ function prepareConversationForExport(
   conversation: ConversationExport,
   options: ExportOptions
 ): ConversationExport {
-  const messages = filterMessagesByScope(conversation.messages, options.scope).map(
-    (message, index) => prepareMessage(message, index, options)
-  );
+  const messages = filterMessagesByScope(conversation.messages, {
+    range: options.range,
+    scope: options.scope
+  }).map((message, index) => prepareMessage(message, index, options));
 
   return {
     schemaVersion: conversation.schemaVersion,
@@ -142,33 +145,6 @@ function prepareConversationForExport(
       : createHiddenCompleteness(messages.length),
     messages
   };
-}
-
-function filterMessagesByScope(
-  messages: readonly ExportedMessage[],
-  scope: ExportScope
-): readonly ExportedMessage[] {
-  if (scope === "user_only") {
-    return messages.filter((message) => message.role === "user");
-  }
-
-  if (scope === "assistant_only") {
-    return messages.filter((message) => message.role === "assistant");
-  }
-
-  if (scope === "selected") {
-    return messages.filter(isSelectedMessage);
-  }
-
-  return messages;
-}
-
-function isSelectedMessage(message: ExportedMessage): boolean {
-  return (
-    message.metadata.selected === true ||
-    message.metadata.exportSelected === true ||
-    message.metadata["localAiChatExporter:selected"] === true
-  );
 }
 
 function prepareMessage(

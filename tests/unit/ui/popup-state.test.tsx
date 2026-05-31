@@ -7,6 +7,7 @@ import {
   buildDownloadRequest,
   buildOpenPdfRequest,
   createInitialPopupState,
+  getScopedPreviewMessages,
   popupReducer,
   toggleFormat
 } from "../../../src/ui/state/popup-state";
@@ -109,5 +110,50 @@ describe("popup state", () => {
       options: { formats: ["pdf"] },
       returnFiles: true
     });
+  });
+
+  test("builds range requests and reflects scoped preview messages", () => {
+    const scanned = popupReducer(createInitialPopupState(), {
+      scan: {
+        completeness,
+        messageCount: 3,
+        platformLabel: "ChatGPT",
+        previewMessages: [
+          { authorLabel: "User", index: 0, role: "user", selected: true, text: "First prompt" },
+          { authorLabel: "ChatGPT", index: 1, role: "assistant", text: "Middle answer" },
+          {
+            authorLabel: "ChatGPT",
+            index: 2,
+            role: "assistant",
+            selected: true,
+            text: "Last answer"
+          }
+        ],
+        sourceUrl: "https://chatgpt.com/c/example",
+        title: "Example"
+      },
+      type: "scan_succeeded"
+    });
+    const rangeState = popupReducer(
+      popupReducer(popupReducer(scanned, { scope: "range", type: "set_scope" }), {
+        rangeStartIndex: 2,
+        type: "set_range_start"
+      }),
+      { rangeEndIndex: 3, type: "set_range_end" }
+    );
+    const selectedState = popupReducer(scanned, { scope: "selected", type: "set_scope" });
+
+    expect(buildDownloadRequest(rangeState).options?.range).toEqual({
+      endIndex: 2,
+      startIndex: 1
+    });
+    expect(getScopedPreviewMessages(rangeState).map((message) => message.text)).toEqual([
+      "Middle answer",
+      "Last answer"
+    ]);
+    expect(getScopedPreviewMessages(selectedState).map((message) => message.text)).toEqual([
+      "First prompt",
+      "Last answer"
+    ]);
   });
 });
