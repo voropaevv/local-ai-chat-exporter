@@ -1,102 +1,112 @@
 import {
   DEFAULT_EXPORT_OPTIONS,
   ExportPipelineError,
-  serializeExportError,
-  type ExportOptions,
-  type SerializedExportError
+  serializeExportError
 } from "../../src/core/export-options";
-import type { RenderedFile } from "../../src/renderers";
+import {
+  CONTENT_CANCEL_SCAN_MESSAGE,
+  CONTENT_EXPORT_MESSAGE,
+  CONTENT_SCAN_MESSAGE,
+  POPUP_CANCEL_SCAN_MESSAGE,
+  POPUP_EXPORT_MESSAGE,
+  POPUP_SCAN_MESSAGE,
+  type ContentExportRequest,
+  type ContentExportSuccess,
+  type ContentScanRequest,
+  type PopupCancelScanRequest,
+  type PopupExportRequest,
+  type PopupExportSuccess,
+  type PopupScanRequest,
+  type RuntimeResponse,
+  type ScanSummary
+} from "../../src/core/messages";
 import { downloadRenderedFiles } from "../../src/utils/download";
 
-const POPUP_EXPORT_MESSAGE = "local-ai-chat-exporter/export-current-tab";
-const CONTENT_EXPORT_MESSAGE = "local-ai-chat-exporter/content-export";
 const CONTENT_SCRIPT_FILE = "content/main.js";
-
-interface PopupExportRequest {
-  readonly type: typeof POPUP_EXPORT_MESSAGE;
-  readonly copyToClipboard?: boolean;
-  readonly options?: Partial<ExportOptions>;
-}
-
-interface ContentExportSuccess {
-  readonly clipboardError?: SerializedExportError;
-  readonly downloaded: readonly string[];
-  readonly files?: readonly RenderedFile<string | Uint8Array>[];
-  readonly messageCount: number;
-  readonly warnings: readonly string[];
-}
-
-type ContentExportResponse =
-  | {
-      readonly ok: true;
-      readonly value: ContentExportSuccess;
-    }
-  | {
-      readonly ok: false;
-      readonly error: SerializedExportError;
-    };
-
-type PopupExportResponse =
-  | {
-      readonly ok: true;
-      readonly value: PopupExportSuccess;
-    }
-  | {
-      readonly ok: false;
-      readonly error: SerializedExportError;
-    };
-
-interface PopupExportSuccess {
-  readonly clipboardError?: SerializedExportError;
-  readonly downloaded: readonly string[];
-  readonly messageCount: number;
-  readonly warnings: readonly string[];
-}
 
 chrome.runtime.onInstalled.addListener(() => {
   // Reserved for local-only extension setup in later tasks.
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (!isPopupExportRequest(message)) {
+  if (!isPopupRequest(message)) {
     return false;
   }
 
-  handlePopupExportRequest(message)
-    .then((value) => sendResponse({ ok: true, value } satisfies PopupExportResponse))
-    .catch((error: unknown) =>
-      sendResponse({ ok: false, error: serializeExportError(error) } satisfies PopupExportResponse)
-    );
+  handlePopupRequest(message)
+    .then((value) => sendResponse({ ok: true, value }))
+    .catch((error: unknown) => sendResponse({ ok: false, error: serializeExportError(error) }));
 
   return true;
 });
 
-async function handlePopupExportRequest(request: PopupExportRequest): Promise<PopupExportSuccess> {
-  const tab = await getActiveTab();
-  const tabId = tab.id;
-
-  if (tabId === undefined) {
-    throw new ExportPipelineError("unsupported_platform", "No active tab is available to export.");
+async function handlePopupRequest(
+  request: PopupScanRequest | PopupCancelScanRequest | PopupExportRequest
+): Promise<ScanSummary | PopupExportSuccess | { readonly cancelled: true }> {
+  if (request.type === POPUP_SCAN_MESSAGE) {
+    return handlePopupScanRequest();
   }
+
+  if (request.type === POPUP_CANCEL_SCAN_MESSAGE) {
+    return handlePopupCancelScanRequest();
+  }
+
+  return handlePopupExportRequest(request);
+}
+
+async function handlePopupScanRequest(): Promise<ScanSummary> {
+  const tab = await getActiveTab();
+  const tabId = requireTabId(tab);
 
   await ensureContentScript(tabId);
 
+  const response = await sendContentMessage<ScanSummary>(tabId, {
+    type: CONTENT_SCAN_MESSAGE
+  } satisfies ContentScanRequest);
+
+  if (!response.ok) {
+    throw new ExportPipelineError(response.error.code, response.error.message);
+  }
+
+  return response.value;
+}
+
+async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: true }> {
+  const tab = await getActiveTab();
+  const tabId = requireTabId(tab);
+
+  await sendContentMessage<{ readonly cancelled: true }>(tabId, {
+    type: CONTENT_CANCEL_SCAN_MESSAGE
+  });
+
+  return { cancelled: true };
+}
+
+async function handlePopupExportRequest(request: PopupExportRequest): Promise<PopupExportSuccess> {
+  const tab = await getActiveTab();
+  const tabId = requireTabId(tab);
+
+  await ensureContentScript(tabId);
+
+  const shouldDownload = request.download ?? true;
   const useDownloadsApi = await canUseDownloadsPermission();
-  const contentResponse = await sendContentExportRequest(tabId, {
+  const contentResponse = await sendContentMessage<ContentExportSuccess>(tabId, {
     copyToClipboard: request.copyToClipboard ?? true,
-    delivery: useDownloadsApi ? "return_files" : "anchor",
+    delivery: useDownloadsApi || request.returnFiles ? "return_files" : "anchor",
+    download: shouldDownload,
     options: request.options ?? DEFAULT_EXPORT_OPTIONS,
     type: CONTENT_EXPORT_MESSAGE
-  });
+  } satisfies ContentExportRequest);
 
   if (!contentResponse.ok) {
     throw new ExportPipelineError(contentResponse.error.code, contentResponse.error.message);
   }
 
-  if (!useDownloadsApi) {
+  if (!useDownloadsApi || !shouldDownload) {
     return {
       clipboardError: contentResponse.value.clipboardError,
       downloaded: contentResponse.value.downloaded,
+      ...(request.returnFiles ? { files: contentResponse.value.files } : {}),
       messageCount: contentResponse.value.messageCount,
       warnings: contentResponse.value.warnings
     };
@@ -111,6 +121,7 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
   return {
     clipboardError: contentResponse.value.clipboardError,
     downloaded: downloadResult.downloaded,
+    ...(request.returnFiles ? { files: contentResponse.value.files } : {}),
     messageCount: contentResponse.value.messageCount,
     warnings: contentResponse.value.warnings
   };
@@ -125,6 +136,14 @@ async function getActiveTab(): Promise<chrome.tabs.Tab> {
   }
 
   return activeTab;
+}
+
+function requireTabId(tab: chrome.tabs.Tab): number {
+  if (tab.id === undefined) {
+    throw new ExportPipelineError("unsupported_platform", "No active tab is available to export.");
+  }
+
+  return tab.id;
 }
 
 async function ensureContentScript(tabId: number): Promise<void> {
@@ -148,15 +167,13 @@ async function canUseDownloadsPermission(): Promise<boolean> {
   });
 }
 
-async function sendContentExportRequest(
+async function sendContentMessage<T>(
   tabId: number,
-  request: {
-    readonly copyToClipboard: boolean;
-    readonly delivery: "anchor" | "return_files";
-    readonly options: Partial<ExportOptions>;
-    readonly type: typeof CONTENT_EXPORT_MESSAGE;
-  }
-): Promise<ContentExportResponse> {
+  request:
+    | ContentScanRequest
+    | ContentExportRequest
+    | { readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE }
+): Promise<RuntimeResponse<T>> {
   try {
     return await chrome.tabs.sendMessage(tabId, request);
   } catch (error) {
@@ -168,8 +185,15 @@ async function sendContentExportRequest(
   }
 }
 
-function isPopupExportRequest(message: unknown): message is PopupExportRequest {
-  return isRecord(message) && message.type === POPUP_EXPORT_MESSAGE;
+function isPopupRequest(
+  message: unknown
+): message is PopupScanRequest | PopupCancelScanRequest | PopupExportRequest {
+  return (
+    isRecord(message) &&
+    (message.type === POPUP_SCAN_MESSAGE ||
+      message.type === POPUP_CANCEL_SCAN_MESSAGE ||
+      message.type === POPUP_EXPORT_MESSAGE)
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
