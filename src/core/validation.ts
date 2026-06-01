@@ -106,6 +106,9 @@ function validateImageRef(input: unknown, path: string, errors: string[]): void 
   requireOptionalString(input, "src", errors, path);
   requireOptionalString(input, "dataUri", errors, path);
   requireOptionalString(input, "localFilename", errors, path);
+  requireOptionalString(input, "omittedReason", errors, path);
+  requireOptionalString(input, "mimeType", errors, path);
+  requireOptionalString(input, "hash", errors, path);
   requireOptionalNumber(input, "width", errors, path);
   requireOptionalNumber(input, "height", errors, path);
 }

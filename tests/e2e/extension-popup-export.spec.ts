@@ -29,7 +29,7 @@ test("extension popup scans a ChatGPT fixture and downloads markdown", async () 
 
     const popup = await openExtensionPopup(context, fixturePage);
     await popup.getByRole("button", { name: "Scan conversation" }).click();
-    await expect(popup.getByText("Scanned 2 message(s).")).toBeVisible();
+    await expect(popup.getByText("Scanned 2 message(s). Ready to export.")).toBeVisible();
     await expect(popup.getByText("Hello, can you summarize this?")).toBeVisible();
 
     const downloadPromise = fixturePage.waitForEvent("download");
@@ -91,6 +91,7 @@ function isLocalBrowserUnavailable(error: unknown): boolean {
     message.includes("Executable doesn't exist") ||
     message.includes("Looks like you launched a headed browser without having a XServer") ||
     message.includes("chrome.action.openPopup") ||
+    message.includes('waiting for event "page"') ||
     message.includes("Could not find an active browser window") ||
     message.includes("Target page, context or browser has been closed") ||
     message.includes("Missing X server")

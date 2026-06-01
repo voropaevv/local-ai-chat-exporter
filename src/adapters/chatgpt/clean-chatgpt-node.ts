@@ -1,4 +1,5 @@
 import type { ExportedCodeBlock, ExportedImageRef } from "../../core/schema";
+import { isSafeExternalImageUrl, renderImageReferenceText } from "../../core/image-safety";
 import { cleanText } from "../../utils/text";
 import { extractCodeBlocks } from "./extract-code";
 import { extractImageRefs } from "./extract-images";
@@ -365,14 +366,14 @@ function normalizeFenceLanguage(language: string | undefined): string {
 
 function renderMarkdownImageRef(image: ExportedImageRef): string {
   const label = image.alt?.trim() || "Image";
-  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const source = image.src ?? image.localFilename;
   const dimensions = renderImageDimensions(image);
 
-  if (source && image.dataUri === undefined && isSafeHref(source)) {
+  if (source && isSafeExternalImageUrl(source)) {
     return `Image: [${label}](${source})${dimensions}`;
   }
 
-  return `Image: ${label}${source ? ` (${source})` : ""}${dimensions}`;
+  return `Image: ${renderImageReferenceText(image)}`;
 }
 
 function renderPlainImageRef(element: Element): string {

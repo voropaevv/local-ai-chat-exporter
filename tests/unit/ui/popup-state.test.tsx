@@ -53,7 +53,13 @@ describe("popup state", () => {
     expect(scanned.platformLabel).toBe("ChatGPT");
     expect(scanned.completeness?.warnings).toEqual(["Top was not reached"]);
     expect(scanned.previewMessages).toHaveLength(3);
+    expect(scanned.progressLabel).toBe("Scanned 3 message(s). Ready to export.");
     expect(scanned.partialWarning).toBe("This export may be partial.");
+
+    const exporting = popupReducer(scanned, { type: "export_started" });
+
+    expect(exporting.scanStatus).toBe("exporting");
+    expect(exporting.progressLabel).toBe("Exporting from scanned snapshot...");
 
     const cancelled = popupReducer(scanning, { type: "scan_cancelled" });
 

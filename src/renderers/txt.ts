@@ -1,4 +1,5 @@
 import type { ConversationExport, ExportedCodeBlock, ExportedMessage } from "../core/schema";
+import { sanitizeConversationImagesForOutput } from "../core/image-safety";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const MESSAGE_SEPARATOR = "=".repeat(80);
@@ -7,26 +8,27 @@ export function renderTxt(
   conversation: ConversationExport,
   options: RendererOptions = {}
 ): RenderedFile {
-  const warnings = collectWarnings(conversation);
+  const safeConversation = sanitizeConversationImagesForOutput(conversation);
+  const warnings = collectWarnings(safeConversation);
   const lines: string[] = [
-    `Title: ${normalizeSingleLine(conversation.title ?? "Untitled conversation")}`,
-    `Platform: ${conversation.platformLabel}`,
-    `Source: ${conversation.sourceUrl}`,
-    `Exported: ${conversation.exportedAt}`,
-    `Messages: ${conversation.messageCount}`,
-    `Completeness: ${conversation.completeness.status}`
+    `Title: ${normalizeSingleLine(safeConversation.title ?? "Untitled conversation")}`,
+    `Platform: ${safeConversation.platformLabel}`,
+    `Source: ${safeConversation.sourceUrl}`,
+    `Exported: ${safeConversation.exportedAt}`,
+    `Messages: ${safeConversation.messageCount}`,
+    `Completeness: ${safeConversation.completeness.status}`
   ];
 
   if (warnings.length > 0) {
     lines.push("Warnings:", ...warnings.map((warning) => `- ${warning}`));
   }
 
-  for (const message of conversation.messages) {
+  for (const message of safeConversation.messages) {
     lines.push("", MESSAGE_SEPARATOR, ...renderMessage(message));
   }
 
   return createRenderedFile(
-    conversation,
+    safeConversation,
     "txt",
     "text/plain;charset=utf-8",
     `${lines.join("\n").trimEnd()}\n`,

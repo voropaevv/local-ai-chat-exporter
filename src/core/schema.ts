@@ -34,6 +34,9 @@ export interface ExportedImageRef {
   readonly src?: string;
   readonly dataUri?: string;
   readonly localFilename?: string;
+  readonly omittedReason?: "embedded_image_omitted";
+  readonly mimeType?: string;
+  readonly hash?: string;
   readonly width?: number;
   readonly height?: number;
 }

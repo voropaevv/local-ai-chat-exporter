@@ -127,7 +127,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
             : "This export may be partial.",
         platformLabel: action.scan.platformLabel,
         previewMessages: action.scan.previewMessages,
-        progressLabel: `Scanned ${action.scan.messageCount} message(s).`,
+        progressLabel: `Scanned ${action.scan.messageCount} message(s). Ready to export.`,
         scanStatus: "scanned",
         sourceUrl: action.scan.sourceUrl,
         title: action.scan.title
@@ -151,7 +151,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return {
         ...state,
         errorMessage: undefined,
-        progressLabel: "Exporting locally...",
+        progressLabel: "Exporting from scanned snapshot...",
         scanStatus: "exporting"
       };
     case "export_finished":

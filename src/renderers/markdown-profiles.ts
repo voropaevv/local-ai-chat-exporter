@@ -4,6 +4,12 @@ import type {
   ExportedImageRef,
   ExportedMessage
 } from "../core/schema";
+import {
+  isSafeExternalImageUrl,
+  renderImageReferenceText,
+  renderDimensions,
+  sanitizeConversationImagesForOutput
+} from "../core/image-safety";
 import { renderFrontmatter, type FrontmatterField } from "./frontmatter";
 
 export const MARKDOWN_PROFILES = [
@@ -28,23 +34,25 @@ export function renderProfileMarkdown(
   conversation: ConversationExport,
   profile: MarkdownProfile
 ): string {
+  const safeConversation = sanitizeConversationImagesForOutput(conversation);
+
   if (profile === "obsidian") {
-    return renderObsidianMarkdown(conversation);
+    return renderObsidianMarkdown(safeConversation);
   }
 
   if (profile === "github") {
-    return renderGithubMarkdown(conversation);
+    return renderGithubMarkdown(safeConversation);
   }
 
   if (profile === "gitbook") {
-    return renderGitBookMarkdown(conversation);
+    return renderGitBookMarkdown(safeConversation);
   }
 
   if (profile === "research-log") {
-    return renderResearchLogMarkdown(conversation);
+    return renderResearchLogMarkdown(safeConversation);
   }
 
-  return renderDefaultMarkdown(conversation, profile);
+  return renderDefaultMarkdown(safeConversation, profile);
 }
 
 function renderDefaultMarkdown(conversation: ConversationExport, profile: MarkdownProfile): string {
@@ -354,14 +362,14 @@ function renderImageRefs(images: readonly ExportedImageRef[], body: string): str
 
 function renderImageRef(image: ExportedImageRef): string {
   const label = escapeMarkdownText(image.alt?.trim() || "Image");
-  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const source = image.src ?? image.localFilename;
   const dimensions = renderDimensions(image);
 
-  if (source && image.dataUri === undefined && isSafeMarkdownHref(source)) {
+  if (source && isSafeExternalImageUrl(source)) {
     return `[${label}](${source})${dimensions}`;
   }
 
-  return `${label}${source ? ` (${source})` : ""}${dimensions}`;
+  return renderImageReferenceText(image);
 }
 
 function isImageAlreadyReferenced(image: ExportedImageRef, body: string): boolean {
@@ -369,27 +377,8 @@ function isImageAlreadyReferenced(image: ExportedImageRef, body: string): boolea
   return source !== undefined && body.includes(source);
 }
 
-function renderDimensions(image: ExportedImageRef): string {
-  if (image.width === undefined || image.height === undefined) {
-    return "";
-  }
-
-  return ` (${image.width}x${image.height})`;
-}
-
 function escapeMarkdownText(input: string): string {
   return input.replace(/\\/g, "\\\\").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
-}
-
-function isSafeMarkdownHref(input: string): boolean {
-  try {
-    const parsed = new URL(input);
-    return (
-      parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:"
-    );
-  } catch {
-    return false;
-  }
 }
 
 function normalizeFenceLanguage(language: string | undefined): string {

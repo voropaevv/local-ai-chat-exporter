@@ -1,4 +1,5 @@
 import type { ConversationExport, ExportedMessage } from "../core/schema";
+import { sanitizeConversationImagesForOutput } from "../core/image-safety";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const CSV_COLUMNS = [
@@ -15,13 +16,14 @@ export function renderCsv(
   conversation: ConversationExport,
   options: RendererOptions = {}
 ): RenderedFile {
+  const safeConversation = sanitizeConversationImagesForOutput(conversation);
   const rows = [
     CSV_COLUMNS.join(","),
-    ...conversation.messages.map((message) => renderMessageRow(message))
+    ...safeConversation.messages.map((message) => renderMessageRow(message))
   ];
 
   return createRenderedFile(
-    conversation,
+    safeConversation,
     "csv",
     "text/csv;charset=utf-8",
     `${rows.join("\n")}\n`,

@@ -6,6 +6,10 @@ import type {
   ExportedImageRef,
   ExportedMessage
 } from "../core/schema";
+import {
+  renderImageReferenceText,
+  sanitizeConversationImagesForOutput
+} from "../core/image-safety";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -14,16 +18,18 @@ export function renderDocx(
   conversation: ConversationExport,
   options: RendererOptions = {}
 ): RenderedFile<Uint8Array> {
+  const safeConversation = sanitizeConversationImagesForOutput(conversation);
+
   return createRenderedFile(
-    conversation,
+    safeConversation,
     "docx",
     DOCX_MIME,
     zipSync({
       "[Content_Types].xml": strToU8(renderContentTypesXml()),
       "_rels/.rels": strToU8(renderRootRelationshipsXml()),
       "docProps/app.xml": strToU8(renderAppPropertiesXml()),
-      "docProps/core.xml": strToU8(renderCorePropertiesXml(conversation)),
-      "word/document.xml": strToU8(renderDocumentXml(conversation)),
+      "docProps/core.xml": strToU8(renderCorePropertiesXml(safeConversation)),
+      "word/document.xml": strToU8(renderDocumentXml(safeConversation)),
       "word/styles.xml": strToU8(renderStylesXml())
     }),
     options
@@ -237,13 +243,17 @@ function renderImageRefs(images: readonly ExportedImageRef[]): readonly string[]
 
 function renderImageRef(image: ExportedImageRef): string {
   const label = image.alt?.trim() || "Image";
-  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const source = image.src ?? image.localFilename;
   const dimensions =
     image.width !== undefined && image.height !== undefined
       ? ` (${image.width}x${image.height})`
       : "";
 
-  return `Image: ${label}${source ? ` - ${source}` : ""}${dimensions}`;
+  if (source !== undefined) {
+    return `Image: ${label} - ${source}${dimensions}`;
+  }
+
+  return renderImageReferenceText(image);
 }
 
 function flushParagraph(paragraphs: string[], lines: readonly string[]): void {

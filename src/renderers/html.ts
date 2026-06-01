@@ -4,6 +4,11 @@ import type {
   ExportedImageRef,
   ExportedMessage
 } from "../core/schema";
+import {
+  isSafeExternalImageUrl,
+  renderImageReferenceText,
+  sanitizeConversationImagesForOutput
+} from "../core/image-safety";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const HTML_CSS = `:root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -41,10 +46,11 @@ export function renderHtml(
   conversation: ConversationExport,
   options: RendererOptions = {}
 ): RenderedFile {
-  const title = normalizeSingleLine(conversation.title ?? "Untitled conversation");
-  const warnings = collectWarnings(conversation);
+  const safeConversation = sanitizeConversationImagesForOutput(conversation);
+  const title = normalizeSingleLine(safeConversation.title ?? "Untitled conversation");
+  const warnings = collectWarnings(safeConversation);
   const warningsSection = renderWarningsSection(warnings);
-  const messages = conversation.messages.map(renderMessage).join("\n");
+  const messages = safeConversation.messages.map(renderMessage).join("\n");
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -61,13 +67,13 @@ ${HTML_CSS}
       <h1>${escapeHtml(title)}</h1>
       <p>This export was generated locally by extension.</p>
       <section class="meta" aria-label="Export metadata">
-        <div><strong>Platform:</strong> ${escapeHtml(conversation.platformLabel)}</div>
-        <div><strong>Source:</strong> <a href="${safeHref(conversation.sourceUrl)}" rel="noreferrer">${escapeHtml(
-          conversation.sourceUrl
+        <div><strong>Platform:</strong> ${escapeHtml(safeConversation.platformLabel)}</div>
+        <div><strong>Source:</strong> <a href="${safeHref(safeConversation.sourceUrl)}" rel="noreferrer">${escapeHtml(
+          safeConversation.sourceUrl
         )}</a></div>
-        <div><strong>Exported:</strong> ${escapeHtml(conversation.exportedAt)}</div>
-        <div><strong>Messages:</strong> ${conversation.messageCount}</div>
-        <div><strong>Completeness:</strong> ${escapeHtml(conversation.completeness.status)}</div>
+        <div><strong>Exported:</strong> ${escapeHtml(safeConversation.exportedAt)}</div>
+        <div><strong>Messages:</strong> ${safeConversation.messageCount}</div>
+        <div><strong>Completeness:</strong> ${escapeHtml(safeConversation.completeness.status)}</div>
       </section>${warningsSection}
     </header>
 ${messages}
@@ -77,7 +83,7 @@ ${messages}
 </html>
 `;
 
-  return createRenderedFile(conversation, "html", "text/html;charset=utf-8", html, options);
+  return createRenderedFile(safeConversation, "html", "text/html;charset=utf-8", html, options);
 }
 
 function renderWarningsSection(warnings: readonly string[]): string {
@@ -166,10 +172,6 @@ function neutralizeUnsafeUrls(input: string): string {
 
       if (normalizedAttribute === "href") {
         return ` href=${quote}${safeHref(attributeValue)}${quote}`;
-      }
-
-      if (normalizedAttribute === "src" && isSafeDataImage(attributeValue)) {
-        return ` src=${quote}${escapeAttribute(attributeValue)}${quote}`;
       }
 
       return "";
@@ -264,22 +266,16 @@ function renderImageRefs(images: readonly ExportedImageRef[]): string {
 
 function renderImageRef(image: ExportedImageRef): string {
   const label = escapeHtml(image.alt?.trim() || "Image");
-  const source = image.src ?? image.localFilename ?? image.dataUri;
+  const source = image.src ?? image.localFilename;
   const dimensions = renderDimensions(image);
 
-  if (image.dataUri !== undefined && isSafeDataImage(image.dataUri)) {
-    return `<figure><img src="${escapeAttribute(image.dataUri)}" alt="${escapeAttribute(
-      image.alt ?? "Image"
-    )}"${renderImageSizeAttributes(image)}>${dimensions ? `<figcaption>${dimensions}</figcaption>` : ""}</figure>`;
-  }
-
-  if (source !== undefined && isSafeHrefValue(source)) {
+  if (source !== undefined && isSafeExternalImageUrl(source)) {
     return `${label}: <a href="${safeHref(source)}" rel="noreferrer">${escapeHtml(
       source
     )}</a>${dimensions}`;
   }
 
-  return `${label}${source ? `: ${escapeHtml(source)}` : ""}${dimensions}`;
+  return escapeHtml(renderImageReferenceText(image));
 }
 
 function renderDimensions(image: ExportedImageRef): string {
@@ -288,13 +284,6 @@ function renderDimensions(image: ExportedImageRef): string {
   }
 
   return ` (${image.width}x${image.height})`;
-}
-
-function renderImageSizeAttributes(image: ExportedImageRef): string {
-  const width = image.width !== undefined ? ` width="${image.width}"` : "";
-  const height = image.height !== undefined ? ` height="${image.height}"` : "";
-
-  return `${width}${height}`;
 }
 
 function parseFencedCode(
@@ -430,8 +419,4 @@ function isSafeHrefValue(input: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isSafeDataImage(input: string): boolean {
-  return /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(input.trim());
 }

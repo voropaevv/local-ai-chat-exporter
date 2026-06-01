@@ -259,10 +259,10 @@ function buildExportStatus(result: PopupExportSuccess): string {
     result.clipboardError === undefined ? "" : ` Clipboard: ${result.clipboardError.message}`;
 
   if (downloaded > 0) {
-    return `Exported ${result.messageCount} message(s) to ${downloaded} file(s).${copied}`;
+    return `Exported from scanned snapshot. ${result.messageCount} message(s) to ${downloaded} file(s).${copied}`;
   }
 
-  return `Prepared ${result.messageCount} message(s).${copied}`;
+  return `Exported from scanned snapshot. Prepared ${result.messageCount} message(s).${copied}`;
 }
 
 function openRenderedFile(file: RenderedFile<RenderedBytes>): void {

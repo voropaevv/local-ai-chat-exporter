@@ -14,6 +14,10 @@ import type {
   ExportedMessage
 } from "./schema";
 import {
+  omitDataImagePayloads,
+  sanitizeImageRefForOutput
+} from "./image-safety";
+import {
   renderers,
   type MarkdownProfile,
   type RenderedBytes,
@@ -29,7 +33,9 @@ export type ExportErrorCode =
   | "download_failed"
   | "clipboard_failed"
   | "unsupported_format"
-  | "content_script_injection_failed";
+  | "content_script_injection_failed"
+  | "scan_required"
+  | "scan_stale";
 
 export interface ExportOptions {
   readonly formats: ExportFormat[];
@@ -171,12 +177,12 @@ function prepareMessage(
     index,
     role: message.role,
     authorLabel: redactIfNeeded(message.authorLabel, options.redaction),
-    text: redactIfNeeded(message.text, options.redaction),
+    text: omitDataImagePayloads(redactIfNeeded(message.text, options.redaction)),
     ...(message.markdown !== undefined
-      ? { markdown: redactIfNeeded(message.markdown, options.redaction) }
+      ? { markdown: omitDataImagePayloads(redactIfNeeded(message.markdown, options.redaction)) }
       : {}),
     ...(message.html !== undefined
-      ? { html: redactIfNeeded(message.html, options.redaction) }
+      ? { html: omitDataImagePayloads(redactIfNeeded(message.html, options.redaction)) }
       : {}),
     codeBlocks: message.codeBlocks.map((codeBlock) =>
       prepareCodeBlock(codeBlock, options.redaction)
@@ -200,12 +206,12 @@ function prepareCodeBlock(
     ...(codeBlock.language !== undefined
       ? { language: redactIfNeeded(codeBlock.language, redaction) }
       : {}),
-    code: redactIfNeeded(codeBlock.code, redaction)
+    code: omitDataImagePayloads(redactIfNeeded(codeBlock.code, redaction))
   };
 }
 
 function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings): ExportedImageRef {
-  return {
+  return sanitizeImageRefForOutput({
     ...(image.alt !== undefined ? { alt: redactIfNeeded(image.alt, redaction) } : {}),
     ...(image.src !== undefined ? { src: redactIfNeeded(image.src, redaction) } : {}),
     ...(image.dataUri !== undefined ? { dataUri: image.dataUri } : {}),
@@ -214,7 +220,7 @@ function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings):
       : {}),
     ...(image.width !== undefined ? { width: image.width } : {}),
     ...(image.height !== undefined ? { height: image.height } : {})
-  };
+  });
 }
 
 function prepareCompleteness(

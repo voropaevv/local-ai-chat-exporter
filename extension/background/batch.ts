@@ -11,12 +11,15 @@ import {
 } from "../../src/core/export-options";
 import {
   CONTENT_EXPORT_MESSAGE,
+  CONTENT_SCAN_MESSAGE,
   type BatchExportSuccess,
   type BatchListSuccess,
   type ContentExportRequest,
   type ContentExportSuccess,
+  type ContentScanRequest,
   type PopupBatchExportRequest,
-  type RuntimeResponse
+  type RuntimeResponse,
+  type ScanSummary
 } from "../../src/core/messages";
 import {
   createBatchZipManifestResults,
@@ -75,6 +78,13 @@ async function exportTab(
 ): Promise<BatchZipResult> {
   try {
     await ensureContentScript(tab.id);
+    const scanResponse = await sendContentMessage<ScanSummary>(tab.id, {
+      type: CONTENT_SCAN_MESSAGE
+    } satisfies ContentScanRequest);
+
+    if (!scanResponse.ok) {
+      throw new ExportPipelineError(scanResponse.error.code, scanResponse.error.message);
+    }
 
     const response = await sendContentMessage<ContentExportSuccess>(tab.id, {
       copyToClipboard: false,
@@ -113,7 +123,7 @@ async function exportTab(
 
 async function sendContentMessage<T>(
   tabId: number,
-  request: ContentExportRequest
+  request: ContentExportRequest | ContentScanRequest
 ): Promise<RuntimeResponse<T>> {
   return chrome.tabs.sendMessage(tabId, request);
 }

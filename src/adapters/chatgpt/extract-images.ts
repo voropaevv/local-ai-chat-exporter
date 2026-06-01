@@ -2,7 +2,6 @@ import type { ExportedImageRef } from "../../core/schema";
 
 export function extractImageRefs(root: Element): readonly ExportedImageRef[] {
   return Array.from(root.querySelectorAll("img"))
-    .filter((image) => isVisibleElement(image))
     .map((image) => {
       const src = image.getAttribute("src")?.trim() || image.currentSrc.trim() || undefined;
       const width =
@@ -12,6 +11,7 @@ export function extractImageRefs(root: Element): readonly ExportedImageRef[] {
       const alt = image.getAttribute("alt")?.trim() || undefined;
 
       return {
+        element: image,
         ...(alt ? { alt } : {}),
         ...(src?.startsWith("data:") ? { dataUri: src } : {}),
         ...(src && !src.startsWith("data:") ? { src } : {}),
@@ -19,7 +19,26 @@ export function extractImageRefs(root: Element): readonly ExportedImageRef[] {
         ...(height ? { height } : {})
       };
     })
-    .filter((imageRef) => Boolean(imageRef.src ?? imageRef.dataUri));
+    .filter((imageRef) => isContentImage(imageRef))
+    .map(toExportedImageRef);
+}
+
+type CandidateImageRef = ExportedImageRef & {
+  readonly element: HTMLImageElement;
+};
+
+function toExportedImageRef(image: CandidateImageRef): ExportedImageRef {
+  return {
+    ...(image.alt !== undefined ? { alt: image.alt } : {}),
+    ...(image.src !== undefined ? { src: image.src } : {}),
+    ...(image.dataUri !== undefined ? { dataUri: image.dataUri } : {}),
+    ...(image.localFilename !== undefined ? { localFilename: image.localFilename } : {}),
+    ...(image.omittedReason !== undefined ? { omittedReason: image.omittedReason } : {}),
+    ...(image.mimeType !== undefined ? { mimeType: image.mimeType } : {}),
+    ...(image.hash !== undefined ? { hash: image.hash } : {}),
+    ...(image.width !== undefined ? { width: image.width } : {}),
+    ...(image.height !== undefined ? { height: image.height } : {})
+  };
 }
 
 function parsePositiveInteger(value: string | null): number | undefined {
@@ -49,4 +68,85 @@ function isVisibleElement(element: Element): boolean {
   }
 
   return true;
+}
+
+function isContentImage(image: CandidateImageRef): boolean {
+  if (!isVisibleElement(image.element)) {
+    return false;
+  }
+
+  if (isInsideUiControl(image.element)) {
+    return false;
+  }
+
+  if (isAvatarImage(image)) {
+    return false;
+  }
+
+  if (isTinyUiIcon(image) && !hasStrongContentSignal(image)) {
+    return false;
+  }
+
+  return Boolean(image.src ?? image.dataUri);
+}
+
+function isInsideUiControl(element: Element): boolean {
+  return (
+    element.closest(
+      [
+        "button",
+        "form",
+        "input",
+        "textarea",
+        "select",
+        "[role='button']",
+        "[role='checkbox']",
+        "[role='menuitem']",
+        "[contenteditable='true']",
+        "[data-local-ai-chat-exporter]",
+        "[data-testid*='copy' i]",
+        "[data-testid*='feedback' i]",
+        "[data-testid*='regenerate' i]",
+        "[data-testid*='rating' i]",
+        "[aria-label*='copy' i]",
+        "[aria-label*='copied' i]",
+        "[aria-label*='feedback' i]",
+        "[aria-label*='regenerate' i]"
+      ].join(",")
+    ) !== null
+  );
+}
+
+function isAvatarImage(image: CandidateImageRef): boolean {
+  const alt = image.alt?.toLocaleLowerCase() ?? "";
+  const src = image.src?.toLocaleLowerCase() ?? "";
+
+  return (
+    alt.includes("avatar") ||
+    alt === "user" ||
+    alt === "chatgpt" ||
+    src.includes("avatar") ||
+    image.element.closest("[data-testid*='avatar' i], .avatar, [class*='avatar' i]") !== null
+  );
+}
+
+function isTinyUiIcon(image: CandidateImageRef): boolean {
+  const width = image.width ?? image.element.naturalWidth;
+  const height = image.height ?? image.element.naturalHeight;
+
+  return width !== undefined && height !== undefined && width <= 64 && height <= 64;
+}
+
+function hasStrongContentSignal(image: CandidateImageRef): boolean {
+  const alt = image.alt?.trim().toLocaleLowerCase() ?? "";
+
+  if (image.dataUri !== undefined && !isTinyUiIcon(image)) {
+    return true;
+  }
+
+  return (
+    image.element.closest("figure, [data-testid*='image' i], [data-testid*='attachment' i]") !==
+      null ||
+    /\b(diagram|chart|photo|image|screenshot|attachment|uploaded)\b/.test(alt)
+  );
 }
