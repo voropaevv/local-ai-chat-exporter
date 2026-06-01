@@ -28,7 +28,8 @@ export type ExportErrorCode =
   | "scan_cancelled"
   | "download_failed"
   | "clipboard_failed"
-  | "unsupported_format";
+  | "unsupported_format"
+  | "content_script_injection_failed";
 
 export interface ExportOptions {
   readonly formats: ExportFormat[];

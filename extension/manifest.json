@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Local AI Chat Exporter",
   "short_name": "Local Exporter",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Export the currently viewed AI chat conversation to local files without telemetry.",
   "minimum_chrome_version": "114",
   "permissions": ["activeTab", "scripting", "storage"],

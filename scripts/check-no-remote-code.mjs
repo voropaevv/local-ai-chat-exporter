@@ -24,7 +24,7 @@ const patterns = [
   {
     label: "analytics",
     regex:
-      /\b(?:gtag|ga|mixpanel|amplitude|posthog|fullstory|hotjar)\b|google-analytics|segment\.com|sentry\.io|analytics\.js/gi
+      /\b(?:gtag|mixpanel|amplitude|posthog|fullstory|hotjar)\b|(?:^|[^A-Za-z0-9_$])ga\s*\(\s*["'](?:send|create|set|require|provide|remove|pageview|event)\b|google-analytics|segment\.com|sentry\.io|analytics\.js/gi
   },
   {
     label: "external JavaScript URL",

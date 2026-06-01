@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "vitest";
+import { zipSync } from "fflate";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
 
@@ -28,7 +29,7 @@ describe("security release scripts", () => {
     withTempDir((directory) => {
       writeFileSync(
         resolve(directory, "popup.js"),
-        'const privacy = "No remote rendering";\nconst local = chrome.runtime.getURL("popup.js");\n'
+        'function ga(){ return "<xml/>"; }\nconst Ga = () => "local helper";\nconst privacy = "No remote rendering";\nconst local = chrome.runtime.getURL("popup.js");\n'
       );
 
       const result = runNodeScript("scripts/check-no-remote-code.mjs", [directory]);
@@ -42,7 +43,7 @@ describe("security release scripts", () => {
     withTempDir((directory) => {
       writeFileSync(
         resolve(directory, "bad.html"),
-        '<script src="https://cdn.example.com/app.js"></script><script>eval("1"); new Function("return 1"); mixpanel.track("x");</script>\n'
+        '<script src="https://cdn.example.com/app.js"></script><script>eval("1"); new Function("return 1"); mixpanel.track("x"); ga("send", "pageview");</script>\n'
       );
 
       const result = runNodeScript("scripts/check-no-remote-code.mjs", [directory]);
@@ -88,6 +89,70 @@ describe("security release scripts", () => {
       expect(result.stderr).toContain("debugger");
       expect(result.stderr).toContain("host_permissions");
       expect(result.stderr).toContain("<all_urls>");
+    });
+  });
+
+  test("check-content-script-classic passes classic dist and release content scripts", () => {
+    withTempDir((directory) => {
+      const distDir = resolve(directory, "dist");
+      const releaseDir = resolve(directory, "release");
+      mkdirSync(resolve(distDir, "content"), { recursive: true });
+      mkdirSync(releaseDir, { recursive: true });
+      writeFileSync(
+        resolve(distDir, "content/main.js"),
+        '(()=>{const ready = true; globalThis.__localAiChatExporterReady = ready;})();\n'
+      );
+      writeFileSync(
+        resolve(releaseDir, "local-ai-chat-exporter-v0.1.0.zip"),
+        Buffer.from(
+          zipSync({
+            "content/main.js": new TextEncoder().encode(
+              '(()=>{const ready = true; globalThis.__localAiChatExporterReady = ready;})();\n'
+            ),
+            "manifest.json": new TextEncoder().encode('{"manifest_version":3}')
+          })
+        )
+      );
+
+      const result = runNodeScript("scripts/check-content-script-classic.mjs", [
+        distDir,
+        releaseDir
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Content script classic checks passed");
+    });
+  });
+
+  test("check-content-script-classic fails ESM syntax in dist and release content scripts", () => {
+    withTempDir((directory) => {
+      const distDir = resolve(directory, "dist");
+      const releaseDir = resolve(directory, "release");
+      mkdirSync(resolve(distDir, "content"), { recursive: true });
+      mkdirSync(releaseDir, { recursive: true });
+      writeFileSync(
+        resolve(distDir, "content/main.js"),
+        'import { value } from "../assets/shared.js";\nexport const ready = value;\n'
+      );
+      writeFileSync(
+        resolve(releaseDir, "local-ai-chat-exporter-v0.1.0.zip"),
+        Buffer.from(
+          zipSync({
+            "content/main.js": new TextEncoder().encode("import('../assets/shared.js');\n"),
+            "manifest.json": new TextEncoder().encode('{"manifest_version":3}')
+          })
+        )
+      );
+
+      const result = runNodeScript("scripts/check-content-script-classic.mjs", [
+        distDir,
+        releaseDir
+      ]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("top-level import");
+      expect(result.stderr).toContain("top-level export");
+      expect(result.stderr).toContain("dynamic import");
     });
   });
 });

@@ -23,9 +23,8 @@ import {
   renderBatchZip,
   type BatchZipResult
 } from "../../src/renderers/zip";
+import { ensureContentScript } from "../../src/utils/content-script";
 import { downloadRenderedFiles } from "../../src/utils/download";
-
-const CONTENT_SCRIPT_FILE = "content/main.js";
 
 export async function handlePopupBatchListRequest(): Promise<BatchListSuccess> {
   await requireTabsPermission();
@@ -109,17 +108,6 @@ async function exportTab(
       tab,
       warnings: []
     };
-  }
-}
-
-async function ensureContentScript(tabId: number): Promise<void> {
-  try {
-    await chrome.scripting.executeScript({
-      files: [CONTENT_SCRIPT_FILE],
-      target: { tabId }
-    });
-  } catch {
-    // Sending the export message below will still fail clearly if the tab cannot run scripts.
   }
 }
 

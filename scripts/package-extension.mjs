@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { readdir, readFile, stat, writeFile, mkdir } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile, mkdir, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { zipSync } from "fflate";
@@ -64,7 +64,7 @@ async function main() {
     ];
   }
 
-  await mkdir(releaseDir, { recursive: true });
+  await cleanReleaseArtifacts();
 
   const zipBytes = zipSync(zipEntries, { level: 9 });
   const zipBuffer = Buffer.from(zipBytes);
@@ -76,6 +76,16 @@ async function main() {
 
   console.log(`Wrote ${relative(projectRoot, zipPath)}`);
   console.log(`SHA256 ${checksum}`);
+}
+
+async function cleanReleaseArtifacts() {
+  await mkdir(releaseDir, { recursive: true });
+
+  for (const entry of await readdir(releaseDir)) {
+    if (/^local-ai-chat-exporter-v.+\.zip(?:\.sha256)?$/.test(entry)) {
+      await rm(resolve(releaseDir, entry), { force: true });
+    }
+  }
 }
 
 main().catch((error) => {

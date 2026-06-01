@@ -35,9 +35,8 @@ import {
   type ScanSummary
 } from "../../src/core/messages";
 import { downloadRenderedFiles } from "../../src/utils/download";
+import { ensureContentScript } from "../../src/utils/content-script";
 import { handlePopupBatchExportRequest, handlePopupBatchListRequest } from "./batch";
-
-const CONTENT_SCRIPT_FILE = "content/main.js";
 
 chrome.runtime.onInstalled.addListener(() => {
   // Reserved for local-only extension setup in later tasks.
@@ -200,17 +199,6 @@ function requireTabId(tab: chrome.tabs.Tab): number {
   }
 
   return tab.id;
-}
-
-async function ensureContentScript(tabId: number): Promise<void> {
-  try {
-    await chrome.scripting.executeScript({
-      files: [CONTENT_SCRIPT_FILE],
-      target: { tabId }
-    });
-  } catch {
-    // Re-injecting an already-loaded content script can fail harmlessly on some pages.
-  }
 }
 
 async function canUseDownloadsPermission(): Promise<boolean> {

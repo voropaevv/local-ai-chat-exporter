@@ -38,8 +38,7 @@ export default defineConfig({
       input: {
         "popup/index": resolve(extensionRoot, "popup/index.html"),
         "options/index": resolve(extensionRoot, "options/index.html"),
-        "background/service-worker": resolve(extensionRoot, "background/service-worker.ts"),
-        "content/main": resolve(extensionRoot, "content/main.ts")
+        "background/service-worker": resolve(extensionRoot, "background/service-worker.ts")
       },
       output: {
         assetFileNames: "assets/[name]-[hash][extname]",

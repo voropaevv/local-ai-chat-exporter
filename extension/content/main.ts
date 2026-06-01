@@ -28,8 +28,6 @@ import { createSelectionOverlay, type SelectionOverlayController } from "./selec
 const LISTENER_STATE_KEY = "__localAiChatExporterContentListenerRegistered";
 const MAX_PREVIEW_MESSAGES = 6;
 
-export const contentScriptReady = true;
-
 const contentGlobal = globalThis as typeof globalThis & {
   [LISTENER_STATE_KEY]?: boolean;
 };
