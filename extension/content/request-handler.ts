@@ -8,15 +8,21 @@ import {
   CONTENT_CANCEL_SCAN_MESSAGE,
   CONTENT_CLEAR_SELECTION_MESSAGE,
   CONTENT_EXPORT_MESSAGE,
+  CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
+  CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   CONTENT_START_SELECTION_MESSAGE,
   type ContentCancelScanRequest,
   type ContentClearSelectionRequest,
   type ContentExportRequest,
   type ContentExportSuccess,
+  type ContentGetCachedConversationRequest,
+  type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
   type ContentStartSelectionRequest,
+  type CachedConversationResult,
   type PreviewMessage,
+  type ScanCacheSummaryResult,
   type ScanSummary
 } from "../../src/core/messages";
 import type { ConversationExport, ExportedMessage } from "../../src/core/schema";
@@ -35,11 +41,15 @@ export type ContentRequest =
   | ContentScanRequest
   | ContentCancelScanRequest
   | ContentExportRequest
+  | ContentGetCachedConversationRequest
+  | ContentGetScanCacheSummaryRequest
   | ContentStartSelectionRequest
   | ContentClearSelectionRequest;
 
 export type ContentRequestResult =
   | ScanSummary
+  | ScanCacheSummaryResult
+  | CachedConversationResult
   | ContentExportSuccess
   | { readonly cancelled: boolean };
 
@@ -67,6 +77,8 @@ export function createContentRequestHandler(
   let activeScanController: AbortController | undefined;
   let cachedConversation: ConversationExport | undefined;
   let cachedSourceUrl: string | undefined;
+  let cachedScanId: string | undefined;
+  let scanSequence = 0;
   let selectionOverlay: SelectionOverlayController | undefined;
   let activeSelection: MessageSelection = { fingerprints: [], ids: [] };
 
@@ -85,6 +97,26 @@ export function createContentRequestHandler(
     };
   }
 
+  function getValidCachedConversation(): CachedConversationState {
+    if (
+      cachedConversation === undefined ||
+      cachedSourceUrl === undefined ||
+      cachedScanId === undefined
+    ) {
+      return { reason: "missing", status: "missing" };
+    }
+
+    if (cachedSourceUrl !== dependencies.getCurrentUrl()) {
+      return { reason: "stale", status: "missing" };
+    }
+
+    return {
+      conversation: cachedConversation,
+      scanId: cachedScanId,
+      status: "ready"
+    };
+  }
+
   async function handleContentScanRequest(): Promise<ScanSummary> {
     activeScanController?.abort();
     activeScanController = new AbortController();
@@ -93,14 +125,55 @@ export function createContentRequestHandler(
       const conversation = await dependencies.scanCurrentConversationExport({
         signal: activeScanController.signal
       });
+      const scanId = createScanId(scanSequence);
 
       cachedConversation = conversation;
       cachedSourceUrl = conversation.sourceUrl;
+      cachedScanId = scanId;
+      scanSequence += 1;
 
-      return summarizeConversation(applyActiveSelection(conversation));
+      return summarizeConversation(applyActiveSelection(conversation), scanId);
     } finally {
       activeScanController = undefined;
     }
+  }
+
+  function handleGetScanCacheSummaryRequest(): ScanCacheSummaryResult {
+    const cached = getValidCachedConversation();
+
+    if (cached.status !== "ready") {
+      return cached.reason === "stale"
+        ? { hasCache: false, reason: "stale" }
+        : { hasCache: false };
+    }
+
+    return {
+      hasCache: true,
+      scan: summarizeConversation(applyActiveSelection(cached.conversation), cached.scanId),
+      scanId: cached.scanId
+    };
+  }
+
+  function handleGetCachedConversationRequest(
+    request: ContentGetCachedConversationRequest
+  ): CachedConversationResult {
+    const cached = getValidCachedConversation();
+
+    if (cached.status !== "ready") {
+      return cached.reason === "stale"
+        ? { hasConversation: false, reason: "stale" }
+        : { hasConversation: false };
+    }
+
+    if (request.scanId !== undefined && request.scanId !== cached.scanId) {
+      return { hasConversation: false };
+    }
+
+    return {
+      conversation: cached.conversation,
+      hasConversation: true,
+      scanId: cached.scanId
+    };
   }
 
   async function handleContentExportRequest(
@@ -172,8 +245,20 @@ export function createContentRequestHandler(
       return { cancelled: true };
     }
 
+    if (request.type === CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE) {
+      return handleGetScanCacheSummaryRequest();
+    }
+
+    if (request.type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE) {
+      return handleGetCachedConversationRequest(request);
+    }
+
     return handleContentExportRequest(request);
   };
+}
+
+function createScanId(sequence: number): string {
+  return `scan-${Date.now().toString(36)}-${sequence.toString(36)}`;
 }
 
 function applySelectionScope(
@@ -193,12 +278,27 @@ function applySelectionScope(
   };
 }
 
-export function summarizeConversation(conversation: ConversationExport): ScanSummary {
+type CachedConversationState =
+  | {
+      readonly conversation: ConversationExport;
+      readonly scanId: string;
+      readonly status: "ready";
+    }
+  | {
+      readonly reason: "missing" | "stale";
+      readonly status: "missing";
+    };
+
+export function summarizeConversation(
+  conversation: ConversationExport,
+  scanId?: string
+): ScanSummary {
   return {
     completeness: conversation.completeness,
     messageCount: conversation.messageCount,
     platformLabel: conversation.platformLabel,
     previewMessages: conversation.messages.slice(0, MAX_PREVIEW_MESSAGES).map(toPreviewMessage),
+    ...(scanId !== undefined ? { scanId } : {}),
     sourceUrl: conversation.sourceUrl,
     ...(conversation.title !== undefined ? { title: conversation.title } : {})
   };
@@ -212,6 +312,8 @@ export function isContentRequest(message: unknown): message is ContentRequest {
   if (
     message.type === CONTENT_SCAN_MESSAGE ||
     message.type === CONTENT_CANCEL_SCAN_MESSAGE ||
+    message.type === CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE ||
+    message.type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE ||
     message.type === CONTENT_START_SELECTION_MESSAGE ||
     message.type === CONTENT_CLEAR_SELECTION_MESSAGE
   ) {

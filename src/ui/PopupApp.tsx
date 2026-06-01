@@ -1,10 +1,11 @@
 import { useEffect, useReducer, useState } from "preact/hooks";
 
 import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
-import type { RuntimeResponse, ScanSummary } from "../core/messages";
+import type { RuntimeResponse, ScanCacheSummaryResult, ScanSummary } from "../core/messages";
 import type { BatchExportSuccess, BatchListSuccess } from "../core/messages";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 import { createFileBlob } from "../utils/blob";
+import { getCachedScanSummary } from "./popup-cache";
 import { ActionBar } from "./components/ActionBar";
 import { BatchExport } from "./components/BatchExport";
 import { CompletenessReport } from "./components/CompletenessReport";
@@ -20,7 +21,9 @@ import {
   buildCopyMarkdownRequest,
   buildClearSelectionRequest,
   buildDownloadRequest,
+  buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
+  buildOpenPreviewRequest,
   buildScanRequest,
   buildStartSelectionRequest,
   createInitialPopupState,
@@ -60,6 +63,26 @@ export function PopupApp() {
       })
       .catch(() => {
         // Export still works with default off redaction if extension storage is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    sendRuntimeMessage<ScanCacheSummaryResult>(buildGetScanCacheSummaryRequest())
+      .then((response) => {
+        const cachedScan = response.ok ? getCachedScanSummary(response.value) : undefined;
+
+        if (!cancelled && cachedScan !== undefined) {
+          dispatch({ scan: cachedScan, type: "scan_succeeded" });
+        }
+      })
+      .catch(() => {
+        // Missing cache simply leaves the popup in the normal unscanned state.
       });
 
     return () => {
@@ -110,6 +133,22 @@ export function PopupApp() {
     if (pdfFile !== undefined) {
       openRenderedFile(pdfFile);
     }
+  }
+
+  async function handleOpenFullPreview() {
+    dispatch({ type: "export_started" });
+
+    const response = await sendRuntimeMessage(buildOpenPreviewRequest());
+
+    if (!response.ok) {
+      dispatch({ message: response.error.message, type: "scan_failed" });
+      return;
+    }
+
+    dispatch({
+      message: "Full preview opened from scanned snapshot.",
+      type: "export_finished"
+    });
   }
 
   async function handleLoadBatchCandidates() {
@@ -221,7 +260,11 @@ export function PopupApp() {
         selectedTabIds={batchSelectedTabIds}
         status={batchStatus}
       />
-      <PreviewPanel messages={getScopedPreviewMessages(state)} />
+      <PreviewPanel
+        disabled={!canUseActions}
+        messages={getScopedPreviewMessages(state)}
+        onOpenFullPreview={handleOpenFullPreview}
+      />
       {state.errorMessage ? <p className="error-text">{state.errorMessage}</p> : null}
       <ActionBar
         disabled={!canUseActions}

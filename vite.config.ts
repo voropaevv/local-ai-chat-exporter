@@ -37,6 +37,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         "popup/index": resolve(extensionRoot, "popup/index.html"),
+        "preview/index": resolve(extensionRoot, "preview/index.html"),
         "options/index": resolve(extensionRoot, "options/index.html"),
         "background/service-worker": resolve(extensionRoot, "background/service-worker.ts")
       },

@@ -5,6 +5,8 @@ import {
   POPUP_BATCH_EXPORT_MESSAGE,
   POPUP_BATCH_LIST_MESSAGE,
   POPUP_CLEAR_SELECTION_MESSAGE,
+  POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
+  POPUP_OPEN_PREVIEW_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
   POPUP_START_SELECTION_MESSAGE,
@@ -13,6 +15,8 @@ import {
   type PopupCancelScanRequest,
   type PopupClearSelectionRequest,
   type PopupExportRequest,
+  type PopupGetScanCacheSummaryRequest,
+  type PopupOpenPreviewRequest,
   type PopupScanRequest,
   type PopupStartSelectionRequest,
   type PreviewMessage,
@@ -249,6 +253,14 @@ export function buildStartSelectionRequest(): PopupStartSelectionRequest {
 
 export function buildClearSelectionRequest(): PopupClearSelectionRequest {
   return { type: POPUP_CLEAR_SELECTION_MESSAGE };
+}
+
+export function buildGetScanCacheSummaryRequest(): PopupGetScanCacheSummaryRequest {
+  return { type: POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE };
+}
+
+export function buildOpenPreviewRequest(): PopupOpenPreviewRequest {
+  return { type: POPUP_OPEN_PREVIEW_MESSAGE };
 }
 
 export function buildBatchListRequest(): PopupBatchListRequest {

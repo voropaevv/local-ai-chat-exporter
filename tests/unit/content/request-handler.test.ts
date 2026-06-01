@@ -1,9 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
 
 import {
+  CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
+  CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_EXPORT_MESSAGE,
   CONTENT_SCAN_MESSAGE,
-  CONTENT_START_SELECTION_MESSAGE
+  CONTENT_START_SELECTION_MESSAGE,
+  type ScanSummary
 } from "../../../src/core/messages";
 import type { ConversationExport } from "../../../src/core/schema";
 import type { RenderedFile } from "../../../src/renderers";
@@ -104,6 +107,55 @@ describe("content request handler scan cache", () => {
     expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
   });
 
+  test("cache summary request rehydrates popup state without rescanning", async () => {
+    const { handler, scanCurrentConversationExport } = createHandler();
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+    const cacheSummary = await handler({ type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE });
+
+    expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
+    expect(cacheSummary).toMatchObject({
+      hasCache: true,
+      scan: {
+        messageCount: 2,
+        platformLabel: "ChatGPT",
+        sourceUrl: "https://chatgpt.com/c/cached"
+      }
+    });
+    expect(cacheSummary).toHaveProperty("scanId");
+  });
+
+  test("cached conversation request returns the full cached snapshot without rescanning", async () => {
+    const { handler, scanCurrentConversationExport } = createHandler();
+
+    const scan = (await handler({ type: CONTENT_SCAN_MESSAGE })) as ScanSummary;
+    const cached = await handler({
+      scanId: scan.scanId,
+      type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+    });
+
+    expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
+    expect(cached).toMatchObject({
+      conversation: {
+        messageCount: 2,
+        messages: [{ text: "First prompt" }, { text: "Final answer" }]
+      },
+      hasConversation: true
+    });
+  });
+
+  test("cache lookup reports missing cache without scanning", async () => {
+    const { handler, scanCurrentConversationExport } = createHandler();
+
+    await expect(handler({ type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE })).resolves.toEqual({
+      hasCache: false
+    });
+    await expect(handler({ type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE })).resolves.toEqual({
+      hasConversation: false
+    });
+    expect(scanCurrentConversationExport).not.toHaveBeenCalled();
+  });
+
   test("export after scan renders from the cached snapshot without rescanning", async () => {
     const { handler, renderedConversations, scanCurrentConversationExport } = createHandler();
 
@@ -160,6 +212,31 @@ describe("content request handler scan cache", () => {
       code: "scan_stale",
       message: "The conversation changed. Rescan before exporting."
     });
+  });
+
+  test("cache lookup treats URL changes as stale and does not expose the snapshot", async () => {
+    let currentUrl = "https://chatgpt.com/c/cached";
+    const { handler, scanCurrentConversationExport } = createHandler({
+      getCurrentUrl: () => currentUrl
+    });
+
+    const scan = (await handler({ type: CONTENT_SCAN_MESSAGE })) as ScanSummary;
+    currentUrl = "https://chatgpt.com/c/changed";
+
+    await expect(handler({ type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE })).resolves.toEqual({
+      hasCache: false,
+      reason: "stale"
+    });
+    await expect(
+      handler({
+        scanId: scan.scanId,
+        type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+      })
+    ).resolves.toEqual({
+      hasConversation: false,
+      reason: "stale"
+    });
+    expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
   });
 
   test("selection export applies current selection to the cached conversation", async () => {

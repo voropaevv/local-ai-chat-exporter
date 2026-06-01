@@ -1,6 +1,6 @@
 import type { ExportOptions, SerializedExportError } from "./export-options";
 import type { BatchCandidateTab, BatchManifestResult } from "./batch";
-import type { CompletenessReport, ChatRole } from "./schema";
+import type { CompletenessReport, ChatRole, ConversationExport } from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
 export const POPUP_SCAN_MESSAGE = "local-ai-chat-exporter/scan-current-tab";
@@ -10,11 +10,20 @@ export const POPUP_BATCH_LIST_MESSAGE = "local-ai-chat-exporter/list-open-chat-t
 export const POPUP_BATCH_EXPORT_MESSAGE = "local-ai-chat-exporter/export-open-chat-tabs";
 export const POPUP_START_SELECTION_MESSAGE = "local-ai-chat-exporter/start-selection";
 export const POPUP_CLEAR_SELECTION_MESSAGE = "local-ai-chat-exporter/clear-selection";
+export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE =
+  "local-ai-chat-exporter/get-scan-cache-summary";
+export const POPUP_OPEN_PREVIEW_MESSAGE = "local-ai-chat-exporter/open-preview";
+export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE =
+  "local-ai-chat-exporter/preview-get-cached-conversation";
 export const CONTENT_SCAN_MESSAGE = "local-ai-chat-exporter/content-scan";
 export const CONTENT_CANCEL_SCAN_MESSAGE = "local-ai-chat-exporter/content-cancel-scan";
 export const CONTENT_EXPORT_MESSAGE = "local-ai-chat-exporter/content-export";
 export const CONTENT_START_SELECTION_MESSAGE = "local-ai-chat-exporter/content-start-selection";
 export const CONTENT_CLEAR_SELECTION_MESSAGE = "local-ai-chat-exporter/content-clear-selection";
+export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE =
+  "local-ai-chat-exporter/content-get-scan-cache-summary";
+export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE =
+  "local-ai-chat-exporter/content-get-cached-conversation";
 
 export interface PreviewMessage {
   readonly index: number;
@@ -29,6 +38,7 @@ export interface ScanSummary {
   readonly messageCount: number;
   readonly platformLabel: string;
   readonly previewMessages: readonly PreviewMessage[];
+  readonly scanId?: string;
   readonly sourceUrl: string;
   readonly title?: string;
 }
@@ -67,6 +77,20 @@ export interface PopupClearSelectionRequest {
   readonly type: typeof POPUP_CLEAR_SELECTION_MESSAGE;
 }
 
+export interface PopupGetScanCacheSummaryRequest {
+  readonly type: typeof POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE;
+}
+
+export interface PopupOpenPreviewRequest {
+  readonly type: typeof POPUP_OPEN_PREVIEW_MESSAGE;
+}
+
+export interface PreviewGetCachedConversationRequest {
+  readonly scanId?: string;
+  readonly sourceTabId: number;
+  readonly type: typeof PREVIEW_GET_CACHED_CONVERSATION_MESSAGE;
+}
+
 export interface ContentScanRequest {
   readonly type: typeof CONTENT_SCAN_MESSAGE;
 }
@@ -91,6 +115,15 @@ export interface ContentClearSelectionRequest {
   readonly type: typeof CONTENT_CLEAR_SELECTION_MESSAGE;
 }
 
+export interface ContentGetScanCacheSummaryRequest {
+  readonly type: typeof CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE;
+}
+
+export interface ContentGetCachedConversationRequest {
+  readonly scanId?: string;
+  readonly type: typeof CONTENT_GET_CACHED_CONVERSATION_MESSAGE;
+}
+
 export interface PopupExportSuccess {
   readonly clipboardError?: SerializedExportError;
   readonly downloaded: readonly string[];
@@ -100,6 +133,35 @@ export interface PopupExportSuccess {
 }
 
 export type ContentExportSuccess = PopupExportSuccess;
+
+export type ScanCacheMissReason = "missing" | "stale";
+
+export type ScanCacheSummaryResult =
+  | {
+      readonly hasCache: true;
+      readonly scan: ScanSummary;
+      readonly scanId: string;
+    }
+  | {
+      readonly hasCache: false;
+      readonly reason?: ScanCacheMissReason;
+    };
+
+export type CachedConversationResult =
+  | {
+      readonly conversation: ConversationExport;
+      readonly hasConversation: true;
+      readonly scanId: string;
+    }
+  | {
+      readonly hasConversation: false;
+      readonly reason?: ScanCacheMissReason;
+    };
+
+export interface PreviewOpenSuccess {
+  readonly sourceTabId: number;
+  readonly url: string;
+}
 
 export interface BatchListSuccess {
   readonly tabs: readonly BatchCandidateTab[];

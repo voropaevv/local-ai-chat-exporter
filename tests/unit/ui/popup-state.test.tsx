@@ -5,7 +5,9 @@ import type { PopupState } from "../../../src/ui/state/popup-state";
 import {
   buildCopyMarkdownRequest,
   buildDownloadRequest,
+  buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
+  buildOpenPreviewRequest,
   createInitialPopupState,
   getScopedPreviewMessages,
   popupReducer,
@@ -115,6 +117,12 @@ describe("popup state", () => {
       download: false,
       options: { formats: ["pdf"] },
       returnFiles: true
+    });
+    expect(buildGetScanCacheSummaryRequest()).toEqual({
+      type: "local-ai-chat-exporter/get-scan-cache-summary"
+    });
+    expect(buildOpenPreviewRequest()).toEqual({
+      type: "local-ai-chat-exporter/open-preview"
     });
   });
 

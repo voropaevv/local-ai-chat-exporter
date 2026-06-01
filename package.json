@@ -16,7 +16,8 @@
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "check:content-script": "node scripts/check-content-script-classic.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:content-script"
+    "check:preview": "node scripts/check-preview-build.mjs",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:content-script && pnpm check:preview"
   },
   "dependencies": {
     "fflate": "^0.8.3",

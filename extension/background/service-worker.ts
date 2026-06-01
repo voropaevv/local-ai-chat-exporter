@@ -9,16 +9,24 @@ import {
   CONTENT_CANCEL_SCAN_MESSAGE,
   CONTENT_CLEAR_SELECTION_MESSAGE,
   CONTENT_EXPORT_MESSAGE,
+  CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
+  CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   CONTENT_START_SELECTION_MESSAGE,
+  POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
+  POPUP_OPEN_PREVIEW_MESSAGE,
   POPUP_CANCEL_SCAN_MESSAGE,
   POPUP_CLEAR_SELECTION_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
   POPUP_START_SELECTION_MESSAGE,
+  PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
+  type CachedConversationResult,
   type ContentClearSelectionRequest,
   type ContentExportRequest,
   type ContentExportSuccess,
+  type ContentGetCachedConversationRequest,
+  type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
   type ContentStartSelectionRequest,
   type BatchExportSuccess,
@@ -29,11 +37,17 @@ import {
   type PopupCancelScanRequest,
   type PopupExportRequest,
   type PopupExportSuccess,
+  type PopupGetScanCacheSummaryRequest,
+  type PopupOpenPreviewRequest,
   type PopupScanRequest,
   type PopupStartSelectionRequest,
+  type PreviewGetCachedConversationRequest,
+  type PreviewOpenSuccess,
   type RuntimeResponse,
+  type ScanCacheSummaryResult,
   type ScanSummary
 } from "../../src/core/messages";
+import { buildPreviewPageUrl } from "../../src/ui/preview-url";
 import { downloadRenderedFiles } from "../../src/utils/download";
 import { ensureContentScript } from "../../src/utils/content-script";
 import { handlePopupBatchExportRequest, handlePopupBatchListRequest } from "./batch";
@@ -63,11 +77,17 @@ async function handlePopupRequest(
     | PopupBatchExportRequest
     | PopupStartSelectionRequest
     | PopupClearSelectionRequest
+    | PopupGetScanCacheSummaryRequest
+    | PopupOpenPreviewRequest
+    | PreviewGetCachedConversationRequest
 ): Promise<
   | ScanSummary
+  | ScanCacheSummaryResult
   | PopupExportSuccess
   | BatchListSuccess
   | BatchExportSuccess
+  | CachedConversationResult
+  | PreviewOpenSuccess
   | { readonly cancelled: true }
 > {
   if (request.type === POPUP_SCAN_MESSAGE) {
@@ -84,6 +104,18 @@ async function handlePopupRequest(
 
   if (request.type === POPUP_CLEAR_SELECTION_MESSAGE) {
     return handlePopupSelectionMessage({ type: CONTENT_CLEAR_SELECTION_MESSAGE });
+  }
+
+  if (request.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE) {
+    return handlePopupGetScanCacheSummaryRequest();
+  }
+
+  if (request.type === POPUP_OPEN_PREVIEW_MESSAGE) {
+    return handlePopupOpenPreviewRequest();
+  }
+
+  if (request.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE) {
+    return handlePreviewGetCachedConversationRequest(request);
   }
 
   if (request.type === POPUP_BATCH_LIST_MESSAGE) {
@@ -112,6 +144,80 @@ async function handlePopupScanRequest(): Promise<ScanSummary> {
   }
 
   return response.value;
+}
+
+async function handlePopupGetScanCacheSummaryRequest(): Promise<ScanCacheSummaryResult> {
+  try {
+    const tab = await getActiveTab();
+    const tabId = requireTabId(tab);
+
+    await ensureContentScript(tabId);
+
+    const response = await sendContentMessage<ScanCacheSummaryResult>(tabId, {
+      type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE
+    } satisfies ContentGetScanCacheSummaryRequest);
+
+    if (!response.ok) {
+      return { hasCache: false };
+    }
+
+    return response.value;
+  } catch {
+    return { hasCache: false };
+  }
+}
+
+async function handlePopupOpenPreviewRequest(): Promise<PreviewOpenSuccess> {
+  const tab = await getActiveTab();
+  const tabId = requireTabId(tab);
+
+  await ensureContentScript(tabId);
+
+  const response = await sendContentMessage<ScanCacheSummaryResult>(tabId, {
+    type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE
+  } satisfies ContentGetScanCacheSummaryRequest);
+
+  if (!response.ok) {
+    throw new ExportPipelineError("scan_required", "Scan the conversation before exporting.");
+  }
+
+  const cacheSummary = response.value;
+
+  if (!cacheSummary.hasCache) {
+    throw new ExportPipelineError(
+      cacheSummary.reason === "stale" ? "scan_stale" : "scan_required",
+      cacheSummary.reason === "stale"
+        ? "The conversation changed. Rescan before exporting."
+        : "Scan the conversation before exporting."
+    );
+  }
+
+  const url = buildPreviewPageUrl({
+    getURL: (path) => chrome.runtime.getURL(path),
+    scanId: cacheSummary.scanId,
+    sourceTabId: tabId
+  });
+
+  await chrome.tabs.create({ active: true, url });
+
+  return { sourceTabId: tabId, url };
+}
+
+async function handlePreviewGetCachedConversationRequest(
+  request: PreviewGetCachedConversationRequest
+): Promise<CachedConversationResult> {
+  try {
+    await ensureContentScript(request.sourceTabId);
+
+    const response = await sendContentMessage<CachedConversationResult>(request.sourceTabId, {
+      ...(request.scanId !== undefined ? { scanId: request.scanId } : {}),
+      type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+    } satisfies ContentGetCachedConversationRequest);
+
+    return response.ok ? response.value : { hasConversation: false };
+  } catch {
+    return { hasConversation: false };
+  }
 }
 
 async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: true }> {
@@ -216,6 +322,8 @@ async function sendContentMessage<T>(
   request:
     | ContentScanRequest
     | ContentExportRequest
+    | ContentGetCachedConversationRequest
+    | ContentGetScanCacheSummaryRequest
     | ContentStartSelectionRequest
     | ContentClearSelectionRequest
     | { readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE }
@@ -240,12 +348,18 @@ function isPopupRequest(
   | PopupBatchListRequest
   | PopupBatchExportRequest
   | PopupStartSelectionRequest
-  | PopupClearSelectionRequest {
+  | PopupClearSelectionRequest
+  | PopupGetScanCacheSummaryRequest
+  | PopupOpenPreviewRequest
+  | PreviewGetCachedConversationRequest {
   return (
     isRecord(message) &&
     (message.type === POPUP_SCAN_MESSAGE ||
       message.type === POPUP_CANCEL_SCAN_MESSAGE ||
       message.type === POPUP_EXPORT_MESSAGE ||
+      message.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE ||
+      message.type === POPUP_OPEN_PREVIEW_MESSAGE ||
+      message.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === POPUP_BATCH_LIST_MESSAGE ||
       message.type === POPUP_BATCH_EXPORT_MESSAGE ||
       message.type === POPUP_START_SELECTION_MESSAGE ||

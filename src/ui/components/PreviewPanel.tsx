@@ -1,17 +1,24 @@
 import type { PreviewMessage } from "../../core/messages";
 
 interface PreviewPanelProps {
+  readonly disabled: boolean;
   readonly messages: readonly PreviewMessage[];
+  readonly onOpenFullPreview: () => void;
 }
 
-export function PreviewPanel({ messages }: PreviewPanelProps) {
+export function PreviewPanel({ disabled, messages, onOpenFullPreview }: PreviewPanelProps) {
   return (
     <section className="panel" aria-labelledby="preview-title">
       <div className="section-heading">
         <h2 id="preview-title">Preview</h2>
-        <a className="inline-link" href="popup/index.html" target="_blank" rel="noreferrer">
+        <button
+          className="link-button"
+          disabled={disabled}
+          onClick={onOpenFullPreview}
+          type="button"
+        >
           Full preview
-        </a>
+        </button>
       </div>
       {messages.length === 0 ? (
         <p className="muted">

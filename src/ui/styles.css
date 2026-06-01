@@ -75,6 +75,13 @@ a:hover {
   padding: 32px;
 }
 
+.app-shell--preview {
+  width: min(1120px, 100vw);
+  min-height: 100vh;
+  align-content: start;
+  padding: 24px;
+}
+
 .popup-header,
 .app-header {
   display: grid;
@@ -439,6 +446,23 @@ legend {
   font-weight: 700;
 }
 
+.link-button {
+  border: 0;
+  background: transparent;
+  color: #0b63ce;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.link-button:disabled {
+  color: #7d8a94;
+}
+
+.link-button:not(:disabled):hover {
+  text-decoration: underline;
+}
+
 .preview-list {
   display: grid;
   max-height: 188px;
@@ -514,6 +538,29 @@ legend {
   grid-template-columns: 1fr;
 }
 
+.preview-page-header {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.preview-toolbar {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.preview-frame {
+  width: 100%;
+  min-height: calc(100vh - 178px);
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
 .privacy-note {
   border-top: 1px solid #d9e1e8;
   padding-top: 10px;
@@ -532,7 +579,8 @@ legend {
   }
 
   .format-grid,
-  .report-grid {
+  .report-grid,
+  .preview-toolbar {
     grid-template-columns: 1fr 1fr;
   }
 }
