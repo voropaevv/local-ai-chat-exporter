@@ -1,0 +1,41 @@
+<svg xmlns="http&#58;//www.w3.org/2000/svg" width="448" height="448" viewBox="0 0 448 448" version="1.1">
+    <defs>
+        <linearGradient x1="9.82142857%" y1="4.46428571%" x2="91.0714286%" y2="95.5357143%" id="linearGradient-1">
+            <stop stop-color="#2563EB" offset="0%"></stop>
+            <stop stop-color="#4F46E5" offset="52%"></stop>
+            <stop stop-color="#7C3AED" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="16.324403%" y1="3.31125828%" x2="94.6849268%" y2="101.986755%" id="linearGradient-2">
+            <stop stop-color="#E0F2FE" offset="0%"></stop>
+            <stop stop-color="#C4B5FD" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="14.1068374%" y1="2.64900662%" x2="87.0510065%" y2="103.97351%" id="linearGradient-3">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#F1F5F9" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="-2.5%" y1="27.4105604%" x2="107.5%" y2="73.4582642%" id="linearGradient-4">
+            <stop stop-color="#8B5CF6" offset="0%"></stop>
+            <stop stop-color="#6D28D9" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Group">
+            <rect id="Rectangle" fill="url(#linearGradient-1)" fill-rule="nonzero" x="0" y="0" width="448" height="448" rx="96"></rect>
+            <rect id="Rectangle" fill="#1E1B4B" fill-rule="nonzero" opacity="0.13" x="62" y="59" width="236" height="302" rx="42"></rect>
+            <rect id="Rectangle" fill="url(#linearGradient-2)" fill-rule="nonzero" opacity="0.88" x="56" y="49" width="264" height="302" rx="46"></rect>
+            <rect id="Rectangle" stroke="#EFF6FF" stroke-width="10" opacity="0.72" x="74" y="68" width="228" height="264" rx="28"></rect>
+            <rect id="Rectangle" fill="#0F172A" fill-rule="nonzero" opacity="0.18" x="128" y="97" width="264" height="302" rx="46"></rect>
+            <rect id="Rectangle" fill="url(#linearGradient-3)" fill-rule="nonzero" x="118" y="85" width="264" height="302" rx="46"></rect>
+            <rect id="Rectangle" stroke="#CBD5E1" stroke-width="10" opacity="0.88" x="136" y="104" width="228" height="264" rx="28"></rect>
+            <path d="M177,129 L272,129 C283.045695,129 292,137.954305 292,149 L292,191.990313 C292,203.036008 283.045695,211.990313 272,211.990313 L201.968659,211.990313 L201.968659,211.990313 L180.311676,229.387265 C179.450538,230.079013 178.191675,229.941696 177.499927,229.080558 C177.214653,228.725429 177.059155,228.283557 177.059155,227.828037 L177.059155,211.990313 L177.059155,211.990313 L177,211.990313 C165.954305,211.990313 157,203.036008 157,191.990313 L157,149 C157,137.954305 165.954305,129 177,129 Z" id="Rectangle" fill="#2563EB" fill-rule="nonzero"></path>
+            <rect id="Rectangle" fill="#DBEAFE" fill-rule="nonzero" x="177" y="145" width="82" height="10" rx="5"></rect>
+            <rect id="Rectangle" fill="#DBEAFE" fill-rule="nonzero" opacity="0.9" x="177" y="165" width="98" height="10" rx="5"></rect>
+            <path d="M228,240 L323,240 C334.045695,240 343,248.954305 343,260 L343,302.990313 C343,314.036008 334.045695,322.990313 323,322.990313 L252.968659,322.990313 L252.968659,322.990313 L231.311676,340.387265 C230.450538,341.079013 229.191675,340.941696 228.499927,340.080558 C228.214653,339.725429 228.059155,339.283557 228.059155,338.828037 L228.059155,322.990313 L228.059155,322.990313 L228,322.990313 C216.954305,322.990313 208,314.036008 208,302.990313 L208,260 C208,248.954305 216.954305,240 228,240 Z" id="Rectangle" fill="url(#linearGradient-4)" fill-rule="nonzero" transform="translate(275.500000, 291.500000) scale(-1, 1) translate(-275.500000, -291.500000) "></path>
+            <rect id="Rectangle" fill="#DBEAFE" fill-rule="nonzero" opacity="0.8" x="177" y="185" width="60" height="10" rx="5"></rect>
+            <rect id="Rectangle" fill="#EDE9FE" fill-rule="nonzero" x="228" y="256" width="97" height="10" rx="5"></rect>
+            <rect id="Rectangle" fill="#EDE9FE" fill-rule="nonzero" opacity="0.9" x="228" y="276" width="54.2686567" height="10" rx="5"></rect>
+            <rect id="Rectangle" fill="#EDE9FE" fill-rule="nonzero" opacity="0.78" x="292" y="276" width="33" height="10" rx="5"></rect>
+            <rect id="Rectangle" fill="#EDE9FE" fill-rule="nonzero" opacity="0.82" x="228" y="296" width="75" height="10" rx="5"></rect>
+        </g>
+    </g>
+</svg>

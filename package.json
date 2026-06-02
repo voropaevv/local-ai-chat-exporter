@@ -15,9 +15,12 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "format": "prettier --write .",
+    "icons:build": "node scripts/build-icons.mjs",
+    "icons:check": "node scripts/check-palette.mjs",
+    "palette:check": "node scripts/check-palette.mjs",
     "check:content-script": "node scripts/check-content-script-classic.mjs",
     "check:preview": "node scripts/check-preview-build.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:content-script && pnpm check:preview"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm icons:check && pnpm build && pnpm check:content-script && pnpm check:preview"
   },
   "dependencies": {
     "fflate": "^0.8.3",
@@ -27,6 +30,7 @@
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.57.0",
     "@preact/preset-vite": "^2.10.2",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/chrome": "^0.1.32",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^24.10.1",
