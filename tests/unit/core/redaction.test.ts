@@ -7,7 +7,11 @@ import {
 } from "../../../src/core/redaction";
 
 const fakeProjectKey = ["sk", "proj", "abcdefghijklmnopqrstuvwxyz1234567890"].join("-");
-const bearerToken = "FAKE_BEARER_TOKEN_FOR_TESTS_ONLY";
+const bearerToken = [
+  "eyJhbGciOiJIUzI1NiIs",
+  "InR5cCI6IkpXVCJ9",
+  "longlonglonglonglonglonglonglong"
+].join(".");
 const richSecretInput = `Email admin@example.com, call +1 (415) 555-2671, key ${fakeProjectKey}, bearer Bearer ${bearerToken}, id 0123456789abcdef0123456789abcdef.`;
 
 describe("redactText", () => {

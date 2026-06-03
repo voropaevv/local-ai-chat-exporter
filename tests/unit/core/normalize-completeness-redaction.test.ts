@@ -5,6 +5,11 @@ import { normalizeMessages } from "../../../src/core/normalize";
 import { redactText } from "../../../src/core/redaction";
 
 const fakeProjectKey = ["sk", "proj", "abcdefghijklmnopqrstuvwxyz1234567890"].join("-");
+const fakeBearerToken = [
+  "eyJhbGciOiJIUzI1NiIs",
+  "InR5cCI6IkpXVCJ9",
+  "longlonglonglonglonglonglonglong"
+].join(".");
 
 describe("normalizeMessages", () => {
   test("normalizes roles, removes empty messages, and deduplicates by id or role plus text hash", () => {
@@ -120,7 +125,7 @@ describe("buildCompletenessReport", () => {
 
 describe("redactText", () => {
   test("redacts emails, phone-like strings, API-key-like tokens, and bearer-like tokens", () => {
-    const input = `Email admin@example.com, call +1 (415) 555-2671, key ${fakeProjectKey}, bearer Bearer FAKE_BEARER_TOKEN_FOR_TESTS_ONLY.`;
+    const input = `Email admin@example.com, call +1 (415) 555-2671, key ${fakeProjectKey}, bearer Bearer ${fakeBearerToken}.`;
 
     expect(redactText(input, { enabled: true })).toBe(
       "Email [REDACTED_EMAIL], call [REDACTED_PHONE], key [REDACTED_SECRET], bearer Bearer [REDACTED_SECRET]."
