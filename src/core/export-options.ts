@@ -112,10 +112,23 @@ export function renderConversationFiles(
   return normalizedOptions.formats.map((format) => {
     return renderers[format](preparedConversation, {
       filenameTemplate: normalizedOptions.filenameTemplate,
+      includeMetadata: normalizedOptions.includeMetadata,
       markdownProfile: normalizedOptions.markdownProfile,
       zipFormats: normalizedOptions.formats.filter((candidate) => candidate !== "zip")
     });
   });
+}
+
+export function getExportedMessageCount(
+  conversation: ConversationExport,
+  options: Partial<ExportOptions> = {}
+): number {
+  const normalizedOptions = normalizeExportOptions(options);
+
+  return filterMessagesByScope(conversation.messages, {
+    range: normalizedOptions.range,
+    scope: normalizedOptions.scope
+  }).length;
 }
 
 export function isExportPipelineError(error: unknown): error is ExportPipelineError {

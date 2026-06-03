@@ -22,8 +22,11 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(JSON.stringify(manifest)).not.toContain("all_urls");
   expect(batchSource).toContain("chrome.permissions.request");
   expect(batchSource).toContain('permissions: ["tabs"]');
+  expect(batchSource).not.toContain('permissions: ["downloads"]');
+  expect(batchSource).not.toContain("Downloads permission is required");
   expect(batchSource).not.toContain("setInterval");
   expect(batchSource).not.toContain("chrome.history");
   expect(batchUiSource).toContain("Find open tabs");
   expect(batchUiSource).toContain("Export selected ZIP");
+  expect(batchUiSource).toContain("formatBatchTabDetail");
 });

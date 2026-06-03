@@ -260,4 +260,74 @@ describe("content request handler scan cache", () => {
       metadata: { selected: true }
     });
   });
+
+  test.each([
+    ["user_only", 1],
+    ["assistant_only", 1],
+    ["range", 1]
+  ] as const)("reports exported message count for %s scope", async (scope, expectedCount) => {
+    const { handler } = createHandler();
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+    const response = await handler({
+      copyToClipboard: false,
+      delivery: "return_files",
+      download: false,
+      options:
+        scope === "range"
+          ? { formats: ["md"], range: { endIndex: 0, startIndex: 0 }, scope }
+          : { formats: ["md"], scope },
+      type: CONTENT_EXPORT_MESSAGE
+    });
+
+    expect(response).toMatchObject({
+      exportedMessageCount: expectedCount,
+      messageCount: expectedCount
+    });
+  });
+
+  test("reports exported message count for selected scope", async () => {
+    const { handler } = createHandler();
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+    await handler({ type: CONTENT_START_SELECTION_MESSAGE });
+    const response = await handler({
+      copyToClipboard: false,
+      delivery: "return_files",
+      download: false,
+      options: { formats: ["md"], scope: "selected" },
+      type: CONTENT_EXPORT_MESSAGE
+    });
+
+    expect(response).toMatchObject({
+      exportedMessageCount: 1,
+      messageCount: 1
+    });
+  });
+
+  test("selected export reports a clear stale-selection error when no ids are selected", async () => {
+    const { handler } = createHandler({
+      createSelectionOverlay: vi.fn(() => ({
+        cleanup: vi.fn(),
+        getSelection: () => ({ fingerprints: [], ids: [] }),
+        show: vi.fn()
+      }))
+    });
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+    await handler({ type: CONTENT_START_SELECTION_MESSAGE });
+
+    await expect(
+      handler({
+        copyToClipboard: false,
+        delivery: "return_files",
+        download: false,
+        options: { formats: ["md"], scope: "selected" },
+        type: CONTENT_EXPORT_MESSAGE
+      })
+    ).rejects.toMatchObject({
+      code: "no_messages_found",
+      message: "No selected messages. Click Select messages again."
+    });
+  });
 });

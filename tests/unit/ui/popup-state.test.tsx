@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { CompletenessReport } from "../../../src/core/schema";
 import type { PopupState } from "../../../src/ui/state/popup-state";
 import {
+  buildExportStatusMessage,
   buildCopyMarkdownRequest,
   buildDownloadRequest,
   buildGetScanCacheSummaryRequest,
@@ -10,6 +11,7 @@ import {
   buildOpenPreviewRequest,
   createInitialPopupState,
   getScopedPreviewMessages,
+  getSelectionStatusText,
   popupReducer,
   toggleFormat
 } from "../../../src/ui/state/popup-state";
@@ -45,6 +47,7 @@ describe("popup state", () => {
           { authorLabel: "ChatGPT", index: 1, role: "assistant", text: "Middle answer" },
           { authorLabel: "ChatGPT", index: 2, role: "assistant", text: "Last answer" }
         ],
+        selectedMessageCount: 0,
         sourceUrl: "https://chatgpt.com/c/example",
         title: "Example"
       },
@@ -161,6 +164,7 @@ describe("popup state", () => {
             text: "Last answer"
           }
         ],
+        selectedMessageCount: 2,
         sourceUrl: "https://chatgpt.com/c/example",
         title: "Example"
       },
@@ -187,5 +191,52 @@ describe("popup state", () => {
       "First prompt",
       "Last answer"
     ]);
+    expect(getSelectionStatusText(selectedState)).toBe("Selected messages: 2");
+  });
+
+  test("selected scope reports lost selection and resets after selected export", () => {
+    const scanned = popupReducer(createInitialPopupState(), {
+      scan: {
+        completeness,
+        messageCount: 2,
+        platformLabel: "ChatGPT",
+        previewMessages: [
+          { authorLabel: "User", index: 0, role: "user", selected: true, text: "First prompt" },
+          { authorLabel: "ChatGPT", index: 1, role: "assistant", text: "Answer" }
+        ],
+        selectedMessageCount: 1,
+        sourceUrl: "https://chatgpt.com/c/example"
+      },
+      type: "scan_succeeded"
+    });
+    const selectedState = popupReducer(scanned, { scope: "selected", type: "set_scope" });
+    const finished = popupReducer(selectedState, {
+      message: "Exported 1 message(s) from scanned snapshot to 1 file(s).",
+      type: "export_finished"
+    });
+
+    expect(finished.selectedMessageCount).toBe(0);
+    expect(getSelectionStatusText(finished)).toBe(
+      "No selected messages. Click Select messages again."
+    );
+    expect(getScopedPreviewMessages(finished)).toEqual([]);
+  });
+
+  test("builds export status with exported scope count", () => {
+    expect(
+      buildExportStatusMessage({
+        downloaded: ["chat.md"],
+        exportedMessageCount: 41
+      })
+    ).toBe("Exported 41 message(s) from scanned snapshot to 1 file(s).");
+    expect(
+      buildExportStatusMessage({
+        clipboardError: { message: "Clipboard unavailable." },
+        downloaded: [],
+        exportedMessageCount: 3
+      })
+    ).toBe(
+      "Exported 3 message(s) from scanned snapshot. Prepared local output. Clipboard: Clipboard unavailable."
+    );
   });
 });

@@ -26,49 +26,61 @@ interface MessageMarkdownOptions {
   readonly escapeHtml: boolean;
 }
 
+interface ProfileMarkdownOptions {
+  readonly includeMetadata?: boolean;
+}
+
 export function normalizeMarkdownProfile(profile: MarkdownProfile | undefined): MarkdownProfile {
   return profile !== undefined && MARKDOWN_PROFILES.includes(profile) ? profile : "default";
 }
 
 export function renderProfileMarkdown(
   conversation: ConversationExport,
-  profile: MarkdownProfile
+  profile: MarkdownProfile,
+  options: ProfileMarkdownOptions = {}
 ): string {
   const safeConversation = sanitizeConversationImagesForOutput(conversation);
+  const includeMetadata = options.includeMetadata ?? true;
 
   if (profile === "obsidian") {
-    return renderObsidianMarkdown(safeConversation);
+    return renderObsidianMarkdown(safeConversation, includeMetadata);
   }
 
   if (profile === "github") {
-    return renderGithubMarkdown(safeConversation);
+    return renderGithubMarkdown(safeConversation, includeMetadata);
   }
 
   if (profile === "gitbook") {
-    return renderGitBookMarkdown(safeConversation);
+    return renderGitBookMarkdown(safeConversation, includeMetadata);
   }
 
   if (profile === "research-log") {
-    return renderResearchLogMarkdown(safeConversation);
+    return renderResearchLogMarkdown(safeConversation, includeMetadata);
   }
 
-  return renderDefaultMarkdown(safeConversation, profile);
+  return renderDefaultMarkdown(safeConversation, profile, includeMetadata);
 }
 
-function renderDefaultMarkdown(conversation: ConversationExport, profile: MarkdownProfile): string {
+function renderDefaultMarkdown(
+  conversation: ConversationExport,
+  profile: MarkdownProfile,
+  includeMetadata: boolean
+): string {
   const warnings = collectWarnings(conversation);
   const title = normalizeSingleLine(conversation.title ?? "Untitled conversation");
-  const lines: string[] = [
-    renderCommonFrontmatter(conversation, profile, warnings),
-    "",
-    `# ${title}`,
-    "",
-    `Source: ${conversation.sourceUrl}`,
-    `Exported: ${conversation.exportedAt}`,
-    `Completeness: ${conversation.completeness.status}`
-  ];
+  const lines: string[] = includeMetadata
+    ? [
+        renderCommonFrontmatter(conversation, profile, warnings),
+        "",
+        `# ${title}`,
+        "",
+        `Source: ${conversation.sourceUrl}`,
+        `Exported: ${conversation.exportedAt}`,
+        `Completeness: ${conversation.completeness.status}`
+      ]
+    : [`# ${title}`];
 
-  if (warnings.length > 0) {
+  if (includeMetadata && warnings.length > 0) {
     lines.push("", "Warnings:", ...warnings.map((warning) => `- ${warning}`));
   }
 
@@ -84,18 +96,23 @@ function renderDefaultMarkdown(conversation: ConversationExport, profile: Markdo
   return finishMarkdown(lines);
 }
 
-function renderObsidianMarkdown(conversation: ConversationExport): string {
+function renderObsidianMarkdown(
+  conversation: ConversationExport,
+  includeMetadata: boolean
+): string {
   const warnings = collectWarnings(conversation);
   const title = cleanHeading(conversation.title ?? "Untitled conversation");
-  const lines: string[] = [
-    renderObsidianFrontmatter(conversation, warnings),
-    "",
-    `# ${title}`,
-    "",
-    `Source: ${conversation.sourceUrl}`,
-    `Exported: ${conversation.exportedAt}`,
-    `Completeness: ${conversation.completeness.status}`
-  ];
+  const lines: string[] = includeMetadata
+    ? [
+        renderObsidianFrontmatter(conversation, warnings),
+        "",
+        `# ${title}`,
+        "",
+        `Source: ${conversation.sourceUrl}`,
+        `Exported: ${conversation.exportedAt}`,
+        `Completeness: ${conversation.completeness.status}`
+      ]
+    : [`# ${title}`];
 
   conversation.messages.forEach((message) => {
     lines.push("", `## ${cleanHeading(message.authorLabel)} ${message.index + 1}`, "");
@@ -105,23 +122,28 @@ function renderObsidianMarkdown(conversation: ConversationExport): string {
   return finishMarkdown(lines);
 }
 
-function renderGithubMarkdown(conversation: ConversationExport): string {
+function renderGithubMarkdown(
+  conversation: ConversationExport,
+  includeMetadata: boolean
+): string {
   const warnings = collectWarnings(conversation);
   const title = normalizeSingleLine(conversation.title ?? "Untitled conversation");
-  const lines: string[] = [
-    renderCommonFrontmatter(conversation, "github", warnings),
-    "",
-    `# ${title}`,
-    "",
-    renderMetadataTable([
-      ["Platform", conversation.platformLabel],
-      ["Source", conversation.sourceUrl],
-      ["Exported", conversation.exportedAt],
-      ["Completeness", conversation.completeness.status]
-    ])
-  ];
+  const lines: string[] = includeMetadata
+    ? [
+        renderCommonFrontmatter(conversation, "github", warnings),
+        "",
+        `# ${title}`,
+        "",
+        renderMetadataTable([
+          ["Platform", conversation.platformLabel],
+          ["Source", conversation.sourceUrl],
+          ["Exported", conversation.exportedAt],
+          ["Completeness", conversation.completeness.status]
+        ])
+      ]
+    : [`# ${title}`];
 
-  if (warnings.length > 0) {
+  if (includeMetadata && warnings.length > 0) {
     lines.push("", renderWarningsBlockquote("Warnings", warnings));
   }
 
@@ -137,26 +159,31 @@ function renderGithubMarkdown(conversation: ConversationExport): string {
   return finishMarkdown(lines);
 }
 
-function renderGitBookMarkdown(conversation: ConversationExport): string {
+function renderGitBookMarkdown(
+  conversation: ConversationExport,
+  includeMetadata: boolean
+): string {
   const warnings = collectWarnings(conversation);
   const title = normalizeSingleLine(conversation.title ?? "Untitled conversation");
-  const lines: string[] = [
-    renderCommonFrontmatter(conversation, "gitbook", warnings),
-    "",
-    `# ${title}`,
-    "",
-    "## Summary",
-    "",
-    renderMetadataTable([
-      ["Platform", conversation.platformLabel],
-      ["Source", conversation.sourceUrl],
-      ["Exported", conversation.exportedAt],
-      ["Messages", String(conversation.messageCount)],
-      ["Completeness", conversation.completeness.status]
-    ])
-  ];
+  const lines: string[] = includeMetadata
+    ? [
+        renderCommonFrontmatter(conversation, "gitbook", warnings),
+        "",
+        `# ${title}`,
+        "",
+        "## Summary",
+        "",
+        renderMetadataTable([
+          ["Platform", conversation.platformLabel],
+          ["Source", conversation.sourceUrl],
+          ["Exported", conversation.exportedAt],
+          ["Messages", String(conversation.messageCount)],
+          ["Completeness", conversation.completeness.status]
+        ])
+      ]
+    : [`# ${title}`];
 
-  if (warnings.length > 0) {
+  if (includeMetadata && warnings.length > 0) {
     lines.push("", "## Warnings", "", ...warnings.map((warning) => `- ${warning}`));
   }
 
@@ -170,16 +197,17 @@ function renderGitBookMarkdown(conversation: ConversationExport): string {
   return finishMarkdown(lines);
 }
 
-function renderResearchLogMarkdown(conversation: ConversationExport): string {
+function renderResearchLogMarkdown(
+  conversation: ConversationExport,
+  includeMetadata: boolean
+): string {
   const warnings = collectWarnings(conversation);
   const title = normalizeSingleLine(conversation.title ?? "Untitled conversation");
-  const lines: string[] = [
-    renderCommonFrontmatter(conversation, "research-log", warnings),
-    "",
-    `# ${title}`
-  ];
+  const lines: string[] = includeMetadata
+    ? [renderCommonFrontmatter(conversation, "research-log", warnings), "", `# ${title}`]
+    : [`# ${title}`];
 
-  if (warnings.length > 0) {
+  if (includeMetadata && warnings.length > 0) {
     lines.push(
       "",
       "## Warnings",
@@ -188,32 +216,34 @@ function renderResearchLogMarkdown(conversation: ConversationExport): string {
     );
   }
 
-  lines.push(
-    "",
-    "## Export Metadata",
-    "",
-    renderMetadataTable([
-      ["Platform", conversation.platformLabel],
-      ["Source URL", conversation.sourceUrl],
-      ["Conversation ID", conversation.conversationId ?? ""],
-      ["Exported At", conversation.exportedAt],
-      ["Message Count", String(conversation.messageCount)]
-    ]),
-    "",
-    "## Completeness Report",
-    "",
-    renderMetadataTable([
-      ["Status", conversation.completeness.status],
-      ["Reached Top", formatBoolean(conversation.completeness.reachedTop)],
-      ["Reached Bottom", formatBoolean(conversation.completeness.reachedBottom)],
-      ["Scroll Steps", String(conversation.completeness.scrollSteps)],
-      ["Duplicates Skipped", String(conversation.completeness.duplicateCount)],
-      ["First Message", conversation.completeness.firstMessagePreview ?? ""],
-      ["Last Message", conversation.completeness.lastMessagePreview ?? ""]
-    ]),
-    "",
-    "## Messages"
-  );
+  if (includeMetadata) {
+    lines.push(
+      "",
+      "## Export Metadata",
+      "",
+      renderMetadataTable([
+        ["Platform", conversation.platformLabel],
+        ["Source URL", conversation.sourceUrl],
+        ["Conversation ID", conversation.conversationId ?? ""],
+        ["Exported At", conversation.exportedAt],
+        ["Message Count", String(conversation.messageCount)]
+      ]),
+      "",
+      "## Completeness Report",
+      "",
+      renderMetadataTable([
+        ["Status", conversation.completeness.status],
+        ["Reached Top", formatBoolean(conversation.completeness.reachedTop)],
+        ["Reached Bottom", formatBoolean(conversation.completeness.reachedBottom)],
+        ["Scroll Steps", String(conversation.completeness.scrollSteps)],
+        ["Duplicates Skipped", String(conversation.completeness.duplicateCount)],
+        ["First Message", conversation.completeness.firstMessagePreview ?? ""],
+        ["Last Message", conversation.completeness.lastMessagePreview ?? ""]
+      ])
+    );
+  }
+
+  lines.push("", "## Messages");
 
   conversation.messages.forEach((message) => {
     lines.push(

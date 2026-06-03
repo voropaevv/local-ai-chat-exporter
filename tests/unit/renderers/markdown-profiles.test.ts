@@ -272,4 +272,28 @@ describe("markdown profiles", () => {
       "
     `);
   });
+
+  test.each(MARKDOWN_PROFILES)(
+    "%s profile omits frontmatter and export metadata when metadata is disabled",
+    (profile) => {
+      const markdown = renderMarkdown(makeConversation(), {
+        includeMetadata: false,
+        markdownProfile: profile
+      }).bytes;
+
+      expect(markdown).not.toMatch(/^---\n/u);
+      expect(markdown).not.toContain("schema_version");
+      expect(markdown).not.toContain("source_url");
+      expect(markdown).not.toContain("exported_at");
+      expect(markdown).not.toContain("message_count");
+      expect(markdown).not.toContain("Source:");
+      expect(markdown).not.toContain("Exported:");
+      expect(markdown).not.toContain("Completeness:");
+      expect(markdown).not.toContain("| Source |");
+      expect(markdown).not.toContain("## Export Metadata");
+      expect(markdown).not.toContain("## Completeness Report");
+      expect(markdown).toContain("Collect export notes.");
+      expect(markdown).toContain("Answer with");
+    }
+  );
 });

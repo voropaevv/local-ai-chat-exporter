@@ -12,6 +12,7 @@ export type RenderedBytes = string | Uint8Array;
 
 export interface RendererOptions {
   readonly filenameTemplate?: string;
+  readonly includeMetadata?: boolean;
   readonly markdownProfile?: MarkdownProfile;
   readonly zipFormats?: readonly LocalRendererFormat[];
 }

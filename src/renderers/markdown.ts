@@ -12,7 +12,7 @@ export function renderMarkdown(
     conversation,
     "md",
     "text/markdown;charset=utf-8",
-    renderProfileMarkdown(conversation, profile),
+    renderProfileMarkdown(conversation, profile, { includeMetadata: options.includeMetadata }),
     options
   );
 }

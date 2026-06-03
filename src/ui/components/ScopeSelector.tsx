@@ -8,6 +8,7 @@ interface ScopeSelectorProps {
   readonly onStartSelection: () => void;
   readonly rangeEndIndex: number;
   readonly rangeStartIndex: number;
+  readonly selectionStatusText?: string;
   readonly scope: ExportOptions["scope"];
 }
 
@@ -19,6 +20,7 @@ export function ScopeSelector({
   onStartSelection,
   rangeEndIndex,
   rangeStartIndex,
+  selectionStatusText,
   scope
 }: ScopeSelectorProps) {
   return (
@@ -45,6 +47,11 @@ export function ScopeSelector({
           <button className="secondary-action" type="button" onClick={onClearSelection}>
             Clear selection
           </button>
+          {selectionStatusText !== undefined ? (
+            <p className="status-text" role="status">
+              {selectionStatusText}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

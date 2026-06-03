@@ -7,6 +7,7 @@ import {
   getBatchCandidateTabs,
   type BatchExportResult
 } from "../../../src/core/batch";
+import { formatBatchTabDetail } from "../../../src/ui/components/BatchExport";
 
 describe("batch export core helpers", () => {
   test("lists only supported opened AI chat tabs with tab ids", () => {
@@ -51,6 +52,18 @@ describe("batch export core helpers", () => {
         2
       )
     ).toBe("chatgpt-api-auth-plan-3");
+  });
+
+  test("formats batch tab details with URL and tab id to disambiguate duplicate titles", () => {
+    expect(
+      formatBatchTabDetail({
+        id: 9,
+        platform: "chatgpt",
+        platformLabel: "ChatGPT",
+        title: "DNA Analysis",
+        url: "https://chatgpt.com/c/abc123?model=test"
+      })
+    ).toBe("chatgpt.com/c/abc123?model=test - tab 9");
   });
 
   test("creates a manifest with success files and failed tabs", () => {

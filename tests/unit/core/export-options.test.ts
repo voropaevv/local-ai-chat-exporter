@@ -143,6 +143,28 @@ describe("renderConversationFiles", () => {
     expect(exported.messages[0].metadata).toEqual({});
   });
 
+  test("omits markdown frontmatter and export metadata when metadata is disabled", () => {
+    const files = renderConversationFiles(
+      makeConversation(),
+      makeOptions({
+        formats: ["md"],
+        includeMetadata: false,
+        markdownProfile: "github"
+      })
+    );
+    const markdown = expectTextBytes(files[0].bytes);
+
+    expect(markdown).not.toMatch(/^---\n/u);
+    expect(markdown).not.toContain("schema_version");
+    expect(markdown).not.toContain("source_url");
+    expect(markdown).not.toContain("exported_at");
+    expect(markdown).not.toContain("message_count");
+    expect(markdown).not.toContain("| Source |");
+    expect(markdown).not.toContain("| Exported |");
+    expect(markdown).not.toContain("| Completeness |");
+    expect(markdown).toContain("Contact admin@example.com");
+  });
+
   test("reports a user-readable no-messages error after scope filtering", () => {
     expect(() =>
       renderConversationFiles(

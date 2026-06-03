@@ -51,6 +51,7 @@ export function BatchExport({
                 />
                 <span>
                   <strong>{tab.platformLabel}</strong> {tab.title}
+                  <span className="muted"> - {formatBatchTabDetail(tab)}</span>
                 </span>
               </label>
             </li>
@@ -84,4 +85,18 @@ export function BatchExport({
       ) : null}
     </section>
   );
+}
+
+export function formatBatchTabDetail(tab: BatchCandidateTab): string {
+  const fallback = `tab ${tab.id}`;
+
+  try {
+    const url = new URL(tab.url);
+    const path = `${url.pathname}${url.search}`.replace(/\/$/u, "");
+    const shortPath = path.length > 0 ? path : "/";
+
+    return `${url.host}${shortPath} - ${fallback}`;
+  } catch {
+    return `${tab.url || "unknown URL"} - ${fallback}`;
+  }
 }

@@ -51,8 +51,17 @@ export interface PopupState {
   readonly previewMessages: readonly PreviewMessage[];
   readonly progressLabel: string;
   readonly scanStatus: PopupScanStatus;
+  readonly selectedMessageCount: number;
   readonly sourceUrl?: string;
   readonly title?: string;
+}
+
+export interface ExportStatusMessageInput {
+  readonly clipboardError?: {
+    readonly message: string;
+  };
+  readonly downloaded: readonly string[];
+  readonly exportedMessageCount: number;
 }
 
 export type PopupAction =
@@ -62,6 +71,7 @@ export type PopupAction =
   | { readonly type: "scan_cancelled" }
   | { readonly type: "export_started" }
   | { readonly type: "export_finished"; readonly message: string }
+  | { readonly selectedMessageCount: number; readonly type: "selection_count_changed" }
   | { readonly type: "set_format"; readonly format: ExportFormat }
   | { readonly type: "set_scope"; readonly scope: ExportOptions["scope"] }
   | { readonly type: "set_markdown_profile"; readonly markdownProfile: MarkdownProfile }
@@ -105,7 +115,8 @@ export function createInitialPopupState(): PopupState {
     platformLabel: "Current tab",
     previewMessages: [],
     progressLabel: "Ready to scan.",
-    scanStatus: "idle"
+    scanStatus: "idle",
+    selectedMessageCount: 0
   };
 }
 
@@ -133,6 +144,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         previewMessages: action.scan.previewMessages,
         progressLabel: `Scanned ${action.scan.messageCount} message(s). Ready to export.`,
         scanStatus: "scanned",
+        selectedMessageCount: action.scan.selectedMessageCount,
         sourceUrl: action.scan.sourceUrl,
         title: action.scan.title
       };
@@ -162,7 +174,21 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return {
         ...state,
         progressLabel: action.message,
-        scanStatus: state.completeness === undefined ? "idle" : "scanned"
+        previewMessages:
+          state.options.scope === "selected"
+            ? state.previewMessages.map((message) => ({ ...message, selected: false }))
+            : state.previewMessages,
+        scanStatus: state.completeness === undefined ? "idle" : "scanned",
+        selectedMessageCount: state.options.scope === "selected" ? 0 : state.selectedMessageCount
+      };
+    case "selection_count_changed":
+      return {
+        ...state,
+        previewMessages:
+          action.selectedMessageCount === 0
+            ? state.previewMessages.map((message) => ({ ...message, selected: false }))
+            : state.previewMessages,
+        selectedMessageCount: action.selectedMessageCount
       };
     case "set_format":
       return toggleFormat(state, action.format);
@@ -363,4 +389,28 @@ export function getScopedPreviewMessages(state: PopupState): readonly PreviewMes
   }
 
   return messages;
+}
+
+export function getSelectionStatusText(state: PopupState): string | undefined {
+  if (state.options.scope !== "selected") {
+    return undefined;
+  }
+
+  if (state.selectedMessageCount === 0) {
+    return "No selected messages. Click Select messages again.";
+  }
+
+  return `Selected messages: ${state.selectedMessageCount}`;
+}
+
+export function buildExportStatusMessage(result: ExportStatusMessageInput): string {
+  const downloaded = result.downloaded.length;
+  const copied =
+    result.clipboardError === undefined ? "" : ` Clipboard: ${result.clipboardError.message}`;
+
+  if (downloaded > 0) {
+    return `Exported ${result.exportedMessageCount} message(s) from scanned snapshot to ${downloaded} file(s).${copied}`;
+  }
+
+  return `Exported ${result.exportedMessageCount} message(s) from scanned snapshot. Prepared local output.${copied}`;
 }

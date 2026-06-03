@@ -39,6 +39,7 @@ export interface ScanSummary {
   readonly platformLabel: string;
   readonly previewMessages: readonly PreviewMessage[];
   readonly scanId?: string;
+  readonly selectedMessageCount: number;
   readonly sourceUrl: string;
   readonly title?: string;
 }
@@ -127,6 +128,7 @@ export interface ContentGetCachedConversationRequest {
 export interface PopupExportSuccess {
   readonly clipboardError?: SerializedExportError;
   readonly downloaded: readonly string[];
+  readonly exportedMessageCount: number;
   readonly files?: readonly RenderedFile<RenderedBytes>[];
   readonly messageCount: number;
   readonly warnings: readonly string[];
@@ -170,7 +172,16 @@ export interface BatchListSuccess {
 export interface BatchExportSuccess {
   readonly downloaded: readonly string[];
   readonly results: readonly BatchManifestResult[];
+  readonly zipFile: SerializedRenderedFile;
   readonly zipFilename: string;
+}
+
+export interface SerializedRenderedFile {
+  readonly bytes: string | readonly number[];
+  readonly encoding: RenderedFile<RenderedBytes>["encoding"];
+  readonly filename: string;
+  readonly format: RenderedFile<RenderedBytes>["format"];
+  readonly mimeType: string;
 }
 
 export type RuntimeResponse<T> =

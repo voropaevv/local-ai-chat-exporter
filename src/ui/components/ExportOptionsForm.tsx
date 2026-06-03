@@ -17,6 +17,7 @@ interface ExportOptionsFormProps {
   readonly onScopeChange: (value: ExportOptions["scope"]) => void;
   readonly onStartSelection: () => void;
   readonly options: PopupOptionsState;
+  readonly selectionStatusText?: string;
 }
 
 export function ExportOptionsForm({
@@ -30,7 +31,8 @@ export function ExportOptionsForm({
   onRedactChange,
   onScopeChange,
   onStartSelection,
-  options
+  options,
+  selectionStatusText
 }: ExportOptionsFormProps) {
   return (
     <section className="panel" aria-labelledby="export-options-title">
@@ -57,6 +59,7 @@ export function ExportOptionsForm({
         onStartSelection={onStartSelection}
         rangeEndIndex={options.rangeEndIndex}
         rangeStartIndex={options.rangeStartIndex}
+        selectionStatusText={selectionStatusText}
         scope={options.scope}
       />
 

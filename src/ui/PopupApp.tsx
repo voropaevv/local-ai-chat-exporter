@@ -1,10 +1,16 @@
 import { useEffect, useReducer, useState } from "preact/hooks";
 
 import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
-import type { RuntimeResponse, ScanCacheSummaryResult, ScanSummary } from "../core/messages";
+import type {
+  RuntimeResponse,
+  ScanCacheSummaryResult,
+  ScanSummary,
+  SerializedRenderedFile
+} from "../core/messages";
 import type { BatchExportSuccess, BatchListSuccess } from "../core/messages";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 import { createFileBlob } from "../utils/blob";
+import { downloadRenderedFiles } from "../utils/download";
 import { getCachedScanSummary } from "./popup-cache";
 import { ActionBar } from "./components/ActionBar";
 import { BatchExport } from "./components/BatchExport";
@@ -21,6 +27,7 @@ import {
   buildCopyMarkdownRequest,
   buildClearSelectionRequest,
   buildDownloadRequest,
+  buildExportStatusMessage,
   buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
   buildOpenPreviewRequest,
@@ -28,6 +35,7 @@ import {
   buildStartSelectionRequest,
   createInitialPopupState,
   getScopedPreviewMessages,
+  getSelectionStatusText,
   popupReducer
 } from "./state/popup-state";
 import { readStoredRedactionSettings } from "./redaction-storage";
@@ -37,6 +45,7 @@ interface PopupExportSuccess {
     readonly message: string;
   };
   readonly downloaded: readonly string[];
+  readonly exportedMessageCount: number;
   readonly files?: readonly RenderedFile<RenderedBytes>[];
   readonly messageCount: number;
   readonly warnings: readonly string[];
@@ -110,11 +119,13 @@ export function PopupApp() {
 
   async function handleStartSelection() {
     dispatch({ scope: "selected", type: "set_scope" });
+    dispatch({ selectedMessageCount: 0, type: "selection_count_changed" });
     await sendRuntimeMessage(buildStartSelectionRequest());
   }
 
   async function handleClearSelection() {
     await sendRuntimeMessage(buildClearSelectionRequest());
+    dispatch({ selectedMessageCount: 0, type: "selection_count_changed" });
     dispatch({ scope: "all", type: "set_scope" });
   }
 
@@ -191,8 +202,14 @@ export function PopupApp() {
     );
 
     if (response.ok) {
-      setBatchResults(response.value.results);
-      setBatchStatus(`Saved ${response.value.zipFilename}.`);
+      try {
+        await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
+        setBatchResults(response.value.results);
+        setBatchStatus(`Saved ${response.value.zipFilename}.`);
+      } catch (error) {
+        setBatchResults(response.value.results);
+        setBatchStatus(error instanceof Error ? error.message : "Download failed.");
+      }
     } else {
       setBatchStatus(response.error.message);
     }
@@ -211,7 +228,7 @@ export function PopupApp() {
     }
 
     dispatch({
-      message: buildExportStatus(response.value),
+      message: buildExportStatusMessage(response.value),
       type: "export_finished"
     });
 
@@ -249,6 +266,7 @@ export function PopupApp() {
         onScopeChange={(scope) => dispatch({ scope, type: "set_scope" })}
         onStartSelection={handleStartSelection}
         options={state.options}
+        selectionStatusText={getSelectionStatusText(state)}
       />
       <BatchExport
         busy={batchBusy || busy}
@@ -296,20 +314,18 @@ async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<
   }
 }
 
-function buildExportStatus(result: PopupExportSuccess): string {
-  const downloaded = result.downloaded.length;
-  const copied =
-    result.clipboardError === undefined ? "" : ` Clipboard: ${result.clipboardError.message}`;
-
-  if (downloaded > 0) {
-    return `Exported from scanned snapshot. ${result.messageCount} message(s) to ${downloaded} file(s).${copied}`;
-  }
-
-  return `Exported from scanned snapshot. Prepared ${result.messageCount} message(s).${copied}`;
-}
-
 function openRenderedFile(file: RenderedFile<RenderedBytes>): void {
   const url = URL.createObjectURL(createFileBlob(file));
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function deserializeRenderedFile(file: SerializedRenderedFile): RenderedFile<RenderedBytes> {
+  return {
+    bytes: typeof file.bytes === "string" ? file.bytes : Uint8Array.from(file.bytes),
+    encoding: file.encoding,
+    filename: file.filename,
+    format: file.format,
+    mimeType: file.mimeType
+  };
 }

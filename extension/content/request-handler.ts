@@ -1,5 +1,6 @@
 import {
   ExportPipelineError,
+  getExportedMessageCount,
   serializeExportError,
   type ExportOptions,
   type SerializedExportError
@@ -190,11 +191,20 @@ export function createContentRequestHandler(
       );
     }
 
-    const selectedConversation = applySelectionScope(
-      applyActiveSelection(cachedConversation),
+    const selectedConversation = applyActiveSelection(cachedConversation);
+    const exportedMessageCount = getExportedMessageCount(selectedConversation, request.options);
+
+    if (request.options.scope === "selected" && exportedMessageCount === 0) {
+      throw new ExportPipelineError(
+        "no_messages_found",
+        "No selected messages. Click Select messages again."
+      );
+    }
+
+    const files = dependencies.renderConversationFiles(
+      applySelectionScope(selectedConversation, request.options),
       request.options
     );
-    const files = dependencies.renderConversationFiles(selectedConversation, request.options);
     let clipboardError: SerializedExportError | undefined;
 
     if (request.copyToClipboard ?? true) {
@@ -214,8 +224,9 @@ export function createContentRequestHandler(
     return {
       ...(clipboardError !== undefined ? { clipboardError } : {}),
       downloaded,
+      exportedMessageCount,
       ...(request.delivery === "return_files" ? { files } : {}),
-      messageCount: selectedConversation.messageCount,
+      messageCount: exportedMessageCount,
       warnings: [
         ...cachedConversation.completeness.warnings,
         ...cachedConversation.completeness.platformWarnings,
@@ -261,6 +272,17 @@ function createScanId(sequence: number): string {
   return `scan-${Date.now().toString(36)}-${sequence.toString(36)}`;
 }
 
+type CachedConversationState =
+  | {
+      readonly conversation: ConversationExport;
+      readonly scanId: string;
+      readonly status: "ready";
+    }
+  | {
+      readonly reason: "missing" | "stale";
+      readonly status: "missing";
+    };
+
 function applySelectionScope(
   conversation: ConversationExport,
   options: Partial<ExportOptions>
@@ -278,17 +300,6 @@ function applySelectionScope(
   };
 }
 
-type CachedConversationState =
-  | {
-      readonly conversation: ConversationExport;
-      readonly scanId: string;
-      readonly status: "ready";
-    }
-  | {
-      readonly reason: "missing" | "stale";
-      readonly status: "missing";
-    };
-
 export function summarizeConversation(
   conversation: ConversationExport,
   scanId?: string
@@ -299,6 +310,7 @@ export function summarizeConversation(
     platformLabel: conversation.platformLabel,
     previewMessages: conversation.messages.slice(0, MAX_PREVIEW_MESSAGES).map(toPreviewMessage),
     ...(scanId !== undefined ? { scanId } : {}),
+    selectedMessageCount: countSelectedMessages(conversation.messages),
     sourceUrl: conversation.sourceUrl,
     ...(conversation.title !== undefined ? { title: conversation.title } : {})
   };
@@ -339,4 +351,8 @@ function toPreviewMessage(message: ExportedMessage): PreviewMessage {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function countSelectedMessages(messages: readonly ExportedMessage[]): number {
+  return messages.filter((message) => message.metadata.selected === true).length;
 }

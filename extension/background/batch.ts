@@ -27,7 +27,7 @@ import {
   type BatchZipResult
 } from "../../src/renderers/zip";
 import { ensureContentScript } from "../../src/utils/content-script";
-import { downloadRenderedFiles } from "../../src/utils/download";
+import type { RenderedBytes, RenderedFile } from "../../src/renderers";
 
 export async function handlePopupBatchListRequest(): Promise<BatchListSuccess> {
   await requireTabsPermission();
@@ -42,7 +42,6 @@ export async function handlePopupBatchExportRequest(
   request: PopupBatchExportRequest
 ): Promise<BatchExportSuccess> {
   await requireTabsPermission();
-  await requireDownloadsPermission();
 
   const exportedAt = new Date().toISOString();
   const candidates = getBatchCandidateTabs(await chrome.tabs.query({}));
@@ -54,20 +53,17 @@ export async function handlePopupBatchExportRequest(
   }
 
   const zipFile = renderBatchZip({ exportedAt, results });
-  const downloadResult = await downloadRenderedFiles([zipFile], {
-    chrome,
-    preferChromeDownloads: true
-  });
   const rootDirectory = createBatchRootDirectory(exportedAt);
   const manifestResults = createBatchZipManifestResults(results);
 
   return {
-    downloaded: downloadResult.downloaded,
+    downloaded: [],
     results: createBatchManifest({
       exportedAt,
       results: manifestResults,
       rootDirectory
     }).results,
+    zipFile: serializeRenderedFile(zipFile),
     zipFilename: zipFile.filename
   };
 }
@@ -104,7 +100,7 @@ async function exportTab(
 
     return {
       files: response.value.files ?? [],
-      messageCount: response.value.messageCount,
+      messageCount: response.value.exportedMessageCount,
       status: "success",
       tab,
       warnings: response.value.warnings
@@ -139,19 +135,18 @@ async function requireTabsPermission(): Promise<void> {
   }
 }
 
-async function requireDownloadsPermission(): Promise<void> {
-  const granted = await requestPermission({ permissions: ["downloads"] });
-
-  if (!granted) {
-    throw new ExportPipelineError(
-      "download_failed",
-      "Downloads permission is required to save a batch ZIP."
-    );
-  }
-}
-
 function requestPermission(permissions: chrome.permissions.Permissions): Promise<boolean> {
   return new Promise((resolve) => {
     chrome.permissions.request(permissions, resolve);
   });
+}
+
+function serializeRenderedFile(file: RenderedFile<RenderedBytes>): BatchExportSuccess["zipFile"] {
+  return {
+    bytes: typeof file.bytes === "string" ? file.bytes : Array.from(file.bytes),
+    encoding: file.encoding,
+    filename: file.filename,
+    format: file.format,
+    mimeType: file.mimeType
+  };
 }

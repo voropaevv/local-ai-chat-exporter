@@ -267,6 +267,7 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
     return {
       clipboardError: contentResponse.value.clipboardError,
       downloaded: contentResponse.value.downloaded,
+      exportedMessageCount: contentResponse.value.exportedMessageCount,
       ...(request.returnFiles ? { files: contentResponse.value.files } : {}),
       messageCount: contentResponse.value.messageCount,
       warnings: contentResponse.value.warnings
@@ -282,6 +283,7 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
   return {
     clipboardError: contentResponse.value.clipboardError,
     downloaded: downloadResult.downloaded,
+    exportedMessageCount: contentResponse.value.exportedMessageCount,
     ...(request.returnFiles ? { files: contentResponse.value.files } : {}),
     messageCount: contentResponse.value.messageCount,
     warnings: contentResponse.value.warnings
