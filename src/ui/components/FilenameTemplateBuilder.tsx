@@ -1,5 +1,8 @@
+import { useState } from "preact/hooks";
+
 import type { ExportFormat } from "../../core/schema";
 import {
+  DEFAULT_FILENAME_TEMPLATE,
   FILENAME_TEMPLATE_TOKENS,
   createFilenamePreview,
   createFilenameTemplate,
@@ -22,6 +25,7 @@ export function FilenameTemplateBuilder({
   onChange,
   value
 }: FilenameTemplateBuilderProps) {
+  const [customText, setCustomText] = useState("");
   const segments = parseFilenameTemplate(value);
   const preview = createFilenamePreview(value, {
     conversationId: "abc123",
@@ -40,11 +44,12 @@ export function FilenameTemplateBuilder({
   }
 
   function addText(valueToAdd: string) {
-    if (valueToAdd.length === 0) {
+    if (valueToAdd.trim().length === 0) {
       return;
     }
 
     updateSegments([...segments, { kind: "text", value: valueToAdd }]);
+    setCustomText("");
   }
 
   function moveSegmentToIndex(sourceIndex: number, targetIndex: number) {
@@ -83,35 +88,42 @@ export function FilenameTemplateBuilder({
             onClick={() => addToken(token.token)}
             type="button"
           >
-            {token.label}
+            + {token.label}
           </button>
         ))}
       </div>
       <label className="field-row">
         <span>Custom text or separator</span>
         <input
+          onInput={(event) => setCustomText(event.currentTarget.value)}
           onKeyDown={(event) => {
             if (event.key !== "Enter") {
               return;
             }
 
             event.preventDefault();
-            addText(event.currentTarget.value);
-            event.currentTarget.value = "";
+            addText(customText);
           }}
           placeholder="_ - ."
           type="text"
+          value={customText}
         />
       </label>
-      <label className="field-row">
-        <span>Stored template string</span>
-        <input onInput={(event) => onChange(event.currentTarget.value)} type="text" value={value} />
-      </label>
+      <button
+        className="secondary-action compact-action"
+        onClick={() => addText(customText)}
+        type="button"
+      >
+        + Custom text
+      </button>
+      <button
+        className="secondary-action compact-action"
+        onClick={() => onChange(DEFAULT_FILENAME_TEMPLATE)}
+        type="button"
+      >
+        Reset to default
+      </button>
       <p className="status-text">Preview: {preview}</p>
-      <p className="muted">
-        Tokens: {"{"}date{"}"}, {"{"}time{"}"}, {"{"}datetime{"}"}, {"{"}platform{"}"},{" "}
-        {"{"}title{"}"}, {"{"}conversationId{"}"}, {"{"}format{"}"}.
-      </p>
     </div>
   );
 }

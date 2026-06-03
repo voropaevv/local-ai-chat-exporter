@@ -39,7 +39,7 @@ export interface FilenamePreviewContext {
 export const FILENAME_TEMPLATE_TOKENS: readonly FilenameTemplateTokenDefinition[] = [
   { label: "Date", token: "date" },
   { label: "Time", token: "time" },
-  { label: "Date-time", token: "datetime" },
+  { label: "Date/time", token: "datetime" },
   { label: "Platform", token: "platform" },
   { label: "Title", token: "title" },
   { label: "Conversation ID", token: "conversationId" },

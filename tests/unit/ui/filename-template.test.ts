@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -21,6 +23,9 @@ describe("filename template builder helpers", () => {
       "conversationId",
       "format"
     ]);
+    expect(FILENAME_TEMPLATE_TOKENS.find((token) => token.token === "datetime")?.label).toBe(
+      "Date/time"
+    );
 
     const segments = parseFilenameTemplate(DEFAULT_FILENAME_TEMPLATE);
 
@@ -48,5 +53,17 @@ describe("filename template builder helpers", () => {
       platform: "chatgpt",
       title: "DNA Analysis"
     })).toBe("2026-06-03T10-20-30_chatgpt_DNA Analysis.md");
+  });
+
+  test("keeps raw template editing out of the default filename builder UI", () => {
+    const source = readFileSync(
+      resolve(import.meta.dirname, "../../../src/ui/components/FilenameTemplateBuilder.tsx"),
+      "utf8"
+    );
+
+    expect(source).toContain("Reset to default");
+    expect(source).toContain("+ Custom text");
+    expect(source).not.toContain("Stored template string");
+    expect(source).not.toContain("Tokens:");
   });
 });
