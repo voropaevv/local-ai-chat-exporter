@@ -153,9 +153,20 @@ local-ai-chat-exporter-*-qa-*.zip
 *.webm
 *.trace.zip
 screenshots/
+Screenshots/
+Screenshot*.png
+Screenshot*.jpg
+Screenshot*.jpeg
+Screenshot*.webp
+CleanShot*
 *.screenshot.png
+*.screenshot.jpg
+*.screenshot.jpeg
+*.screenshot.webp
+*.screen-recording.*
 
 # Build and release artifacts
+release/
 release/*.zip
 release/*.sha256
 
