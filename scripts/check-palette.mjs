@@ -8,7 +8,6 @@ const projectRoot = resolve(process.argv[2] ?? fileURLToPath(new URL("../", impo
 const sourceIconPath = resolve(projectRoot, "assets/icon/icon.svg");
 const palettePath = resolve(projectRoot, "src/ui/styles/palette.css");
 const manifestPath = resolve(projectRoot, "extension/manifest.json");
-const previewPath = resolve(projectRoot, "docs/icon-preview.html");
 const iconSizes = [16, 32, 48, 128, 512];
 const requiredTokens = [
   "--color-product-blue",
@@ -44,7 +43,6 @@ async function main() {
   await validateGeneratedIcons(violations);
   await validateManifest(violations);
   await validateUiPaletteDiscipline(iconColors, violations);
-  await validatePreviewDocument(violations);
 
   if (violations.length > 0) {
     for (const violation of violations) {
@@ -207,22 +205,6 @@ async function validateUiPaletteDiscipline(iconColors, violations) {
       );
     }
 
-  }
-}
-
-async function validatePreviewDocument(violations) {
-  const preview = await readText(previewPath, violations, "docs/icon-preview.html");
-
-  if (preview === undefined) {
-    return;
-  }
-
-  const references = ["assets/icon/icon.svg", ...iconSizes.map((size) => `icon-${size}.png`)];
-
-  for (const reference of references) {
-    if (!preview.includes(reference)) {
-      violations.push(`docs/icon-preview.html: missing reference to ${reference}`);
-    }
   }
 }
 

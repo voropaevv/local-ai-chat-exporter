@@ -71,15 +71,6 @@ describe("icon and product palette assets", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Icon and palette checks passed");
   });
-
-  test("icon preview references every generated icon size", () => {
-    const preview = readFileSync(resolve(projectRoot, "docs/icon-preview.html"), "utf8");
-
-    expect(preview).toContain("assets/icon/icon.svg");
-    for (const size of requiredIconSizes) {
-      expect(preview).toContain(`extension/icons/icon-${size}.png`);
-    }
-  });
 });
 
 function readPngSize(png: Buffer): { readonly height: number; readonly width: number } {

@@ -75,8 +75,6 @@ pnpm test:e2e
 - Browser storage is used for local preferences such as redaction settings.
 - Optional permissions are requested only for user-facing workflows such as downloads and batch export.
 
-See [PRIVACY.md](PRIVACY.md) and [docs/permissions.md](docs/permissions.md).
-
 ## Limitations
 
 - ChatGPT is the primary v1 platform.
