@@ -8,13 +8,15 @@ import {
   type ExportOptions
 } from "../../../src/core/export-options";
 
+const fakeProjectKey = ["sk", "proj", "abcdefghijklmnopqrstuvwxyz1234567890"].join("-");
+
 function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage {
   return {
     id: "msg-1",
     index: 0,
     role: "user",
     authorLabel: "User",
-    text: "Contact admin@example.com with token FAKE_OPENAI_KEY_FOR_TESTS_ONLY.",
+    text: `Contact admin@example.com with token ${fakeProjectKey}.`,
     codeBlocks: [],
     images: [],
     metadata: {},
@@ -82,13 +84,12 @@ describe("renderConversationFiles", () => {
           index: 1,
           role: "assistant",
           authorLabel: "ChatGPT",
-          text: "Email admin@example.com and use key FAKE_OPENAI_KEY_FOR_TESTS_ONLY.",
-          markdown:
-            "Email admin@example.com and use key FAKE_OPENAI_KEY_FOR_TESTS_ONLY.",
+          text: `Email admin@example.com and use key ${fakeProjectKey}.`,
+          markdown: `Email admin@example.com and use key ${fakeProjectKey}.`,
           codeBlocks: [
             {
               language: "txt",
-              code: "FAKE_OPENAI_KEY_FOR_TESTS_ONLY\n"
+              code: `${fakeProjectKey}\n`
             }
           ]
         })

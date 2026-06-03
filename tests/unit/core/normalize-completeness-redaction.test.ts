@@ -4,6 +4,8 @@ import { buildCompletenessReport } from "../../../src/core/completeness";
 import { normalizeMessages } from "../../../src/core/normalize";
 import { redactText } from "../../../src/core/redaction";
 
+const fakeProjectKey = ["sk", "proj", "abcdefghijklmnopqrstuvwxyz1234567890"].join("-");
+
 describe("normalizeMessages", () => {
   test("normalizes roles, removes empty messages, and deduplicates by id or role plus text hash", () => {
     const messages = normalizeMessages([
@@ -118,8 +120,7 @@ describe("buildCompletenessReport", () => {
 
 describe("redactText", () => {
   test("redacts emails, phone-like strings, API-key-like tokens, and bearer-like tokens", () => {
-    const input =
-      "Email admin@example.com, call +1 (415) 555-2671, key FAKE_OPENAI_KEY_FOR_TESTS_ONLY, bearer Bearer FAKE_BEARER_TOKEN_FOR_TESTS_ONLY.";
+    const input = `Email admin@example.com, call +1 (415) 555-2671, key ${fakeProjectKey}, bearer Bearer FAKE_BEARER_TOKEN_FOR_TESTS_ONLY.`;
 
     expect(redactText(input, { enabled: true })).toBe(
       "Email [REDACTED_EMAIL], call [REDACTED_PHONE], key [REDACTED_SECRET], bearer Bearer [REDACTED_SECRET]."
@@ -127,7 +128,7 @@ describe("redactText", () => {
   });
 
   test("leaves text unchanged when disabled", () => {
-    const input = "Email admin@example.com and key FAKE_OPENAI_KEY_FOR_TESTS_ONLY";
+    const input = `Email admin@example.com and key ${fakeProjectKey}`;
 
     expect(redactText(input, { enabled: false })).toBe(input);
   });

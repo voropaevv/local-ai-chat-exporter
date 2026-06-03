@@ -6,8 +6,9 @@ import {
   redactText
 } from "../../../src/core/redaction";
 
-const richSecretInput =
-  "Email admin@example.com, call +1 (415) 555-2671, key FAKE_OPENAI_KEY_FOR_TESTS_ONLY, bearer Bearer FAKE_BEARER_TOKEN_FOR_TESTS_ONLY, id 0123456789abcdef0123456789abcdef.";
+const fakeProjectKey = ["sk", "proj", "abcdefghijklmnopqrstuvwxyz1234567890"].join("-");
+const bearerToken = "FAKE_BEARER_TOKEN_FOR_TESTS_ONLY";
+const richSecretInput = `Email admin@example.com, call +1 (415) 555-2671, key ${fakeProjectKey}, bearer Bearer ${bearerToken}, id 0123456789abcdef0123456789abcdef.`;
 
 describe("redactText", () => {
   test("keeps text unchanged when the preset is off", () => {
@@ -16,7 +17,7 @@ describe("redactText", () => {
 
   test("basic preset redacts emails and phone numbers only", () => {
     expect(redactText(richSecretInput, { preset: "basic" })).toBe(
-      "Email [REDACTED_EMAIL], call [REDACTED_PHONE], key FAKE_OPENAI_KEY_FOR_TESTS_ONLY, bearer Bearer FAKE_BEARER_TOKEN_FOR_TESTS_ONLY, id 0123456789abcdef0123456789abcdef."
+      `Email [REDACTED_EMAIL], call [REDACTED_PHONE], key ${fakeProjectKey}, bearer Bearer ${bearerToken}, id 0123456789abcdef0123456789abcdef.`
     );
   });
 
