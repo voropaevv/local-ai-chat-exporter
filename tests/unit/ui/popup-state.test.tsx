@@ -58,7 +58,7 @@ describe("popup state", () => {
     expect(scanned.platformLabel).toBe("ChatGPT");
     expect(scanned.completeness?.warnings).toEqual(["Top was not reached"]);
     expect(scanned.previewMessages).toHaveLength(3);
-    expect(scanned.progressLabel).toBe("Scanned 3 message(s). Ready to export.");
+    expect(scanned.progressLabel).toBe("Scanned 3 messages. Ready to export.");
     expect(scanned.partialWarning).toBe("This export may be partial.");
 
     const exporting = popupReducer(scanned, { type: "export_started" });
@@ -147,6 +147,24 @@ describe("popup state", () => {
     });
   });
 
+  test("builds ZIP bundle requests with selected bundle formats", () => {
+    const zipState = popupReducer(
+      popupReducer(createInitialPopupState(), {
+        outputMode: "zip",
+        type: "set_output_mode"
+      }),
+      {
+        format: "txt",
+        type: "set_bundle_format"
+      }
+    );
+
+    expect(buildDownloadRequest(zipState).options).toMatchObject({
+      formats: ["zip"],
+      zipFormats: ["md", "json", "html", "txt"]
+    });
+  });
+
   test("builds range requests and reflects scoped preview messages", () => {
     const scanned = popupReducer(createInitialPopupState(), {
       scan: {
@@ -211,7 +229,7 @@ describe("popup state", () => {
     });
     const selectedState = popupReducer(scanned, { scope: "selected", type: "set_scope" });
     const finished = popupReducer(selectedState, {
-      message: "Exported 1 message(s) from scanned snapshot to 1 file(s).",
+      message: "Exported 1 message from scanned snapshot to 1 file.",
       type: "export_finished"
     });
 
@@ -228,7 +246,7 @@ describe("popup state", () => {
         downloaded: ["chat.md"],
         exportedMessageCount: 41
       })
-    ).toBe("Exported 41 message(s) from scanned snapshot to 1 file(s).");
+    ).toBe("Exported 41 messages from scanned snapshot to 1 file.");
     expect(
       buildExportStatusMessage({
         clipboardError: { message: "Clipboard unavailable." },
@@ -236,7 +254,43 @@ describe("popup state", () => {
         exportedMessageCount: 3
       })
     ).toBe(
-      "Exported 3 message(s) from scanned snapshot. Prepared local output. Clipboard: Clipboard unavailable."
+      "Exported 3 messages from scanned snapshot. Prepared local output. Clipboard: Clipboard unavailable."
     );
+  });
+
+  test("clamps custom range UI values to one-based positive integers", () => {
+    const state = popupReducer(
+      popupReducer(createInitialPopupState(), {
+        rangeStartIndex: 0,
+        type: "set_range_start"
+      }),
+      {
+        rangeEndIndex: Number.NaN,
+        type: "set_range_end"
+      }
+    );
+
+    expect(state.options.rangeStartIndex).toBe(1);
+    expect(state.options.rangeEndIndex).toBe(1);
+    expect(buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options?.range).toEqual({
+      endIndex: 0,
+      startIndex: 0
+    });
+  });
+
+  test("keeps range start and end valid when users enter reversed values", () => {
+    const state = popupReducer(
+      popupReducer(createInitialPopupState(), {
+        rangeStartIndex: 4,
+        type: "set_range_start"
+      }),
+      {
+        rangeEndIndex: 2,
+        type: "set_range_end"
+      }
+    );
+
+    expect(state.options.rangeStartIndex).toBe(2);
+    expect(state.options.rangeEndIndex).toBe(2);
   });
 });

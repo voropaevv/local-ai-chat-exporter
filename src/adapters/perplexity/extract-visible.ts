@@ -10,12 +10,14 @@ const PERPLEXITY_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   {
     authorLabel: "User",
     role: "user",
-    selector: "[data-testid='query-text'], [data-test-id='query-text']"
+    selector:
+      "[data-testid='query-text'], [data-test-id='query-text'], [data-testid='query-content'], [data-testid='thread-question']"
   },
   {
     authorLabel: "Perplexity",
     role: "assistant",
-    selector: "[data-testid='answer'], [data-test-id='answer']"
+    selector:
+      "[data-testid='answer'], [data-test-id='answer'], [data-testid='answer-content'], [data-testid='thread-answer']"
   }
 ];
 

@@ -24,15 +24,22 @@ import {
 } from "../../core/messages";
 import type { CompletenessReport, ExportFormat } from "../../core/schema";
 import type { MarkdownProfile } from "../../renderers";
+import { DEFAULT_FILENAME_TEMPLATE } from "../filename-template";
+import { formatCount } from "../pluralize";
+
+export type PopupOutputMode = "separate" | "zip";
+export type PopupFileFormat = Exclude<ExportFormat, "zip">;
 
 export type PopupScanStatus = "idle" | "scanning" | "scanned" | "exporting" | "error";
 
 export interface PopupOptionsState {
   readonly filenameTemplate: string;
   readonly formats: readonly ExportFormat[];
+  readonly bundleFormats: readonly PopupFileFormat[];
   readonly includeMetadata: boolean;
   readonly includeCompletenessReport: boolean;
   readonly markdownProfile: MarkdownProfile;
+  readonly outputMode: PopupOutputMode;
   readonly rangeEndIndex: number;
   readonly rangeStartIndex: number;
   readonly redact: boolean;
@@ -73,6 +80,8 @@ export type PopupAction =
   | { readonly type: "export_finished"; readonly message: string }
   | { readonly selectedMessageCount: number; readonly type: "selection_count_changed" }
   | { readonly type: "set_format"; readonly format: ExportFormat }
+  | { readonly type: "set_bundle_format"; readonly format: PopupFileFormat }
+  | { readonly type: "set_output_mode"; readonly outputMode: PopupOutputMode }
   | { readonly type: "set_scope"; readonly scope: ExportOptions["scope"] }
   | { readonly type: "set_markdown_profile"; readonly markdownProfile: MarkdownProfile }
   | { readonly type: "set_filename_template"; readonly filenameTemplate: string }
@@ -84,11 +93,13 @@ export type PopupAction =
   | { readonly type: "set_range_end"; readonly rangeEndIndex: number };
 
 const DEFAULT_OPTIONS: PopupOptionsState = {
-  filenameTemplate: "{datetime}_{platform}_{title}.{format}",
+  bundleFormats: ["md", "json", "html"],
+  filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
   formats: ["md"],
   includeMetadata: true,
   includeCompletenessReport: true,
   markdownProfile: "default",
+  outputMode: "separate",
   rangeEndIndex: 1,
   rangeStartIndex: 1,
   redact: false,
@@ -97,7 +108,7 @@ const DEFAULT_OPTIONS: PopupOptionsState = {
   scope: "all"
 };
 
-export const POPUP_FORMATS: readonly ExportFormat[] = [
+export const POPUP_FILE_FORMATS: readonly PopupFileFormat[] = [
   "md",
   "txt",
   "json",
@@ -105,7 +116,7 @@ export const POPUP_FORMATS: readonly ExportFormat[] = [
   "html",
   "pdf",
   "docx",
-  "zip"
+  "png"
 ];
 
 export function createInitialPopupState(): PopupState {
@@ -142,7 +153,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
             : "This export may be partial.",
         platformLabel: action.scan.platformLabel,
         previewMessages: action.scan.previewMessages,
-        progressLabel: `Scanned ${action.scan.messageCount} message(s). Ready to export.`,
+        progressLabel: `Scanned ${formatCount(action.scan.messageCount, "message")}. Ready to export.`,
         scanStatus: "scanned",
         selectedMessageCount: action.scan.selectedMessageCount,
         sourceUrl: action.scan.sourceUrl,
@@ -192,6 +203,16 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       };
     case "set_format":
       return toggleFormat(state, action.format);
+    case "set_bundle_format":
+      return toggleBundleFormat(state, action.format);
+    case "set_output_mode":
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          outputMode: action.outputMode
+        }
+      };
     case "set_scope":
       return { ...state, options: { ...state.options, scope: action.scope } };
     case "set_markdown_profile":
@@ -238,19 +259,45 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         }
       };
     case "set_range_start":
-      return {
-        ...state,
-        options: { ...state.options, rangeStartIndex: action.rangeStartIndex }
-      };
+      {
+        const rangeStartIndex = normalizeOneBasedIndex(action.rangeStartIndex);
+
+        return {
+          ...state,
+          options: {
+            ...state.options,
+            rangeEndIndex: Math.max(state.options.rangeEndIndex, rangeStartIndex),
+            rangeStartIndex
+          }
+        };
+      }
     case "set_range_end":
-      return {
-        ...state,
-        options: { ...state.options, rangeEndIndex: action.rangeEndIndex }
-      };
+      {
+        const rangeEndIndex = normalizeOneBasedIndex(action.rangeEndIndex);
+
+        return {
+          ...state,
+          options: {
+            ...state.options,
+            rangeEndIndex,
+            rangeStartIndex: Math.min(state.options.rangeStartIndex, rangeEndIndex)
+          }
+        };
+      }
   }
 }
 
 export function toggleFormat(state: PopupState, format: ExportFormat): PopupState {
+  if (format === "zip") {
+    return {
+      ...state,
+      options: {
+        ...state.options,
+        outputMode: state.options.outputMode === "zip" ? "separate" : "zip"
+      }
+    };
+  }
+
   const hasFormat = state.options.formats.includes(format);
   const formats = hasFormat
     ? state.options.formats.filter((candidate) => candidate !== format)
@@ -261,6 +308,21 @@ export function toggleFormat(state: PopupState, format: ExportFormat): PopupStat
     options: {
       ...state.options,
       formats: formats.length > 0 ? formats : state.options.formats
+    }
+  };
+}
+
+export function toggleBundleFormat(state: PopupState, format: PopupFileFormat): PopupState {
+  const hasFormat = state.options.bundleFormats.includes(format);
+  const bundleFormats = hasFormat
+    ? state.options.bundleFormats.filter((candidate) => candidate !== format)
+    : [...state.options.bundleFormats, format];
+
+  return {
+    ...state,
+    options: {
+      ...state.options,
+      bundleFormats: bundleFormats.length > 0 ? bundleFormats : state.options.bundleFormats
     }
   };
 }
@@ -343,9 +405,12 @@ export function buildExportOptions(
       ? "strict"
       : state.options.redactionPreset;
 
+  const requestedFormats: readonly ExportFormat[] =
+    state.options.outputMode === "zip" && formats === state.options.formats ? ["zip"] : formats;
+
   return {
     filenameTemplate: state.options.filenameTemplate,
-    formats: [...formats],
+    formats: [...requestedFormats],
     includeCompletenessReport: state.options.includeCompletenessReport,
     includeMetadata: state.options.includeMetadata,
     markdownProfile: state.options.markdownProfile,
@@ -362,6 +427,9 @@ export function buildExportOptions(
       customPatterns: [...state.options.redactionCustomPatterns],
       preset: redactionPreset
     },
+    ...(state.options.outputMode === "zip" && formats === state.options.formats
+      ? { zipFormats: [...state.options.bundleFormats] }
+      : {}),
     scope: state.options.scope
   };
 }
@@ -409,8 +477,12 @@ export function buildExportStatusMessage(result: ExportStatusMessageInput): stri
     result.clipboardError === undefined ? "" : ` Clipboard: ${result.clipboardError.message}`;
 
   if (downloaded > 0) {
-    return `Exported ${result.exportedMessageCount} message(s) from scanned snapshot to ${downloaded} file(s).${copied}`;
+    return `Exported ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot to ${formatCount(downloaded, "file")}.${copied}`;
   }
 
-  return `Exported ${result.exportedMessageCount} message(s) from scanned snapshot. Prepared local output.${copied}`;
+  return `Exported ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot. Prepared local output.${copied}`;
+}
+
+function normalizeOneBasedIndex(value: number): number {
+  return Number.isInteger(value) && value > 0 ? value : 1;
 }

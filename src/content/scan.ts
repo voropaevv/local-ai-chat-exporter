@@ -91,6 +91,13 @@ function scanVisibleAdapterConversation(
   const messages = normalized.messages;
 
   if (messages.length === 0) {
+    if (adapter.id === "perplexity") {
+      throw new ExportPipelineError(
+        "no_messages_found",
+        "Perplexity layout was detected, but no visible messages could be extracted. The current Perplexity layout may need an adapter update."
+      );
+    }
+
     throw new ExportPipelineError("no_messages_found", "No messages were found on this page.");
   }
 

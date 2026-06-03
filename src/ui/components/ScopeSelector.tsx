@@ -6,6 +6,7 @@ interface ScopeSelectorProps {
   readonly onRangeStartChange: (value: number) => void;
   readonly onScopeChange: (value: ExportOptions["scope"]) => void;
   readonly onStartSelection: () => void;
+  readonly messageCount?: number;
   readonly rangeEndIndex: number;
   readonly rangeStartIndex: number;
   readonly selectionStatusText?: string;
@@ -18,6 +19,7 @@ export function ScopeSelector({
   onRangeStartChange,
   onScopeChange,
   onStartSelection,
+  messageCount,
   rangeEndIndex,
   rangeStartIndex,
   selectionStatusText,
@@ -56,26 +58,34 @@ export function ScopeSelector({
       ) : null}
 
       {scope === "range" ? (
-        <div className="range-grid">
-          <label className="field-row">
-            <span>Start</span>
-            <input
-              min="1"
-              onInput={(event) => onRangeStartChange(Number(event.currentTarget.value))}
-              type="number"
-              value={rangeStartIndex}
-            />
-          </label>
-          <label className="field-row">
-            <span>End</span>
-            <input
-              min="1"
-              onInput={(event) => onRangeEndChange(Number(event.currentTarget.value))}
-              type="number"
-              value={rangeEndIndex}
-            />
-          </label>
-        </div>
+        <>
+          <p className="muted">{messageCount === undefined ? "From 1 to N" : `From 1 to ${messageCount}`}</p>
+          <div className="range-grid">
+            <label className="field-row">
+              <span>Start message</span>
+              <input
+                max={messageCount}
+                min="1"
+                onInput={(event) => onRangeStartChange(Number(event.currentTarget.value))}
+                type="number"
+                value={rangeStartIndex}
+              />
+            </label>
+            <label className="field-row">
+              <span>End message</span>
+              <input
+                max={messageCount}
+                min="1"
+                onInput={(event) => onRangeEndChange(Number(event.currentTarget.value))}
+                type="number"
+                value={rangeEndIndex}
+              />
+            </label>
+          </div>
+          {rangeStartIndex > rangeEndIndex ? (
+            <p className="warning-text">Start must be less than or equal to end.</p>
+          ) : null}
+        </>
       ) : null}
     </div>
   );

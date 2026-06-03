@@ -15,6 +15,19 @@ test("preview page is built and no UI points at nested popup preview path", asyn
 
   const distPopup = await readFile(resolve(projectRoot, "dist/popup/index.html"), "utf8");
   const distPreview = await readFile(resolve(projectRoot, "dist/preview/index.html"), "utf8");
+  const sourceCss = await readFile(resolve(projectRoot, "src/ui/styles.css"), "utf8");
+  const popupFooter = await readFile(
+    resolve(projectRoot, "src/ui/components/PopupFooter.tsx"),
+    "utf8"
+  );
 
   expect(`${distPopup}\n${distPreview}`).not.toContain("popup/popup/index.html");
+  expect(sourceCss).toContain(".app-shell--preview");
+  expect(sourceCss).toContain(".app-shell--popup");
+  expect(sourceCss).toContain("overflow: auto");
+  expect(sourceCss).toContain("max-height: 620px");
+  expect(sourceCss).toContain("margin-inline: auto");
+  expect(sourceCss).toContain("position: sticky");
+  expect(popupFooter).toContain("options/index.html#privacy");
+  expect(popupFooter).toContain("chrome.runtime.getURL");
 });

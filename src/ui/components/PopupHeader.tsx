@@ -1,3 +1,5 @@
+import { BrandIcon } from "./BrandIcon";
+
 interface PopupHeaderProps {
   readonly platformLabel: string;
 }
@@ -5,9 +7,7 @@ interface PopupHeaderProps {
 export function PopupHeader({ platformLabel }: PopupHeaderProps) {
   return (
     <header className="popup-header">
-      <div className="brand-mark" aria-hidden="true">
-        LA
-      </div>
+      <BrandIcon />
       <div className="popup-title-group">
         <h1>Local AI Chat Exporter</h1>
         <p>{platformLabel}</p>

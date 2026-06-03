@@ -8,7 +8,7 @@ interface PrivacyPanelProps {
 
 export function PrivacyPanel({ copyStatus, onCopyPrivacySummary }: PrivacyPanelProps) {
   return (
-    <section className="panel privacy-panel" aria-labelledby="privacy-title">
+    <section className="panel privacy-panel" aria-labelledby="privacy-title" id="privacy">
       <div className="section-heading">
         <h2 id="privacy-title">Privacy</h2>
         <button

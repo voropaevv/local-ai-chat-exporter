@@ -49,12 +49,14 @@ export async function handlePopupBatchExportRequest(
   const results: BatchZipResult[] = [];
 
   for (const tab of selectedTabs) {
+    await requireTabHostPermission(tab);
     results.push(await exportTab(tab, request));
   }
 
-  const zipFile = renderBatchZip({ exportedAt, results });
   const rootDirectory = createBatchRootDirectory(exportedAt);
   const manifestResults = createBatchZipManifestResults(results);
+  const successCount = results.filter((result) => result.status === "success").length;
+  const zipFile = successCount > 0 ? renderBatchZip({ exportedAt, results }) : undefined;
 
   return {
     downloaded: [],
@@ -63,8 +65,12 @@ export async function handlePopupBatchExportRequest(
       results: manifestResults,
       rootDirectory
     }).results,
-    zipFile: serializeRenderedFile(zipFile),
-    zipFilename: zipFile.filename
+    ...(zipFile !== undefined
+      ? {
+          zipFile: serializeRenderedFile(zipFile),
+          zipFilename: zipFile.filename
+        }
+      : {})
   };
 }
 
@@ -135,10 +141,64 @@ async function requireTabsPermission(): Promise<void> {
   }
 }
 
+async function requireTabHostPermission(tab: BatchCandidateTab): Promise<void> {
+  const origins = getRequiredOrigins(tab);
+
+  if (origins.length === 0) {
+    throw new ExportPipelineError(
+      "unsupported_platform",
+      `Batch export cannot determine host access requirements for ${tab.title}.`
+    );
+  }
+
+  const hasPermission = await containsPermission({ origins: [...origins] });
+
+  if (hasPermission) {
+    return;
+  }
+
+  const granted = await requestPermission({ origins: [...origins] });
+
+  if (!granted) {
+    throw new ExportPipelineError(
+      "unsupported_platform",
+      `Batch export needs host access for ${formatOriginList(origins)} before exporting selected tabs.`
+    );
+  }
+}
+
+function getRequiredOrigins(tab: BatchCandidateTab): readonly string[] {
+  try {
+    const url = new URL(tab.url);
+
+    if (url.hostname === "chatgpt.com") {
+      return ["https://chatgpt.com/*"];
+    }
+
+    if (url.hostname === "chat.openai.com") {
+      return ["https://chat.openai.com/*"];
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
+}
+
+function containsPermission(permissions: chrome.permissions.Permissions): Promise<boolean> {
+  return new Promise((resolve) => {
+    chrome.permissions.contains(permissions, resolve);
+  });
+}
+
 function requestPermission(permissions: chrome.permissions.Permissions): Promise<boolean> {
   return new Promise((resolve) => {
     chrome.permissions.request(permissions, resolve);
   });
+}
+
+function formatOriginList(origins: readonly string[]): string {
+  return origins.map((origin) => origin.replace(/^https:\/\/|\/\*$/gu, "")).join(", ");
 }
 
 function serializeRenderedFile(file: RenderedFile<RenderedBytes>): BatchExportSuccess["zipFile"] {

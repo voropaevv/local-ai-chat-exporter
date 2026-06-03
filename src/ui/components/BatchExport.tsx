@@ -35,9 +35,15 @@ export function BatchExport({
         </button>
       </div>
       <p className="muted">
-        Batch export lists only AI chat tabs already open in this browser. It asks for tabs
-        permission when this panel is used.
+        Batch export lists only AI chat tabs already open in this browser.
       </p>
+      <details className="inline-details">
+        <summary>Permission details</summary>
+        <p className="muted">
+          The extension asks for tabs permission when this panel is used and checks host access
+          before exporting selected tabs.
+        </p>
+      </details>
       {candidates.length > 0 ? (
         <ul className="batch-tab-list" aria-label="Open AI chat tabs">
           {candidates.map((tab) => (
@@ -51,7 +57,11 @@ export function BatchExport({
                 />
                 <span>
                   <strong>{tab.platformLabel}</strong> {tab.title}
-                  <span className="muted"> - {formatBatchTabDetail(tab)}</span>
+                  <span className="muted"> - {formatBatchTabSummary(tab)}</span>
+                  <details className="inline-details">
+                    <summary>Details</summary>
+                    <span className="muted">{formatBatchTabDetail(tab)}</span>
+                  </details>
                 </span>
               </label>
             </li>
@@ -65,7 +75,7 @@ export function BatchExport({
           onClick={onExportSelected}
           type="button"
         >
-          Export selected ZIP
+          Export selected
         </button>
       </div>
       <p className="status-text" role="status">
@@ -98,5 +108,13 @@ export function formatBatchTabDetail(tab: BatchCandidateTab): string {
     return `${url.host}${shortPath} - ${fallback}`;
   } catch {
     return `${tab.url || "unknown URL"} - ${fallback}`;
+  }
+}
+
+export function formatBatchTabSummary(tab: BatchCandidateTab): string {
+  try {
+    return new URL(tab.url).host;
+  } catch {
+    return "unknown host";
   }
 }

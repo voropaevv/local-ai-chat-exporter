@@ -172,8 +172,8 @@ export interface BatchListSuccess {
 export interface BatchExportSuccess {
   readonly downloaded: readonly string[];
   readonly results: readonly BatchManifestResult[];
-  readonly zipFile: SerializedRenderedFile;
-  readonly zipFilename: string;
+  readonly zipFile?: SerializedRenderedFile;
+  readonly zipFilename?: string;
 }
 
 export interface SerializedRenderedFile {

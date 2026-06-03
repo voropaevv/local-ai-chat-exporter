@@ -5,6 +5,7 @@ import {
   renderPdf,
   type RenderedFile
 } from "../renderers";
+import { formatCount } from "./pluralize";
 
 export const PREVIEW_MISSING_CACHE_MESSAGE =
   "Scanned snapshot is no longer available. Return to the ChatGPT tab and scan again.";
@@ -39,6 +40,6 @@ export function createPreviewRenderState(
     markdown: renderMarkdown(conversation),
     pdf: renderPdf(conversation),
     status: "ready",
-    statusMessage: `Previewing ${conversation.messageCount} scanned message(s).`
+    statusMessage: `Previewing ${formatCount(conversation.messageCount, "scanned message")}.`
   };
 }

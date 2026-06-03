@@ -19,6 +19,7 @@ import {
 } from "./image-safety";
 import {
   renderers,
+  type LocalRendererFormat,
   type MarkdownProfile,
   type RenderedBytes,
   type RenderedFile
@@ -47,6 +48,7 @@ export interface ExportOptions {
   readonly redaction: RedactionSettings;
   readonly filenameTemplate: string;
   readonly range?: SelectionRange;
+  readonly zipFormats?: readonly LocalRendererFormat[];
 }
 
 export interface SerializedExportError {
@@ -109,12 +111,19 @@ export function renderConversationFiles(
     );
   }
 
-  return normalizedOptions.formats.map((format) => {
+  const outputFormats = normalizedOptions.formats.includes("zip")
+    ? (["zip"] as const)
+    : normalizedOptions.formats;
+  const zipFormats =
+    normalizedOptions.zipFormats ??
+    normalizedOptions.formats.filter((candidate): candidate is LocalRendererFormat => candidate !== "zip");
+
+  return outputFormats.map((format) => {
     return renderers[format](preparedConversation, {
       filenameTemplate: normalizedOptions.filenameTemplate,
       includeMetadata: normalizedOptions.includeMetadata,
       markdownProfile: normalizedOptions.markdownProfile,
-      zipFormats: normalizedOptions.formats.filter((candidate) => candidate !== "zip")
+      zipFormats
     });
   });
 }

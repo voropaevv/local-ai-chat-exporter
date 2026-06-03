@@ -222,8 +222,9 @@ describe("renderJson", () => {
       format: "json",
       mimeType: "application/json;charset=utf-8"
     });
-    expect(JSON.parse(rendered.bytes)).toEqual(makeConversation());
+    expect(JSON.parse(rendered.bytes)).toEqual(omitRawHtmlForJson(makeConversation()));
     expect(rendered.bytes).toContain('\n  "schemaVersion": "1.0",\n');
+    expect(rendered.bytes).not.toContain('"html"');
     expect(rendered.bytes).toMatchInlineSnapshot(`
       "{
         "schemaVersion": "1.0",
@@ -258,13 +259,13 @@ describe("renderJson", () => {
             "role": "user",
             "authorLabel": "User: \\"Pilot\\"",
             "text": "Please compare A, B, and C.\\nThis quote: \\"keep it\\".",
+            "markdown": "Please compare [docs](https://example.com/docs?a=1&b=2).\\n\\n| Format | Use |\\n| --- | --- |\\n| Markdown | Archive |\\n| CSV | Spreadsheet |",
             "codeBlocks": [],
             "images": [],
+            "createdAt": "2026-05-31T10:21:00.000Z",
             "metadata": {
               "source": "visible-dom"
-            },
-            "markdown": "Please compare [docs](https://example.com/docs?a=1&b=2).\\n\\n| Format | Use |\\n| --- | --- |\\n| Markdown | Archive |\\n| CSV | Spreadsheet |",
-            "createdAt": "2026-05-31T10:21:00.000Z"
+            }
           },
           {
             "id": "msg-2",
@@ -272,6 +273,7 @@ describe("renderJson", () => {
             "role": "assistant",
             "authorLabel": "ChatGPT",
             "text": "Here is code:\\n\\nconst value = \\"<script>\\";\\nconsole.log(value);\\n\\nFormula-like text: \\\\(a+b\\\\).",
+            "markdown": "Here is code:\\n\\n\`\`\`ts\\nconst value = \\"<script>\\";\\nconsole.log(value);\\n\`\`\`\\n\\nFormula-like text: \\\\(a+b\\\\).",
             "codeBlocks": [
               {
                 "language": "ts",
@@ -279,11 +281,9 @@ describe("renderJson", () => {
               }
             ],
             "images": [],
-            "metadata": {},
-            "markdown": "Here is code:\\n\\n\`\`\`ts\\nconst value = \\"<script>\\";\\nconsole.log(value);\\n\`\`\`\\n\\nFormula-like text: \\\\(a+b\\\\).",
-            "html": "<p>Here is code:</p><pre><code class=\\"language-ts\\">const value = &quot;&lt;script&gt;&quot;\\nconsole.log(value);</code></pre><table><thead><tr><th>Kind</th></tr></thead><tbody><tr><td>Safe</td></tr></tbody></table><p><a href=\\"https://example.com/from-user\\">source link</a></p><script>window.evil()</script>",
             "createdAt": "2026-05-31T10:22:00.000Z",
-            "model": "gpt-test"
+            "model": "gpt-test",
+            "metadata": {}
           }
         ]
       }
@@ -330,6 +330,12 @@ describe("renderHtml", () => {
     expect(rendered.bytes).toContain("<pre><code");
     expect(rendered.bytes).not.toContain("<script>");
     expect(rendered.bytes).not.toContain("window.evil");
+    expect(rendered.bytes).not.toContain("data-testid");
+    expect(rendered.bytes).not.toContain("markdown prose");
+    expect(rendered.bytes).not.toContain("flex w-full");
+    expect(rendered.bytes).not.toContain("user-message-bubble-color");
+    expect(rendered.bytes).not.toContain("data-role");
+    expect(rendered.bytes).not.toContain("data-message-id");
     expect(rendered.bytes).not.toContain("https://fonts.");
     expect(rendered.bytes).toMatchInlineSnapshot(`
       "<!doctype html>
@@ -392,16 +398,16 @@ describe("renderHtml", () => {
               </ul>
             </section>
           </header>
-          <article class="message" data-role="user" data-message-id="msg-1">
+          <article class="message">
             <h2>1. User: &quot;Pilot&quot;</h2>
             <div class="message-meta">Role: user - Created: 2026-05-31T10:21:00.000Z</div>
             <div class="message-body"><p>Please compare <a href="https://example.com/docs?a=1&amp;b=2" rel="noreferrer">docs</a>.</p><table><thead><tr><th>Format</th><th>Use</th></tr></thead><tbody><tr><td>Markdown</td><td>Archive</td></tr><tr><td>CSV</td><td>Spreadsheet</td></tr></tbody></table></div>
           </article>
-          <article class="message" data-role="assistant" data-message-id="msg-2">
+          <article class="message">
             <h2>2. ChatGPT</h2>
             <div class="message-meta">Role: assistant - Model: gpt-test - Created: 2026-05-31T10:22:00.000Z</div>
-            <div class="message-body"><p>Here is code:</p><pre><code class="language-ts">const value = &quot;&lt;script&gt;&quot;
-      console.log(value);</code></pre><table><thead><tr><th>Kind</th></tr></thead><tbody><tr><td>Safe</td></tr></tbody></table><p><a href="https://example.com/from-user" rel="noreferrer">source link</a></p></div>
+            <div class="message-body"><p>Here is code:</p><pre><code class="language-ts">const value = &quot;&lt;script&gt;&quot;;
+      console.log(value);</code></pre><p>Formula-like text: \\(a+b\\).</p></div>
           </article>
           <footer>This file was generated locally by extension from content visible in the current conversation.</footer>
         </main>
@@ -409,6 +415,26 @@ describe("renderHtml", () => {
       </html>
       "
     `);
+  });
+
+  test("does not render raw ChatGPT DOM classes from message HTML", () => {
+    const rawClassConversation = {
+      ...makeConversation(),
+      messages: [
+        makeMessage({
+          html: '<div data-testid="conversation-turn" class="markdown prose flex w-full user-message-bubble-color">Raw DOM</div>',
+          markdown: "Clean markdown body",
+          text: "Clean text body"
+        })
+      ]
+    } satisfies ConversationExport;
+    const rendered = renderHtml(rawClassConversation).bytes;
+
+    expect(rendered).toContain("Clean markdown body");
+    expect(rendered).not.toContain("conversation-turn");
+    expect(rendered).not.toContain("markdown prose");
+    expect(rendered).not.toContain("flex w-full");
+    expect(rendered).not.toContain("user-message-bubble-color");
   });
 });
 
@@ -427,3 +453,22 @@ describe("renderer registry", () => {
     ]);
   });
 });
+
+function omitRawHtmlForJson(conversation: ConversationExport): ConversationExport {
+  return {
+    ...conversation,
+    messages: conversation.messages.map((message) => ({
+      id: message.id,
+      index: message.index,
+      role: message.role,
+      authorLabel: message.authorLabel,
+      text: message.text,
+      codeBlocks: message.codeBlocks,
+      images: message.images,
+      metadata: message.metadata,
+      ...(message.markdown !== undefined ? { markdown: message.markdown } : {}),
+      ...(message.createdAt !== undefined ? { createdAt: message.createdAt } : {}),
+      ...(message.model !== undefined ? { model: message.model } : {})
+    }))
+  };
+}

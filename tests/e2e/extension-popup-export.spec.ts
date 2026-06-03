@@ -29,7 +29,7 @@ test("extension popup scans a ChatGPT fixture and downloads markdown", async () 
 
     const popup = await openExtensionPopup(context, fixturePage);
     await popup.getByRole("button", { name: "Scan conversation" }).click();
-    await expect(popup.getByText("Scanned 2 message(s). Ready to export.")).toBeVisible();
+    await expect(popup.getByText("Scanned 2 messages. Ready to export.")).toBeVisible();
     await expect(popup.getByText("Hello, can you summarize this?")).toBeVisible();
 
     const downloadPromise = fixturePage.waitForEvent("download");

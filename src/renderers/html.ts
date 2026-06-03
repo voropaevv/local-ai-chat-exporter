@@ -103,9 +103,7 @@ ${warnings.map((warning) => `          <li>${escapeHtml(warning)}</li>`).join("\
 function renderMessage(message: ExportedMessage): string {
   const messageMeta = renderMessageMeta(message);
 
-  return `    <article class="message" data-role="${escapeAttribute(message.role)}" data-message-id="${escapeAttribute(
-    message.id
-  )}">
+  return `    <article class="message">
       <h2>${message.index + 1}. ${escapeHtml(normalizeSingleLine(message.authorLabel))}</h2>
       <div class="message-meta">${escapeHtml(messageMeta)}</div>
       <div class="message-body">${renderMessageBody(message)}</div>
@@ -130,63 +128,13 @@ function renderMessageBody(message: ExportedMessage): string {
   const imageRefs = renderImageRefs(message.images);
   let body: string;
 
-  if (message.html !== undefined && message.html.trim().length > 0) {
-    body = sanitizeMessageHtml(message.html);
-  } else if (message.markdown !== undefined && message.markdown.trim().length > 0) {
+  if (message.markdown !== undefined && message.markdown.trim().length > 0) {
     body = markdownToHtml(message.markdown, message.codeBlocks);
   } else {
     body = textToHtml(message.text, message.codeBlocks);
   }
 
   return `${body}${imageRefs}`;
-}
-
-function sanitizeMessageHtml(input: string): string {
-  return addRelToLinks(
-    neutralizeUnsafeUrls(
-      input
-        .replace(
-          /<\s*(script|style|iframe|object|embed|svg|math|link|meta|base|form|button|audio|video|picture|canvas)\b[\s\S]*?<\s*\/\s*\1\s*>/gi,
-          ""
-        )
-        .replace(
-          /<\s*(script|style|iframe|object|embed|svg|math|link|meta|base|form|input|button|img|source|track|audio|video|picture|canvas)\b[^>]*>/gi,
-          ""
-        )
-        .replace(/\s+style\s*=\s*"[^"]*"/gi, "")
-        .replace(/\s+style\s*=\s*'[^']*'/gi, "")
-        .replace(/\s+(srcset|poster)\s*=\s*"[^"]*"/gi, "")
-        .replace(/\s+(srcset|poster)\s*=\s*'[^']*'/gi, "")
-        .replace(/\s+on[a-z]+\s*=\s*"[^"]*"/gi, "")
-        .replace(/\s+on[a-z]+\s*=\s*'[^']*'/gi, "")
-        .replace(/\s+on[a-z]+\s*=\s*[^\s>]+/gi, "")
-    )
-  ).trim();
-}
-
-function neutralizeUnsafeUrls(input: string): string {
-  return input.replace(
-    /\s(href|src)=("|')([^"']*)\2/gi,
-    (_match: string, attributeName: string, quote: string, attributeValue: string) => {
-      const normalizedAttribute = attributeName.toLocaleLowerCase();
-
-      if (normalizedAttribute === "href") {
-        return ` href=${quote}${safeHref(attributeValue)}${quote}`;
-      }
-
-      return "";
-    }
-  );
-}
-
-function addRelToLinks(input: string): string {
-  return input.replace(/<a\b([^>]*)>/gi, (_match: string, attributes: string) => {
-    if (/\srel\s*=/i.test(attributes)) {
-      return `<a${attributes}>`;
-    }
-
-    return `<a${attributes} rel="noreferrer">`;
-  });
 }
 
 function markdownToHtml(markdown: string, codeBlocks: readonly ExportedCodeBlock[]): string {

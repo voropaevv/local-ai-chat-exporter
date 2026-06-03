@@ -39,6 +39,7 @@ import {
   popupReducer
 } from "./state/popup-state";
 import { readStoredRedactionSettings } from "./redaction-storage";
+import { formatCount } from "./pluralize";
 
 interface PopupExportSuccess {
   readonly clipboardError?: {
@@ -170,9 +171,10 @@ export function PopupApp() {
     const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
 
     if (response.ok) {
-      setBatchCandidates(response.value.tabs);
+      const tabs = response.value.tabs;
+      setBatchCandidates(tabs);
       setBatchSelectedTabIds([]);
-      setBatchStatus(`Found ${response.value.tabs.length} open AI chat tab(s).`);
+      setBatchStatus(`Found ${formatCount(tabs.length, "open AI chat tab")}.`);
     } else {
       setBatchStatus(response.error.message);
     }
@@ -202,10 +204,21 @@ export function PopupApp() {
     );
 
     if (response.ok) {
+      const successCount = response.value.results.filter((result) => result.status === "success").length;
+      const failedCount = response.value.results.length - successCount;
+
       try {
-        await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
         setBatchResults(response.value.results);
-        setBatchStatus(`Saved ${response.value.zipFilename}.`);
+        if (response.value.zipFile === undefined || response.value.zipFilename === undefined) {
+          setBatchStatus(
+            `No ZIP downloaded. ${formatCount(successCount, "tab")} exported, ${formatCount(failedCount, "tab")} failed.`
+          );
+        } else {
+          await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
+          setBatchStatus(
+            `Saved ${response.value.zipFilename}. ${formatCount(successCount, "tab")} exported, ${formatCount(failedCount, "tab")} failed.`
+          );
+        }
       } catch (error) {
         setBatchResults(response.value.results);
         setBatchStatus(error instanceof Error ? error.message : "Download failed.");
@@ -250,6 +263,7 @@ export function PopupApp() {
         onFilenameTemplateChange={(filenameTemplate) =>
           dispatch({ filenameTemplate, type: "set_filename_template" })
         }
+        onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
         onClearSelection={handleClearSelection}
         onFormatToggle={(format) => dispatch({ format, type: "set_format" })}
         onIncludeMetadataChange={(includeMetadata) =>
@@ -258,13 +272,17 @@ export function PopupApp() {
         onMarkdownProfileChange={(markdownProfile) =>
           dispatch({ markdownProfile, type: "set_markdown_profile" })
         }
+        onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
         onRangeEndChange={(rangeEndIndex) => dispatch({ rangeEndIndex, type: "set_range_end" })}
         onRangeStartChange={(rangeStartIndex) =>
           dispatch({ rangeStartIndex, type: "set_range_start" })
         }
-        onRedactChange={(redact) => dispatch({ redact, type: "set_redact" })}
+        onRedactionPresetChange={(redactionPreset) =>
+          dispatch({ redactionPreset, type: "set_redaction_preset" })
+        }
         onScopeChange={(scope) => dispatch({ scope, type: "set_scope" })}
         onStartSelection={handleStartSelection}
+        messageCount={state.completeness?.messageCount}
         options={state.options}
         selectionStatusText={getSelectionStatusText(state)}
       />

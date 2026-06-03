@@ -6,6 +6,7 @@ import {
   type RedactionPreset,
   type RedactionSettings
 } from "../core/redaction";
+import { BrandIcon } from "./components/BrandIcon";
 import { PermissionExplainer } from "./components/PermissionExplainer";
 import { PRIVACY_SUMMARY, PrivacyPanel } from "./components/PrivacyPanel";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
@@ -57,9 +58,7 @@ export function OptionsApp() {
   return (
     <main className="app-shell app-shell--options">
       <header className="app-header">
-        <div className="brand-mark" aria-hidden="true">
-          LA
-        </div>
+        <BrandIcon />
         <div>
           <h1>Local AI Chat Exporter</h1>
           <p className="muted">Privacy controls and permission details.</p>

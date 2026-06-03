@@ -72,4 +72,21 @@ describe("scanCurrentConversationExport", () => {
     expect(conversation.messageCount).toBe(1);
     expect(conversation.completeness.duplicateCount).toBe(1);
   });
+
+  test("throws a precise Perplexity adapter error when the layout is detected but no messages extract", async () => {
+    const document = new JSDOM("<main><div data-testid='answer'></div></main>", {
+      url: "https://www.perplexity.ai/search/example"
+    }).window.document;
+
+    await expect(
+      scanCurrentConversationExport({
+        document,
+        hostname: "www.perplexity.ai",
+        href: "https://www.perplexity.ai/search/example"
+      })
+    ).rejects.toMatchObject({
+      code: "no_messages_found",
+      message: expect.stringContaining("Perplexity layout was detected")
+    } satisfies Partial<ExportPipelineError>);
+  });
 });

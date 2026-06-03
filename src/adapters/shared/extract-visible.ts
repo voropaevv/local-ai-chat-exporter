@@ -59,8 +59,11 @@ function collectMessageElements(
   selectors: readonly VisibleMessageSelector[]
 ): readonly Element[] {
   const query = selectors.map((selector) => selector.selector).join(", ");
+  const elements = Array.from(root.querySelectorAll(query));
 
-  return Array.from(root.querySelectorAll(query));
+  return elements.filter(
+    (element) => !elements.some((candidate) => candidate !== element && candidate.contains(element))
+  );
 }
 
 function findSelectorConfig(

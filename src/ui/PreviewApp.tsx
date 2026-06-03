@@ -14,6 +14,7 @@ import {
   type PreviewRenderState
 } from "./preview-rendering";
 import type { RenderedFile } from "../renderers";
+import { BrandIcon } from "./components/BrandIcon";
 
 type PreviewLoadState =
   | { readonly status: "loading" }
@@ -105,11 +106,16 @@ export function PreviewApp() {
   return (
     <main className="app-shell app-shell--preview">
       <header className="preview-page-header">
-        <div>
-          <h1>{renderPreviewTitle(renderState)}</h1>
-          <p className="muted">
-            {loadState.status === "loading" ? "Loading scanned snapshot..." : renderState.statusMessage}
-          </p>
+        <div className="preview-title-row">
+          <BrandIcon />
+          <div>
+            <h1>{renderPreviewTitle(renderState)}</h1>
+            <p className="muted">
+              {loadState.status === "loading"
+                ? "Loading scanned snapshot..."
+                : renderState.statusMessage}
+            </p>
+          </div>
         </div>
         <div className="preview-toolbar" aria-label="Preview actions">
           <button className="primary-action" disabled={!isReady} onClick={handleDownload} type="button">

@@ -27,6 +27,8 @@ describe("Perplexity adapter", () => {
   test("defines selectors and extraction limitations", () => {
     expect(perplexitySelectors.message).toContain("[data-testid='query-text']");
     expect(perplexitySelectors.message).toContain("[data-testid='answer']");
+    expect(perplexitySelectors.message).toContain("[data-testid='thread-question']");
+    expect(perplexitySelectors.message).toContain("[data-testid='thread-answer']");
   });
 
   test("extracts visible user and assistant messages from fixture DOM", () => {
@@ -41,5 +43,19 @@ describe("Perplexity adapter", () => {
     expect(messages[0].text).toBe("What should the CSV include?");
     expect(messages[1].text).toContain("The CSV should include role, author, and text columns.");
     expect(messages[1].codeBlocks).toEqual([{ code: "role,author,text", language: "csv" }]);
+  });
+
+  test("extracts visible messages from a current Perplexity-style thread layout", () => {
+    const messages = extractVisiblePerplexityMessages(loadFixture("current-layout.html"));
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[0].text).toBe("How should HTML exports handle ChatGPT classes?");
+    expect(messages[1].text).toContain("clean semantic HTML");
+    expect(messages[1].codeBlocks).toEqual([
+      {
+        code: "no internal class names",
+        language: undefined
+      }
+    ]);
   });
 });
