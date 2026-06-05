@@ -16,6 +16,10 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   const distPopup = await readFile(resolve(projectRoot, "dist/popup/index.html"), "utf8");
   const distPreview = await readFile(resolve(projectRoot, "dist/preview/index.html"), "utf8");
   const sourceCss = await readFile(resolve(projectRoot, "src/ui/styles.css"), "utf8");
+  const popupHeader = await readFile(
+    resolve(projectRoot, "src/ui/components/PopupHeader.tsx"),
+    "utf8"
+  );
   const popupFooter = await readFile(
     resolve(projectRoot, "src/ui/components/PopupFooter.tsx"),
     "utf8"
@@ -28,7 +32,8 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   expect(sourceCss).toContain("max-height: 620px");
   expect(sourceCss).toContain("margin-inline: auto");
   expect(sourceCss).toContain("position: sticky");
-  expect(popupFooter).toContain("options/index.html#filename-settings");
+  expect(popupHeader).toContain("options/index.html#filename-settings");
+  expect(popupHeader).toContain('className="settings-button"');
   expect(popupFooter).toContain("options/index.html#privacy");
   expect(popupFooter).toContain("chrome.runtime.getURL");
 });

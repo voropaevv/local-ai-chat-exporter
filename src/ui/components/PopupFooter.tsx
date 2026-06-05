@@ -1,5 +1,4 @@
 const GITHUB_URL = ["https:", "", "github.com", "voropaevv", "local-ai-chat-exporter"].join("/");
-const SETTINGS_PAGE_PATH = "options/index.html#filename-settings";
 const PRIVACY_PAGE_PATH = "options/index.html#privacy";
 
 export function PopupFooter() {
@@ -7,9 +6,6 @@ export function PopupFooter() {
     <footer className="popup-footer">
       <a href={GITHUB_URL} target="_blank" rel="noreferrer">
         GitHub
-      </a>
-      <a href={getExtensionPageUrl(SETTINGS_PAGE_PATH)} target="_blank" rel="noreferrer">
-        Settings
       </a>
       <a href={getPrivacyPageUrl()} target="_blank" rel="noreferrer">
         Privacy
