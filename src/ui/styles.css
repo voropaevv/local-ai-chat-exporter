@@ -90,7 +90,7 @@ a:hover {
 .app-header {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -111,8 +111,7 @@ a:hover {
 }
 
 .popup-title-group h1 {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 15px;
   white-space: nowrap;
 }
 
@@ -208,12 +207,12 @@ legend {
 
 .settings-button {
   display: inline-flex;
-  min-height: 30px;
+  min-height: 28px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  padding: 0 10px;
+  padding: 0 8px;
   background: var(--color-surface);
   color: var(--color-product-indigo);
   font-size: 12px;

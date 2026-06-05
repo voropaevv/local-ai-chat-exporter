@@ -19,8 +19,12 @@ describe("popup header and footer source", () => {
     expect(headerSource).toContain("options/index.html#filename-settings");
     expect(headerSource).toContain('className="settings-button"');
     expect(headerSource).toContain("Settings");
-    expect(stylesSource).toContain(".popup-title-group h1");
-    expect(stylesSource).toContain("white-space: nowrap;");
+    const titleRule = stylesSource.match(/\.popup-title-group h1 \{(?<body>[^}]+)\}/u);
+    expect(titleRule?.groups?.body).toContain("font-size: 15px;");
+    expect(titleRule?.groups?.body).toContain("white-space: nowrap;");
+    expect(titleRule?.groups?.body).not.toContain("overflow: hidden;");
+    expect(titleRule?.groups?.body).not.toContain("text-overflow: ellipsis;");
+    expect(stylesSource).toContain("padding: 0 8px;");
     expect(headerSource).not.toContain("Local only");
     expect(headerSource).not.toContain("privacy-badge");
     expect(footerSource).not.toContain("options/index.html#filename-settings");
