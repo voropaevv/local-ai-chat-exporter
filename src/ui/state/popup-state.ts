@@ -360,7 +360,7 @@ export function buildBatchExportRequest(
   tabIds: readonly number[]
 ): PopupBatchExportRequest {
   return {
-    options: buildExportOptions(state, ["md", "json"]),
+    options: buildExportOptions(state, getBatchExportFormats(state)),
     tabIds,
     type: POPUP_BATCH_EXPORT_MESSAGE
   };
@@ -485,4 +485,16 @@ export function buildExportStatusMessage(result: ExportStatusMessageInput): stri
 
 function normalizeOneBasedIndex(value: number): number {
   return Number.isInteger(value) && value > 0 ? value : 1;
+}
+
+function getBatchExportFormats(state: PopupState): readonly PopupFileFormat[] {
+  if (state.options.outputMode === "zip") {
+    return [...state.options.bundleFormats];
+  }
+
+  const formats = state.options.formats.filter(
+    (format): format is PopupFileFormat => format !== "zip"
+  );
+
+  return formats.length > 0 ? formats : ["md"];
 }

@@ -4,6 +4,8 @@ import {
   createBatchEntryBase,
   createBatchManifest,
   createBatchRootDirectory,
+  getBatchRequiredOrigins,
+  getBatchRequiredOriginsForTabs,
   getBatchCandidateTabs,
   type BatchExportResult
 } from "../../../src/core/batch";
@@ -15,6 +17,10 @@ describe("batch export core helpers", () => {
       getBatchCandidateTabs([
         { id: 1, title: "First", url: "https://chatgpt.com/c/one" },
         { id: 2, title: "Legacy", url: "https://chat.openai.com/c/two" },
+        { id: 3, title: "Claude", url: "https://claude.ai/chat/three" },
+        { id: 4, title: "Gemini", url: "https://gemini.google.com/app/four" },
+        { id: 5, title: "Perplexity", url: "https://www.perplexity.ai/search/five" },
+        { id: 6, title: "Notebook", url: "https://notebooklm.google.com/notebook/six" },
         { id: 3, title: "Search", url: "https://example.com/" },
         { title: "Missing id", url: "https://chatgpt.com/c/no-id" }
       ])
@@ -32,7 +38,51 @@ describe("batch export core helpers", () => {
         platformLabel: "ChatGPT",
         title: "Legacy",
         url: "https://chat.openai.com/c/two"
+      },
+      {
+        id: 3,
+        platform: "claude",
+        platformLabel: "Claude",
+        title: "Claude",
+        url: "https://claude.ai/chat/three"
+      },
+      {
+        id: 4,
+        platform: "gemini",
+        platformLabel: "Gemini",
+        title: "Gemini",
+        url: "https://gemini.google.com/app/four"
+      },
+      {
+        id: 5,
+        platform: "perplexity",
+        platformLabel: "Perplexity",
+        title: "Perplexity",
+        url: "https://www.perplexity.ai/search/five"
+      },
+      {
+        id: 6,
+        platform: "notebooklm",
+        platformLabel: "NotebookLM",
+        title: "Notebook",
+        url: "https://notebooklm.google.com/notebook/six"
       }
+    ]);
+  });
+
+  test("collects exact optional host origins for selected batch tabs", () => {
+    const tabs = getBatchCandidateTabs([
+      { id: 1, title: "First", url: "https://chatgpt.com/c/one" },
+      { id: 2, title: "Second", url: "https://chatgpt.com/c/two" },
+      { id: 3, title: "Claude", url: "https://claude.ai/chat/three" },
+      { id: 4, title: "Perplexity", url: "https://www.perplexity.ai/search/four" }
+    ]);
+
+    expect(getBatchRequiredOrigins(tabs[0])).toEqual(["https://chatgpt.com/*"]);
+    expect(getBatchRequiredOriginsForTabs(tabs)).toEqual([
+      "https://chatgpt.com/*",
+      "https://claude.ai/*",
+      "https://www.perplexity.ai/*"
     ]);
   });
 

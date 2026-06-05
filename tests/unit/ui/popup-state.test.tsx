@@ -5,6 +5,7 @@ import type { PopupState } from "../../../src/ui/state/popup-state";
 import {
   buildExportStatusMessage,
   buildCopyMarkdownRequest,
+  buildBatchExportRequest,
   buildDownloadRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
@@ -163,6 +164,18 @@ describe("popup state", () => {
       formats: ["zip"],
       zipFormats: ["md", "json", "html", "txt"]
     });
+    expect(buildBatchExportRequest(zipState, [1, 2]).options).toMatchObject({
+      formats: ["md", "json", "html", "txt"]
+    });
+  });
+
+  test("builds batch requests from the current separate file formats", () => {
+    const htmlTxtState = toggleFormat(toggleFormat(createInitialPopupState(), "html"), "txt");
+
+    expect(buildBatchExportRequest(htmlTxtState, [7]).options).toMatchObject({
+      formats: ["md", "html", "txt"]
+    });
+    expect(buildBatchExportRequest(htmlTxtState, [7]).tabIds).toEqual([7]);
   });
 
   test("builds range requests and reflects scoped preview messages", () => {

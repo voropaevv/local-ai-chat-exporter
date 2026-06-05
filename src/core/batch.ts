@@ -7,10 +7,12 @@ export interface BatchTabLike {
   readonly url?: string;
 }
 
+type BatchPlatform = Exclude<ChatPlatform, "unknown">;
+
 export interface BatchCandidateTab {
   readonly id: number;
-  readonly platform: Extract<ChatPlatform, "chatgpt">;
-  readonly platformLabel: "ChatGPT";
+  readonly platform: BatchPlatform;
+  readonly platformLabel: string;
   readonly title: string;
   readonly url: string;
 }
@@ -56,7 +58,7 @@ export type BatchManifestResult =
   | {
       readonly files: readonly BatchManifestFile[];
       readonly messageCount: number;
-      readonly platform: BatchCandidateTab["platform"];
+      readonly platform: BatchPlatform;
       readonly status: "success";
       readonly tabId: number;
       readonly title: string;
@@ -65,13 +67,65 @@ export type BatchManifestResult =
     }
   | {
       readonly error: string;
-      readonly platform: BatchCandidateTab["platform"];
+      readonly platform: BatchPlatform;
       readonly status: "failed";
       readonly tabId: number;
       readonly title: string;
       readonly url: string;
       readonly warnings: readonly string[];
     };
+
+interface BatchPlatformConfig {
+  readonly hostnames: readonly string[];
+  readonly label: string;
+  readonly origins: Readonly<Record<string, string>>;
+  readonly platform: BatchPlatform;
+}
+
+const BATCH_PLATFORM_CONFIGS: readonly BatchPlatformConfig[] = [
+  {
+    hostnames: ["chatgpt.com", "chat.openai.com"],
+    label: "ChatGPT",
+    origins: {
+      "chatgpt.com": "https://chatgpt.com/*",
+      "chat.openai.com": "https://chat.openai.com/*"
+    },
+    platform: "chatgpt"
+  },
+  {
+    hostnames: ["claude.ai"],
+    label: "Claude",
+    origins: {
+      "claude.ai": "https://claude.ai/*"
+    },
+    platform: "claude"
+  },
+  {
+    hostnames: ["gemini.google.com"],
+    label: "Gemini",
+    origins: {
+      "gemini.google.com": "https://gemini.google.com/*"
+    },
+    platform: "gemini"
+  },
+  {
+    hostnames: ["www.perplexity.ai", "perplexity.ai"],
+    label: "Perplexity",
+    origins: {
+      "perplexity.ai": "https://perplexity.ai/*",
+      "www.perplexity.ai": "https://www.perplexity.ai/*"
+    },
+    platform: "perplexity"
+  },
+  {
+    hostnames: ["notebooklm.google.com"],
+    label: "NotebookLM",
+    origins: {
+      "notebooklm.google.com": "https://notebooklm.google.com/*"
+    },
+    platform: "notebooklm"
+  }
+];
 
 export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly BatchCandidateTab[] {
   return tabs.flatMap((tab) => {
@@ -88,8 +142,8 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
     return [
       {
         id: tab.id,
-        platform,
-        platformLabel: "ChatGPT",
+        platform: platform.platform,
+        platformLabel: platform.label,
         title: tab.title?.trim() || "Untitled chat",
         url: tab.url
       }
@@ -103,6 +157,29 @@ export function createBatchRootDirectory(exportedAt: string): string {
 
 export function createBatchEntryBase(tab: BatchCandidateTab, index: number): string {
   return `${tab.platform}-${slugify(tab.title)}-${index + 1}`;
+}
+
+export function getBatchRequiredOrigins(tab: Pick<BatchCandidateTab, "url">): readonly string[] {
+  const config = detectBatchPlatform(tab.url);
+
+  if (config === undefined) {
+    return [];
+  }
+
+  try {
+    const hostname = new URL(tab.url).hostname;
+    const origin = config.origins[hostname];
+
+    return origin === undefined ? [] : [origin];
+  } catch {
+    return [];
+  }
+}
+
+export function getBatchRequiredOriginsForTabs(
+  tabs: readonly Pick<BatchCandidateTab, "url">[]
+): readonly string[] {
+  return [...new Set(tabs.flatMap((tab) => getBatchRequiredOrigins(tab)))];
 }
 
 export function createBatchManifest(input: BatchManifestInput): BatchManifest {
@@ -138,18 +215,14 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
   };
 }
 
-function detectBatchPlatform(url: string): BatchCandidateTab["platform"] | undefined {
+function detectBatchPlatform(url: string): BatchPlatformConfig | undefined {
   try {
     const parsed = new URL(url);
 
-    if (parsed.hostname === "chatgpt.com" || parsed.hostname === "chat.openai.com") {
-      return "chatgpt";
-    }
+    return BATCH_PLATFORM_CONFIGS.find((config) => config.hostnames.includes(parsed.hostname));
   } catch {
     return undefined;
   }
-
-  return undefined;
 }
 
 function slugify(value: string): string {

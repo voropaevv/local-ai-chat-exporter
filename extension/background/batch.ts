@@ -1,6 +1,7 @@
 import {
   createBatchManifest,
   createBatchRootDirectory,
+  getBatchRequiredOrigins,
   getBatchCandidateTabs,
   type BatchCandidateTab
 } from "../../src/core/batch";
@@ -94,8 +95,7 @@ async function exportTab(
       download: false,
       options: {
         ...DEFAULT_EXPORT_OPTIONS,
-        ...request.options,
-        formats: ["md", "json"]
+        ...request.options
       },
       type: CONTENT_EXPORT_MESSAGE
     } satisfies ContentExportRequest);
@@ -131,18 +131,18 @@ async function sendContentMessage<T>(
 }
 
 async function requireTabsPermission(): Promise<void> {
-  const granted = await requestPermission({ permissions: ["tabs"] });
+  const granted = await containsPermission({ permissions: ["tabs"] });
 
   if (!granted) {
     throw new ExportPipelineError(
       "unsupported_platform",
-      "Tabs permission is required to list opened chat tabs for batch export."
+      "Tabs permission is required for batch export. Click Find open tabs again and approve the permission prompt."
     );
   }
 }
 
 async function requireTabHostPermission(tab: BatchCandidateTab): Promise<void> {
-  const origins = getRequiredOrigins(tab);
+  const origins = getBatchRequiredOrigins(tab);
 
   if (origins.length === 0) {
     throw new ExportPipelineError(
@@ -157,43 +157,15 @@ async function requireTabHostPermission(tab: BatchCandidateTab): Promise<void> {
     return;
   }
 
-  const granted = await requestPermission({ origins: [...origins] });
-
-  if (!granted) {
-    throw new ExportPipelineError(
-      "unsupported_platform",
-      `Batch export needs host access for ${formatOriginList(origins)} before exporting selected tabs.`
-    );
-  }
-}
-
-function getRequiredOrigins(tab: BatchCandidateTab): readonly string[] {
-  try {
-    const url = new URL(tab.url);
-
-    if (url.hostname === "chatgpt.com") {
-      return ["https://chatgpt.com/*"];
-    }
-
-    if (url.hostname === "chat.openai.com") {
-      return ["https://chat.openai.com/*"];
-    }
-  } catch {
-    return [];
-  }
-
-  return [];
+  throw new ExportPipelineError(
+    "unsupported_platform",
+    `Batch export needs host access for ${formatOriginList(origins)}. Approve site access from the popup, then export again.`
+  );
 }
 
 function containsPermission(permissions: chrome.permissions.Permissions): Promise<boolean> {
   return new Promise((resolve) => {
     chrome.permissions.contains(permissions, resolve);
-  });
-}
-
-function requestPermission(permissions: chrome.permissions.Permissions): Promise<boolean> {
-  return new Promise((resolve) => {
-    chrome.permissions.request(permissions, resolve);
   });
 }
 

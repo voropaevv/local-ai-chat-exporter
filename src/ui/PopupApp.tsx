@@ -11,6 +11,7 @@ import type { BatchExportSuccess, BatchListSuccess } from "../core/messages";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 import { createFileBlob } from "../utils/blob";
 import { downloadRenderedFiles } from "../utils/download";
+import { requestBatchHostPermissions, requestBatchTabsPermission } from "./batch-permissions";
 import { getCachedScanSummary } from "./popup-cache";
 import { ActionBar } from "./components/ActionBar";
 import { BatchExport } from "./components/BatchExport";
@@ -164,17 +165,25 @@ export function PopupApp() {
   }
 
   async function handleLoadBatchCandidates() {
+    const permission = await requestBatchTabsPermission();
+
+    setBatchResults([]);
+
+    if (!permission.granted) {
+      setBatchStatus(permission.message ?? "Tabs permission was not granted.");
+      return;
+    }
+
     setBatchBusy(true);
     setBatchStatus("Looking for open AI chat tabs...");
-    setBatchResults([]);
 
     const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
 
     if (response.ok) {
       const tabs = response.value.tabs;
       setBatchCandidates(tabs);
-      setBatchSelectedTabIds([]);
-      setBatchStatus(`Found ${formatCount(tabs.length, "open AI chat tab")}.`);
+      setBatchSelectedTabIds(tabs.map((tab) => tab.id));
+      setBatchStatus(`Found ${formatCount(tabs.length, "open AI chat tab")}. All selected.`);
     } else {
       setBatchStatus(response.error.message);
     }
@@ -190,14 +199,30 @@ export function PopupApp() {
     );
   }
 
+  function handleSelectAllBatchTabs() {
+    setBatchSelectedTabIds(batchCandidates.map((tab) => tab.id));
+  }
+
+  function handleClearBatchSelection() {
+    setBatchSelectedTabIds([]);
+  }
+
   async function handleBatchExport() {
     if (batchSelectedTabIds.length === 0) {
       setBatchStatus("Select at least one open tab.");
       return;
     }
 
+    const selectedTabs = batchCandidates.filter((tab) => batchSelectedTabIds.includes(tab.id));
+    const permission = await requestBatchHostPermissions(selectedTabs);
+
+    if (!permission.granted) {
+      setBatchStatus(permission.message ?? "Site access was not granted.");
+      return;
+    }
+
     setBatchBusy(true);
-    setBatchStatus("Exporting selected tabs locally...");
+    setBatchStatus("Exporting selected tabs locally into one ZIP...");
 
     const response = await sendRuntimeMessage<BatchExportSuccess>(
       buildBatchExportRequest(state, batchSelectedTabIds)
@@ -216,7 +241,7 @@ export function PopupApp() {
         } else {
           await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
           setBatchStatus(
-            `Saved ${response.value.zipFilename}. ${formatCount(successCount, "tab")} exported, ${formatCount(failedCount, "tab")} failed.`
+            `Saved one ZIP: ${response.value.zipFilename}. ${formatCount(successCount, "tab")} exported, ${formatCount(failedCount, "tab")} failed.`
           );
         }
       } catch (error) {
@@ -290,7 +315,9 @@ export function PopupApp() {
         busy={batchBusy || busy}
         candidates={batchCandidates}
         onExportSelected={handleBatchExport}
+        onClearSelection={handleClearBatchSelection}
         onLoadCandidates={handleLoadBatchCandidates}
+        onSelectAll={handleSelectAllBatchTabs}
         onToggleTab={handleToggleBatchTab}
         results={batchResults}
         selectedTabIds={batchSelectedTabIds}

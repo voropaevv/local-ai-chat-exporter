@@ -12,6 +12,11 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
     readonly permissions?: readonly string[];
   };
   const batchSource = await readFile(resolve(projectRoot, "extension/background/batch.ts"), "utf8");
+  const popupSource = await readFile(resolve(projectRoot, "src/ui/PopupApp.tsx"), "utf8");
+  const permissionSource = await readFile(
+    resolve(projectRoot, "src/ui/batch-permissions.ts"),
+    "utf8"
+  );
   const batchUiSource = await readFile(
     resolve(projectRoot, "src/ui/components/BatchExport.tsx"),
     "utf8"
@@ -20,13 +25,20 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(manifest.optional_permissions).toContain("tabs");
   expect(manifest.permissions).not.toContain("tabs");
   expect(JSON.stringify(manifest)).not.toContain("all_urls");
-  expect(batchSource).toContain("chrome.permissions.request");
-  expect(batchSource).toContain('permissions: ["tabs"]');
+  expect(batchSource).not.toContain("chrome.permissions.request");
+  expect(permissionSource).toContain("return chrome.permissions");
+  expect(permissionSource).toContain("permissions.request(request, resolve)");
+  expect(permissionSource).toContain('permissions: ["tabs"]');
   expect(batchSource).not.toContain('permissions: ["downloads"]');
   expect(batchSource).not.toContain("Downloads permission is required");
   expect(batchSource).not.toContain("setInterval");
   expect(batchSource).not.toContain("chrome.history");
+  expect(popupSource).toContain("requestBatchTabsPermission");
+  expect(popupSource).toContain("requestBatchHostPermissions");
   expect(batchUiSource).toContain("Find open tabs");
+  expect(batchUiSource).toContain("Select all");
+  expect(batchUiSource).toContain("Clear selection");
+  expect(batchUiSource).toContain("one ZIP");
   expect(batchUiSource).toContain("Export selected");
   expect(batchUiSource).toContain("formatBatchTabSummary");
   expect(batchUiSource).toContain("<details");

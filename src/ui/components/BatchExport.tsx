@@ -3,8 +3,10 @@ import type { BatchCandidateTab, BatchManifestResult } from "../../core/batch";
 interface BatchExportProps {
   readonly busy: boolean;
   readonly candidates: readonly BatchCandidateTab[];
+  readonly onClearSelection: () => void;
   readonly onExportSelected: () => void;
   readonly onLoadCandidates: () => void;
+  readonly onSelectAll: () => void;
   readonly onToggleTab: (tabId: number) => void;
   readonly results: readonly BatchManifestResult[];
   readonly selectedTabIds: readonly number[];
@@ -14,8 +16,10 @@ interface BatchExportProps {
 export function BatchExport({
   busy,
   candidates,
+  onClearSelection,
   onExportSelected,
   onLoadCandidates,
+  onSelectAll,
   onToggleTab,
   results,
   selectedTabIds,
@@ -35,15 +39,36 @@ export function BatchExport({
         </button>
       </div>
       <p className="muted">
-        Batch export lists only AI chat tabs already open in this browser.
+        Batch export lists open supported AI chat tabs and downloads successful exports as one ZIP.
       </p>
       <details className="inline-details">
         <summary>Permission details</summary>
         <p className="muted">
-          The extension asks for tabs permission when this panel is used and checks host access
-          before exporting selected tabs.
+          Approve tabs permission to list open chats, then approve site access for selected chats.
+          Content is processed locally.
         </p>
       </details>
+      {candidates.length > 0 ? (
+        <div className="button-row">
+          <button
+            className="secondary-action compact-action"
+            disabled={busy}
+            onClick={onSelectAll}
+            type="button"
+          >
+            Select all
+          </button>
+          <button
+            className="secondary-action compact-action"
+            disabled={busy || selectedTabIds.length === 0}
+            onClick={onClearSelection}
+            type="button"
+          >
+            Clear selection
+          </button>
+          <span className="status-text">{selectedTabIds.length} selected</span>
+        </div>
+      ) : null}
       {candidates.length > 0 ? (
         <ul className="batch-tab-list" aria-label="Open AI chat tabs">
           {candidates.map((tab) => (
@@ -75,7 +100,7 @@ export function BatchExport({
           onClick={onExportSelected}
           type="button"
         >
-          Export selected
+          Export selected to ZIP
         </button>
       </div>
       <p className="status-text" role="status">
