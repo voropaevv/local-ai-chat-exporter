@@ -1,5 +1,7 @@
 import type { CompletenessReport as CompletenessReportModel } from "../../core/schema";
 
+const PREVIEW_MAX_LENGTH = 48;
+
 interface CompletenessReportProps {
   readonly completeness?: CompletenessReportModel;
   readonly partialWarning?: string;
@@ -25,18 +27,18 @@ export function CompletenessReport({ completeness, partialWarning }: Completenes
           {completeness.status.replaceAll("_", " ")}
         </span>
       </div>
-      <dl className="report-grid">
+      <dl className="report-grid report-grid--summary">
         <div>
           <dt>Messages</dt>
           <dd>{completeness.messageCount}</dd>
         </div>
         <div>
           <dt>First</dt>
-          <dd>{truncatePreview(completeness.firstMessagePreview)}</dd>
+          <dd className="report-preview">{truncatePreview(completeness.firstMessagePreview)}</dd>
         </div>
         <div>
           <dt>Last</dt>
-          <dd>{truncatePreview(completeness.lastMessagePreview)}</dd>
+          <dd className="report-preview">{truncatePreview(completeness.lastMessagePreview)}</dd>
         </div>
       </dl>
       <details className="inline-details">
@@ -60,19 +62,6 @@ export function CompletenessReport({ completeness, partialWarning }: Completenes
           </div>
         </dl>
       </details>
-      <details className="inline-details">
-        <summary>Show full preview details</summary>
-        <dl className="report-grid">
-          <div>
-            <dt>First</dt>
-            <dd>{completeness.firstMessagePreview ?? "Not available"}</dd>
-          </div>
-          <div>
-            <dt>Last</dt>
-            <dd>{completeness.lastMessagePreview ?? "Not available"}</dd>
-          </div>
-        </dl>
-      </details>
       {partialWarning ? <p className="warning-text">{partialWarning}</p> : null}
       {warnings.length > 0 ? (
         <ul className="warning-list" aria-label="Completeness warnings">
@@ -93,5 +82,7 @@ function truncatePreview(value: string | undefined): string {
   const twoLines = value.trim().split(/\r?\n/u).slice(0, 2).join(" ");
   const compact = twoLines.replace(/\s+/gu, " ");
 
-  return compact.length > 100 ? `${compact.slice(0, 100)}...` : compact;
+  return compact.length > PREVIEW_MAX_LENGTH
+    ? `${compact.slice(0, PREVIEW_MAX_LENGTH)}...`
+    : compact;
 }
