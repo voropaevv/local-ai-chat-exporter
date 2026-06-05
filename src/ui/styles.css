@@ -110,6 +110,12 @@ a:hover {
   min-width: 0;
 }
 
+.popup-title-group h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 h1,
 h2,
 p,

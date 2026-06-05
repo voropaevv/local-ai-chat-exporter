@@ -14,10 +14,13 @@ describe("popup header and footer source", () => {
       resolve(projectRoot, "src/ui/components/PopupFooter.tsx"),
       "utf8"
     );
+    const stylesSource = readFileSync(resolve(projectRoot, "src/ui/styles.css"), "utf8");
 
     expect(headerSource).toContain("options/index.html#filename-settings");
     expect(headerSource).toContain('className="settings-button"');
     expect(headerSource).toContain("Settings");
+    expect(stylesSource).toContain(".popup-title-group h1");
+    expect(stylesSource).toContain("white-space: nowrap;");
     expect(headerSource).not.toContain("Local only");
     expect(headerSource).not.toContain("privacy-badge");
     expect(footerSource).not.toContain("options/index.html#filename-settings");
