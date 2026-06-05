@@ -12,7 +12,7 @@ const PERMISSIONS = [
   {
     name: "storage",
     scope: "Required",
-    reason: "Stores local preferences such as redaction settings."
+    reason: "Stores local preferences such as filename and redaction settings."
   },
   {
     name: "downloads",

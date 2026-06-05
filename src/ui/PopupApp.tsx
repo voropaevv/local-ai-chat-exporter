@@ -12,6 +12,7 @@ import type { RenderedBytes, RenderedFile } from "../renderers";
 import { createFileBlob } from "../utils/blob";
 import { downloadRenderedFiles } from "../utils/download";
 import { requestBatchHostPermissions, requestBatchTabsPermission } from "./batch-permissions";
+import { readStoredExportSettings } from "./export-settings-storage";
 import { getCachedScanSummary } from "./popup-cache";
 import { ActionBar } from "./components/ActionBar";
 import { BatchExport } from "./components/BatchExport";
@@ -66,14 +67,18 @@ export function PopupApp() {
   useEffect(() => {
     let cancelled = false;
 
-    readStoredRedactionSettings()
-      .then((redaction) => {
+    Promise.all([readStoredRedactionSettings(), readStoredExportSettings()])
+      .then(([redaction, exportSettings]) => {
         if (!cancelled) {
           dispatch({ redaction, type: "set_redaction_settings" });
+          dispatch({
+            filenameTemplate: exportSettings.filenameTemplate,
+            type: "set_filename_template"
+          });
         }
       })
       .catch(() => {
-        // Export still works with default off redaction if extension storage is unavailable.
+        // Export still works with default local settings if extension storage is unavailable.
       });
 
     return () => {
@@ -285,9 +290,6 @@ export function PopupApp() {
       />
       <CompletenessReport completeness={state.completeness} partialWarning={state.partialWarning} />
       <ExportOptionsForm
-        onFilenameTemplateChange={(filenameTemplate) =>
-          dispatch({ filenameTemplate, type: "set_filename_template" })
-        }
         onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
         onClearSelection={handleClearSelection}
         onFormatToggle={(format) => dispatch({ format, type: "set_format" })}

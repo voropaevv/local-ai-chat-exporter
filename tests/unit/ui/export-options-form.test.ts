@@ -16,5 +16,7 @@ describe("export options UI source", () => {
     expect(source).toContain("Metadata is written only into local output files");
     expect(source).toContain("ZIP bundle");
     expect(source).not.toContain("onRedactChange");
+    expect(source).not.toContain("FilenameTemplateBuilder");
+    expect(source).not.toContain("onFilenameTemplateChange");
   });
 });

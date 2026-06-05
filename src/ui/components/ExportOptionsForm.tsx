@@ -8,12 +8,10 @@ import {
   type PopupOptionsState,
   type PopupOutputMode
 } from "../state/popup-state";
-import { FilenameTemplateBuilder } from "./FilenameTemplateBuilder";
 import { MarkdownProfileSelector } from "./MarkdownProfileSelector";
 import { ScopeSelector } from "./ScopeSelector";
 
 interface ExportOptionsFormProps {
-  readonly onFilenameTemplateChange: (value: string) => void;
   readonly onBundleFormatToggle: (format: PopupFileFormat) => void;
   readonly onFormatToggle: (format: ExportFormat) => void;
   readonly onClearSelection: () => void;
@@ -33,7 +31,6 @@ interface ExportOptionsFormProps {
 export function ExportOptionsForm({
   onClearSelection,
   onBundleFormatToggle,
-  onFilenameTemplateChange,
   onFormatToggle,
   onIncludeMetadataChange,
   onMarkdownProfileChange,
@@ -106,12 +103,6 @@ export function ExportOptionsForm({
       />
 
       <MarkdownProfileSelector onChange={onMarkdownProfileChange} value={options.markdownProfile} />
-
-      <FilenameTemplateBuilder
-        format={options.outputMode === "zip" ? "zip" : options.formats[0]}
-        onChange={onFilenameTemplateChange}
-        value={options.filenameTemplate}
-      />
 
       <label className="check-row">
         <input

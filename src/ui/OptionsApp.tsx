@@ -6,28 +6,44 @@ import {
   type RedactionPreset,
   type RedactionSettings
 } from "../core/redaction";
+import { FilenameTemplateBuilder } from "./components/FilenameTemplateBuilder";
 import { BrandIcon } from "./components/BrandIcon";
 import { PermissionExplainer } from "./components/PermissionExplainer";
 import { PRIVACY_SUMMARY, PrivacyPanel } from "./components/PrivacyPanel";
+import {
+  DEFAULT_EXPORT_SETTINGS,
+  normalizeExportSettings,
+  readStoredExportSettings,
+  writeStoredExportSettings,
+  type ExportSettings
+} from "./export-settings-storage";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
 
 export function OptionsApp() {
   const [copyStatus, setCopyStatus] = useState("Ready.");
+  const [exportSettings, setExportSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
+  const [filenameSaveStatus, setFilenameSaveStatus] = useState(
+    "Stored locally in browser storage."
+  );
   const [redaction, setRedaction] = useState<RedactionSettings>(DEFAULT_REDACTION_SETTINGS);
-  const [saveStatus, setSaveStatus] = useState("Stored locally in browser storage.");
+  const [redactionSaveStatus, setRedactionSaveStatus] = useState(
+    "Stored locally in browser storage."
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    readStoredRedactionSettings()
-      .then((settings) => {
+    Promise.all([readStoredRedactionSettings(), readStoredExportSettings()])
+      .then(([redactionSettings, storedExportSettings]) => {
         if (!cancelled) {
-          setRedaction(settings);
+          setRedaction(redactionSettings);
+          setExportSettings(storedExportSettings);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setSaveStatus("Storage is unavailable in this context.");
+          setFilenameSaveStatus("Storage is unavailable in this context.");
+          setRedactionSaveStatus("Storage is unavailable in this context.");
         }
       });
 
@@ -39,11 +55,21 @@ export function OptionsApp() {
   function updateRedaction(next: RedactionSettings) {
     const normalized = normalizeRedactionSettings(next);
     setRedaction(normalized);
-    setSaveStatus("Saving locally...");
+    setRedactionSaveStatus("Saving locally...");
 
     writeStoredRedactionSettings(normalized)
-      .then(() => setSaveStatus("Saved locally."))
-      .catch(() => setSaveStatus("Could not save settings in this context."));
+      .then(() => setRedactionSaveStatus("Saved locally."))
+      .catch(() => setRedactionSaveStatus("Could not save settings in this context."));
+  }
+
+  function updateFilenameTemplate(filenameTemplate: string) {
+    const normalized = normalizeExportSettings({ filenameTemplate });
+    setExportSettings(normalized);
+    setFilenameSaveStatus("Saving locally...");
+
+    writeStoredExportSettings(normalized)
+      .then(() => setFilenameSaveStatus("Saved locally."))
+      .catch(() => setFilenameSaveStatus("Could not save settings in this context."));
   }
 
   async function handleCopyPrivacySummary() {
@@ -66,6 +92,18 @@ export function OptionsApp() {
       </header>
 
       <PrivacyPanel copyStatus={copyStatus} onCopyPrivacySummary={handleCopyPrivacySummary} />
+
+      <section className="panel" aria-labelledby="filename-settings-title" id="filename-settings">
+        <h2 id="filename-settings-title">Filename settings</h2>
+        <FilenameTemplateBuilder
+          format="md"
+          onChange={updateFilenameTemplate}
+          value={exportSettings.filenameTemplate}
+        />
+        <p className="status-text" role="status">
+          {filenameSaveStatus}
+        </p>
+      </section>
 
       <section className="panel" aria-labelledby="redaction-title">
         <h2 id="redaction-title">Redaction</h2>
@@ -105,7 +143,7 @@ export function OptionsApp() {
           One JavaScript regex per line. Matches use [REDACTED_SECRET].
         </p>
         <p className="status-text" role="status">
-          {saveStatus}
+          {redactionSaveStatus}
         </p>
       </section>
 

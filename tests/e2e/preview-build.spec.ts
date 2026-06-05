@@ -28,6 +28,7 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   expect(sourceCss).toContain("max-height: 620px");
   expect(sourceCss).toContain("margin-inline: auto");
   expect(sourceCss).toContain("position: sticky");
+  expect(popupFooter).toContain("options/index.html#filename-settings");
   expect(popupFooter).toContain("options/index.html#privacy");
   expect(popupFooter).toContain("chrome.runtime.getURL");
 });
