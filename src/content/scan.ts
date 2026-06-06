@@ -101,14 +101,15 @@ function scanVisibleAdapterConversation(
     throw new ExportPipelineError("no_messages_found", "No messages were found on this page.");
   }
 
+  const treatVisibleScanAsComplete = shouldTreatVisibleScanAsComplete(adapter);
   const completeness = buildCompletenessReport({
     duplicateCount: normalized.duplicateCount,
     messages,
-    platformWarnings: buildAdapterWarnings(adapter),
-    reachedBottom: false,
-    reachedTop: false,
+    platformWarnings: treatVisibleScanAsComplete ? [] : buildAdapterWarnings(adapter),
+    reachedBottom: treatVisibleScanAsComplete,
+    reachedTop: treatVisibleScanAsComplete,
     scrollSteps: 0,
-    virtualized: true
+    virtualized: !treatVisibleScanAsComplete
   });
 
   return {
@@ -130,6 +131,10 @@ function buildAdapterWarnings(adapter: PlatformAdapter): readonly string[] {
     ...(adapter.experimentalWarning !== undefined ? [adapter.experimentalWarning] : []),
     ...adapter.limitations
   ];
+}
+
+function shouldTreatVisibleScanAsComplete(adapter: PlatformAdapter): boolean {
+  return adapter.id === "perplexity";
 }
 
 function getCurrentDocument(): Document {

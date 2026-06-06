@@ -6,11 +6,17 @@ import { describe, expect, test } from "vitest";
 import type { ExportPipelineError } from "../../../src/core/export-options";
 import { scanCurrentConversationExport } from "../../../src/content/scan";
 
-const fixturesDir = resolve(import.meta.dirname, "../../fixtures/claude");
+const claudeFixturesDir = resolve(import.meta.dirname, "../../fixtures/claude");
+const perplexityFixturesDir = resolve(import.meta.dirname, "../../fixtures/perplexity");
 
 function loadClaudeFixture(): Document {
-  const html = readFileSync(resolve(fixturesDir, "simple-conversation.html"), "utf8");
+  const html = readFileSync(resolve(claudeFixturesDir, "simple-conversation.html"), "utf8");
   return new JSDOM(html, { url: "https://claude.ai/chat/example" }).window.document;
+}
+
+function loadPerplexityFixture(): Document {
+  const html = readFileSync(resolve(perplexityFixturesDir, "answer-page-layout.html"), "utf8");
+  return new JSDOM(html, { url: "https://www.perplexity.ai/search/example" }).window.document;
 }
 
 describe("scanCurrentConversationExport", () => {
@@ -71,6 +77,28 @@ describe("scanCurrentConversationExport", () => {
 
     expect(conversation.messageCount).toBe(1);
     expect(conversation.completeness.duplicateCount).toBe(1);
+  });
+
+  test("treats extracted Perplexity answer pages as complete without partial warnings", async () => {
+    const conversation = await scanCurrentConversationExport({
+      document: loadPerplexityFixture(),
+      exportedAt: "2026-06-06T18:20:30.000Z",
+      hostname: "www.perplexity.ai",
+      href: "https://www.perplexity.ai/search/example",
+      title: "Perplexity fixture"
+    });
+
+    expect(conversation.platform).toBe("perplexity");
+    expect(conversation.messageCount).toBe(2);
+    expect(conversation.completeness).toMatchObject({
+      duplicateCount: 0,
+      reachedBottom: true,
+      reachedTop: true,
+      scrollSteps: 0,
+      status: "complete",
+      warnings: [],
+      platformWarnings: []
+    });
   });
 
   test("throws a precise Perplexity adapter error when the layout is detected but no messages extract", async () => {
