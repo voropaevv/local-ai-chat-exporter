@@ -58,4 +58,14 @@ describe("Perplexity adapter", () => {
       }
     ]);
   });
+
+  test("extracts visible messages from the current Perplexity answer page layout", () => {
+    const messages = extractVisiblePerplexityMessages(loadFixture("answer-page-layout.html"));
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[0].text).toBe("Предложи лучшие практики для каждого элемента моего сайта");
+    expect(messages[1].text).toContain("Отлично, у меня достаточно данных");
+    expect(messages[1].text).toContain("Command Palette");
+    expect(messages.map((message) => message.text)).not.toContain("Answer Links Images");
+  });
 });
