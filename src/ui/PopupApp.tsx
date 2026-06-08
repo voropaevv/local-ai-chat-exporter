@@ -280,7 +280,7 @@ export function PopupApp() {
 
   return (
     <main className="app-shell app-shell--popup">
-      <PopupHeader platformLabel={state.platformLabel} />
+      <PopupHeader />
       <ScanControls
         canCancelScan={state.canCancelScan}
         onCancelScan={handleCancelScan}

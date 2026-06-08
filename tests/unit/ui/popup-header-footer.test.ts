@@ -19,6 +19,8 @@ describe("popup header and footer source", () => {
     expect(headerSource).toContain("options/index.html#filename-settings");
     expect(headerSource).toContain('className="settings-button"');
     expect(headerSource).toContain("Settings");
+    expect(headerSource).not.toContain("platformLabel");
+    expect(headerSource).not.toContain("<p>");
     const titleRule = stylesSource.match(/\.popup-title-group h1 \{(?<body>[^}]+)\}/u);
     expect(titleRule?.groups?.body).toContain("font-size: 15px;");
     expect(titleRule?.groups?.body).toContain("white-space: nowrap;");
