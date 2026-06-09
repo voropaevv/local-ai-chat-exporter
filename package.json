@@ -1,7 +1,7 @@
 {
   "name": "logthread",
   "version": "0.1.0",
-  "description": "Open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
+  "description": "LogThread is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
   "type": "module",
   "private": true,
   "license": "GPL-3.0-or-later",

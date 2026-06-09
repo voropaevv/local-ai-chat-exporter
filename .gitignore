@@ -144,8 +144,13 @@ vite.config.ts.timestamp-*
 
 # Local QA artifacts
 qa-artifacts/
-local-ai-chat-exporter-brave-qa-*.zip
-local-ai-chat-exporter-*-qa-*.zip
+*-brave-qa-*.zip
+*-qa-*.zip
+
+# Local Codex/task artifacts
+GOAL.md
+codex-tasks/
+*-codex-task-pack/
 
 # Local browser / debug artifacts
 .DS_Store
