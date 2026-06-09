@@ -143,6 +143,16 @@ legend {
   text-transform: uppercase;
 }
 
+h3 {
+  margin: 0;
+  color: var(--color-product-blue);
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
 .popup-title-group p,
 .muted,
 .privacy-note,
@@ -213,7 +223,9 @@ legend {
 
 .section-heading,
 .button-row,
-.popup-footer {
+.popup-footer,
+.support-prompt-actions,
+.support-links {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -226,6 +238,51 @@ legend {
 
 .button-row > button {
   flex: 1;
+}
+
+.support-prompt {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  padding: 10px;
+}
+
+.support-prompt strong {
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.support-prompt p {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.support-prompt-actions,
+.support-links {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.support-prompt-actions a,
+.support-prompt-actions button,
+.support-links a {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: var(--color-surface-accent);
+  color: var(--color-product-indigo);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.support-prompt-actions button {
+  color: var(--color-text-muted);
 }
 
 .compact-action {

@@ -18,6 +18,7 @@ import {
   type ExportSettings
 } from "./export-settings-storage";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
+import { SUPPORT_LINKS, SUPPORT_TAGLINE } from "./support-links";
 
 export function OptionsApp() {
   const [copyStatus, setCopyStatus] = useState("Ready.");
@@ -157,6 +158,25 @@ export function OptionsApp() {
       </section>
 
       <PermissionExplainer />
+
+      <section className="panel" aria-labelledby="support-title" id="support">
+        <h2 id="support-title">Support LogThread</h2>
+        <p className="muted">{SUPPORT_TAGLINE}</p>
+        <div className="support-links" aria-label="Donation and support links">
+          {SUPPORT_LINKS.map((link) => (
+            <a href={link.href} key={link.label} target="_blank" rel="noreferrer">
+              {link.label}
+            </a>
+          ))}
+        </div>
+        <h3>Business model</h3>
+        <ul className="compact-list">
+          <li>Core exports stay free and open-source.</li>
+          <li>Donations support maintenance and provider compatibility work.</li>
+          <li>Paid support and custom enterprise builds are optional services.</li>
+          <li>Any future cloud companion must remain optional, not core export infrastructure.</li>
+        </ul>
+      </section>
     </main>
   );
 }

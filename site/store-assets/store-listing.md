@@ -33,6 +33,10 @@ extension.
 No pricing wall is used in v1. Donation and support links are optional and do not lock core export
 features.
 
+Core exports stay free and open-source. Donations, paid support, and custom enterprise builds are
+optional ways to fund maintenance and compatibility work; they do not add ads, telemetry, export
+branding, or feature lockouts.
+
 ## Reviewer instructions
 
 1. Build with `pnpm build`.

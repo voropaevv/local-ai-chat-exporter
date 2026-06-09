@@ -72,6 +72,24 @@ pnpm test:e2e
 
 `pnpm check` runs lint, typecheck, unit tests, and a production build.
 
+## Support and Business Model
+
+Core exports stay free and open-source. LogThread does not add ads, telemetry, branding in exports
+by default, feature lockouts, or pricing gates around the core local export workflow.
+
+Support channels:
+
+- GitHub Sponsors: `https://github.com/sponsors/voropaevv`
+- OpenCollective: `https://opencollective.com/logthread`
+
+Business model:
+
+- Donations support maintenance, docs, provider fixtures, and compatibility updates.
+- Paid support can cover setup help, private QA guidance, and migration support.
+- Custom enterprise builds are optional services for organizations with stricter packaging needs.
+- A future cloud companion may be explored, but it must remain optional and separate from core local
+  exports.
+
 ## Privacy Model
 
 - Processing happens locally in the browser after explicit user action.

@@ -14,7 +14,16 @@ LogThread is designed to be local-first:
 
 ## Reporting Issues
 
-Report security issues privately if possible, or open a minimal public issue without sensitive transcript data. Do not include private chat content, credentials, tokens, or personal data in public reports.
+Use GitHub Security Advisories for private security reports when possible:
+`https://github.com/voropaevv/logthread/security/advisories/new`
+
+If private reporting is unavailable, open a minimal public issue without sensitive transcript data.
+Do not include private chat content, credentials, tokens, personal data, screenshots with sensitive
+content, or exported files with sensitive content in public reports.
+
+Donation, sponsorship, paid support, and custom build work must not weaken this security model or
+add ads, telemetry, pricing gates, default export branding, remote rendering, or a server export
+path to core LogThread exports.
 
 ## Verification
 

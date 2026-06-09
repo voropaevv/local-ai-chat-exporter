@@ -25,6 +25,7 @@ import { PopupHeader } from "./components/PopupHeader";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { ScanControls } from "./components/ScanControls";
 import { SimpleActionBar } from "./components/SimpleActionBar";
+import { SupportPrompt } from "./components/SupportPrompt";
 import {
   buildCancelScanRequest,
   buildBatchExportRequest,
@@ -69,6 +70,8 @@ export function PopupApp() {
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
   const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
   const [batchStatus, setBatchStatus] = useState("Batch export is idle.");
+  const [showSupportPrompt, setShowSupportPrompt] = useState(false);
+  const [supportPromptDismissed, setSupportPromptDismissed] = useState(false);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions = state.completeness !== undefined && !busy;
   const advancedMode = mode === "advanced";
@@ -295,6 +298,7 @@ export function PopupApp() {
         } else {
           await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
           setBatchStatus(`Saved one ZIP: ${response.value.zipFilename}. ${resultSummary}.`);
+          maybeShowSupportPrompt();
         }
       } catch (error) {
         setBatchResults(response.value.results);
@@ -346,8 +350,20 @@ export function PopupApp() {
       message: buildExportStatusMessage(response.value),
       type: "export_finished"
     });
+    maybeShowSupportPrompt();
 
     return response.value;
+  }
+
+  function maybeShowSupportPrompt() {
+    if (!supportPromptDismissed) {
+      setShowSupportPrompt(true);
+    }
+  }
+
+  function handleDismissSupportPrompt() {
+    setSupportPromptDismissed(true);
+    setShowSupportPrompt(false);
   }
 
   return (
@@ -442,6 +458,9 @@ export function PopupApp() {
         100% local processing. No telemetry, trackers, remote logging, remote rendering, or server
         uploads.
       </p>
+      {showSupportPrompt && !supportPromptDismissed ? (
+        <SupportPrompt onDismiss={handleDismissSupportPrompt} />
+      ) : null}
       <PopupFooter />
     </main>
   );
