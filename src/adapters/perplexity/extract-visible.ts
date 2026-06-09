@@ -1,4 +1,5 @@
 import type { PlatformAdapter } from "../types";
+import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
@@ -21,16 +22,23 @@ const PERPLEXITY_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
+const PERPLEXITY_LIMITATIONS = [
+  "Visible-message extraction only; unloaded or collapsed turns may be missing."
+] as const;
+const PERPLEXITY_SUPPORT_WARNING =
+  "Perplexity support is experimental. Verify first and last messages before relying on export.";
+
 export const perplexityAdapter: PlatformAdapter = {
   id: "perplexity",
   label: "Perplexity",
   hostnames: PERPLEXITY_HOSTNAMES,
+  supportStatus: "experimental",
   selectors: perplexitySelectors,
-  limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
-  experimentalWarning:
-    "Perplexity support is experimental. Verify first and last messages before relying on export.",
+  limitations: PERPLEXITY_LIMITATIONS,
+  experimentalWarning: PERPLEXITY_SUPPORT_WARNING,
+  providerWarnings: createProviderWarnings(PERPLEXITY_SUPPORT_WARNING, PERPLEXITY_LIMITATIONS),
   detect: detectPerplexity,
-  extractVisibleMessages: extractVisiblePerplexityMessages
+  ...createVisibleAdapterContract(extractVisiblePerplexityMessages)
 };
 
 export function extractVisiblePerplexityMessages(

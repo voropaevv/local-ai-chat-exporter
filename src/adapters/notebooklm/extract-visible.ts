@@ -1,4 +1,5 @@
 import type { PlatformAdapter } from "../types";
+import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
@@ -19,16 +20,23 @@ const NOTEBOOKLM_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
+const NOTEBOOKLM_LIMITATIONS = [
+  "Visible-message extraction only; unloaded or collapsed turns may be missing."
+] as const;
+const NOTEBOOKLM_SUPPORT_WARNING =
+  "NotebookLM support is experimental. Verify first and last messages before relying on export.";
+
 export const notebookLmAdapter: PlatformAdapter = {
   id: "notebooklm",
   label: "NotebookLM",
   hostnames: NOTEBOOKLM_HOSTNAMES,
+  supportStatus: "experimental",
   selectors: notebookLmSelectors,
-  limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
-  experimentalWarning:
-    "NotebookLM support is experimental. Verify first and last messages before relying on export.",
+  limitations: NOTEBOOKLM_LIMITATIONS,
+  experimentalWarning: NOTEBOOKLM_SUPPORT_WARNING,
+  providerWarnings: createProviderWarnings(NOTEBOOKLM_SUPPORT_WARNING, NOTEBOOKLM_LIMITATIONS),
   detect: detectNotebookLm,
-  extractVisibleMessages: extractVisibleNotebookLmMessages
+  ...createVisibleAdapterContract(extractVisibleNotebookLmMessages)
 };
 
 export function extractVisibleNotebookLmMessages(

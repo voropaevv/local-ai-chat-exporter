@@ -8,8 +8,11 @@ No account is required to use LogThread. The extension operates on the supported
 
 ## Supported Platforms
 
-- ChatGPT at `https://chatgpt.com/*` and `https://chat.openai.com/*`.
-- Claude, Gemini, Perplexity, and NotebookLM are experimental visible-message adapters. Verify first and last messages before relying on those exports.
+- ChatGPT at `https://chatgpt.com/*` and `https://chat.openai.com/*` is stable.
+- Claude and Gemini are beta visible-message adapters with documented limitations.
+- Perplexity and NotebookLM are experimental visible-message adapters until real live QA passes.
+
+For current adapter status and live QA criteria, see [Provider QA Checklists](docs/provider-qa-checklists.md).
 
 This project is not affiliated with, endorsed by, or sponsored by OpenAI, Anthropic, Google, Perplexity, or any AI platform.
 

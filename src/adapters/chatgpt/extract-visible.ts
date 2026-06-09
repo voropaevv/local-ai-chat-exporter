@@ -2,22 +2,27 @@ import type { ExportedMessage } from "../../core/schema";
 import { normalizeRole } from "../../core/normalize";
 import { stableHash } from "../../utils/hash";
 import type { PlatformAdapter } from "../types";
+import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
 import { cleanChatGptNode } from "./clean-chatgpt-node";
 import { CHAT_GPT_HOSTNAMES, detectChatGpt } from "./detect";
 import { extractChatGptAdvancedContent } from "./extract-advanced";
 import { chatGptSelectors } from "./selectors";
 
+const CHATGPT_LIMITATIONS: readonly string[] = [];
+
 export const chatGptAdapter: PlatformAdapter = {
   id: "chatgpt",
   label: "ChatGPT",
   hostnames: CHAT_GPT_HOSTNAMES,
+  supportStatus: "stable",
   selectors: {
     content: chatGptSelectors.markdownBody,
     message: chatGptSelectors.messageByRole
   },
-  limitations: [],
+  limitations: CHATGPT_LIMITATIONS,
+  providerWarnings: createProviderWarnings(undefined, CHATGPT_LIMITATIONS),
   detect: detectChatGpt,
-  extractVisibleMessages: extractVisibleChatGptMessages
+  ...createVisibleAdapterContract(extractVisibleChatGptMessages)
 };
 
 export function extractVisibleChatGptMessages(

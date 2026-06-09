@@ -35,7 +35,7 @@ describe("scanCurrentConversationExport", () => {
     expect(conversation.exportedAt).toBe("2026-05-31T10:20:30.000Z");
     expect(conversation.completeness.status).toBe("partial");
     expect(conversation.completeness.platformWarnings).toContain(
-      "Claude support is experimental. Verify first and last messages before relying on export."
+      "Claude support is beta. Verify first and last messages before relying on export."
     );
   });
 
@@ -114,7 +114,7 @@ describe("scanCurrentConversationExport", () => {
       })
     ).rejects.toMatchObject({
       code: "no_messages_found",
-      message: expect.stringContaining("Perplexity layout was detected")
+      message: "Perplexity layout not recognized. Adapter update needed."
     } satisfies Partial<ExportPipelineError>);
   });
 });

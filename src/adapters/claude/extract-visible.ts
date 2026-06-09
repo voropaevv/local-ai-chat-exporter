@@ -1,4 +1,5 @@
 import type { PlatformAdapter } from "../types";
+import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
@@ -29,16 +30,23 @@ const CLAUDE_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
+const CLAUDE_LIMITATIONS = [
+  "Visible-message extraction only; unloaded or collapsed turns may be missing."
+] as const;
+const CLAUDE_SUPPORT_WARNING =
+  "Claude support is beta. Verify first and last messages before relying on export.";
+
 export const claudeAdapter: PlatformAdapter = {
   id: "claude",
   label: "Claude",
   hostnames: CLAUDE_HOSTNAMES,
+  supportStatus: "beta",
   selectors: claudeSelectors,
-  limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
-  experimentalWarning:
-    "Claude support is experimental. Verify first and last messages before relying on export.",
+  limitations: CLAUDE_LIMITATIONS,
+  experimentalWarning: CLAUDE_SUPPORT_WARNING,
+  providerWarnings: createProviderWarnings(CLAUDE_SUPPORT_WARNING, CLAUDE_LIMITATIONS),
   detect: detectClaude,
-  extractVisibleMessages: extractVisibleClaudeMessages
+  ...createVisibleAdapterContract(extractVisibleClaudeMessages)
 };
 
 export function extractVisibleClaudeMessages(

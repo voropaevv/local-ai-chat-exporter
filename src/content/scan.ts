@@ -87,14 +87,14 @@ function scanVisibleAdapterConversation(
     readonly title?: string;
   }
 ): ConversationExport {
-  const normalized = normalizeMessagesWithStats(adapter.extractVisibleMessages(input.rootDocument));
+  const normalized = normalizeMessagesWithStats(adapter.scanVisible(input.rootDocument));
   const messages = normalized.messages;
 
   if (messages.length === 0) {
     if (adapter.id === "perplexity") {
       throw new ExportPipelineError(
         "no_messages_found",
-        "Perplexity layout was detected, but no visible messages could be extracted. The current Perplexity layout may need an adapter update."
+        "Perplexity layout not recognized. Adapter update needed."
       );
     }
 
@@ -127,10 +127,7 @@ function scanVisibleAdapterConversation(
 }
 
 function buildAdapterWarnings(adapter: PlatformAdapter): readonly string[] {
-  return [
-    ...(adapter.experimentalWarning !== undefined ? [adapter.experimentalWarning] : []),
-    ...adapter.limitations
-  ];
+  return adapter.providerWarnings;
 }
 
 function shouldTreatVisibleScanAsComplete(adapter: PlatformAdapter): boolean {
