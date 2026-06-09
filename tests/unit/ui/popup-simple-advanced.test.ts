@@ -21,6 +21,7 @@ describe("popup simple and advanced UX source", () => {
     expect(source).toContain("{advancedMode ? (");
     expect(source).toContain("<ExportOptionsForm");
     expect(source).toContain("<BatchExport");
+    expect(source).toContain("<LocalLibraryPanel");
     expect(source).toContain("<PreviewPanel");
   });
 
@@ -36,6 +37,7 @@ describe("popup simple and advanced UX source", () => {
     expect(simpleActionSource).not.toContain("Open PDF");
     expect(actionSource).toContain("Open PDF");
     expect(popupSource).toContain("PDF generation fell back to PDF-ready HTML");
+    expect(popupSource).toContain("buildGetCachedConversationRequest");
     expect(previewSource).toContain("PDF generation fell back to PDF-ready HTML");
   });
 

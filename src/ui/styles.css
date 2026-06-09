@@ -171,7 +171,9 @@ legend {
 }
 
 .settings-examples,
-.compact-list {
+.compact-list,
+.library-record-list,
+.stacked-fields {
   display: grid;
   gap: 6px;
 }
@@ -182,6 +184,31 @@ legend {
   color: var(--color-text-muted);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.library-record-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library-record-card {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  border-top: 1px solid var(--color-surface-accent);
+  padding-top: 10px;
+}
+
+.library-record-card:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.library-record-card strong,
+.library-record-card p {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .section-heading,

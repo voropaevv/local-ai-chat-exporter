@@ -12,6 +12,8 @@ export const POPUP_START_SELECTION_MESSAGE = "logthread/start-selection";
 export const POPUP_CLEAR_SELECTION_MESSAGE = "logthread/clear-selection";
 export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE =
   "logthread/get-scan-cache-summary";
+export const POPUP_GET_CACHED_CONVERSATION_MESSAGE =
+  "logthread/get-cached-conversation";
 export const POPUP_OPEN_PREVIEW_MESSAGE = "logthread/open-preview";
 export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE =
   "logthread/preview-get-cached-conversation";
@@ -80,6 +82,10 @@ export interface PopupClearSelectionRequest {
 
 export interface PopupGetScanCacheSummaryRequest {
   readonly type: typeof POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE;
+}
+
+export interface PopupGetCachedConversationRequest {
+  readonly type: typeof POPUP_GET_CACHED_CONVERSATION_MESSAGE;
 }
 
 export interface PopupOpenPreviewRequest {

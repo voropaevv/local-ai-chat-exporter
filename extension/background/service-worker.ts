@@ -13,6 +13,7 @@ import {
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   CONTENT_START_SELECTION_MESSAGE,
+  POPUP_GET_CACHED_CONVERSATION_MESSAGE,
   POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   POPUP_OPEN_PREVIEW_MESSAGE,
   POPUP_CANCEL_SCAN_MESSAGE,
@@ -36,6 +37,7 @@ import {
   type PopupClearSelectionRequest,
   type PopupCancelScanRequest,
   type PopupExportRequest,
+  type PopupGetCachedConversationRequest,
   type PopupExportSuccess,
   type PopupGetScanCacheSummaryRequest,
   type PopupOpenPreviewRequest,
@@ -78,6 +80,7 @@ async function handlePopupRequest(
     | PopupStartSelectionRequest
     | PopupClearSelectionRequest
     | PopupGetScanCacheSummaryRequest
+    | PopupGetCachedConversationRequest
     | PopupOpenPreviewRequest
     | PreviewGetCachedConversationRequest
 ): Promise<
@@ -108,6 +111,10 @@ async function handlePopupRequest(
 
   if (request.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE) {
     return handlePopupGetScanCacheSummaryRequest();
+  }
+
+  if (request.type === POPUP_GET_CACHED_CONVERSATION_MESSAGE) {
+    return handlePopupGetCachedConversationRequest();
   }
 
   if (request.type === POPUP_OPEN_PREVIEW_MESSAGE) {
@@ -164,6 +171,23 @@ async function handlePopupGetScanCacheSummaryRequest(): Promise<ScanCacheSummary
     return response.value;
   } catch {
     return { hasCache: false };
+  }
+}
+
+async function handlePopupGetCachedConversationRequest(): Promise<CachedConversationResult> {
+  try {
+    const tab = await getActiveTab();
+    const tabId = requireTabId(tab);
+
+    await ensureContentScript(tabId);
+
+    const response = await sendContentMessage<CachedConversationResult>(tabId, {
+      type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+    } satisfies ContentGetCachedConversationRequest);
+
+    return response.ok ? response.value : { hasConversation: false };
+  } catch {
+    return { hasConversation: false };
   }
 }
 
@@ -352,6 +376,7 @@ function isPopupRequest(
   | PopupStartSelectionRequest
   | PopupClearSelectionRequest
   | PopupGetScanCacheSummaryRequest
+  | PopupGetCachedConversationRequest
   | PopupOpenPreviewRequest
   | PreviewGetCachedConversationRequest {
   return (
@@ -360,6 +385,7 @@ function isPopupRequest(
       message.type === POPUP_CANCEL_SCAN_MESSAGE ||
       message.type === POPUP_EXPORT_MESSAGE ||
       message.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE ||
+      message.type === POPUP_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === POPUP_OPEN_PREVIEW_MESSAGE ||
       message.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === POPUP_BATCH_LIST_MESSAGE ||

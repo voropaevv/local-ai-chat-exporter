@@ -8,6 +8,7 @@ import {
   buildBatchExportRequest,
   buildDownloadMarkdownRequest,
   buildDownloadRequest,
+  buildGetCachedConversationRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
   buildOpenPreviewRequest,
@@ -135,6 +136,9 @@ describe("popup state", () => {
     });
     expect(buildGetScanCacheSummaryRequest()).toEqual({
       type: "logthread/get-scan-cache-summary"
+    });
+    expect(buildGetCachedConversationRequest()).toEqual({
+      type: "logthread/get-cached-conversation"
     });
     expect(buildOpenPreviewRequest()).toEqual({
       type: "logthread/open-preview"

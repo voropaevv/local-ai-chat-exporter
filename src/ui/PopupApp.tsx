@@ -2,6 +2,7 @@ import { useEffect, useReducer, useState } from "preact/hooks";
 
 import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
 import type {
+  CachedConversationResult,
   RuntimeResponse,
   ScanCacheSummaryResult,
   ScanSummary,
@@ -18,6 +19,7 @@ import { ActionBar } from "./components/ActionBar";
 import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
 import { CompletenessReport } from "./components/CompletenessReport";
 import { ExportOptionsForm } from "./components/ExportOptionsForm";
+import { LocalLibraryPanel } from "./components/LocalLibraryPanel";
 import { PopupFooter } from "./components/PopupFooter";
 import { PopupHeader } from "./components/PopupHeader";
 import { PreviewPanel } from "./components/PreviewPanel";
@@ -32,6 +34,7 @@ import {
   buildDownloadMarkdownRequest,
   buildDownloadRequest,
   buildExportStatusMessage,
+  buildGetCachedConversationRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
   buildOpenPreviewRequest,
@@ -184,6 +187,16 @@ export function PopupApp() {
       message: "Full preview opened from scanned snapshot.",
       type: "export_finished"
     });
+  }
+
+  async function loadCurrentConversationForLibrary() {
+    const response = await sendRuntimeMessage<CachedConversationResult>(
+      buildGetCachedConversationRequest()
+    );
+
+    return response.ok && response.value.hasConversation
+      ? response.value.conversation
+      : undefined;
   }
 
   async function handleLoadBatchCandidates() {
@@ -400,6 +413,10 @@ export function PopupApp() {
             results={batchResults}
             selectedTabIds={batchSelectedTabIds}
             status={batchStatus}
+          />
+          <LocalLibraryPanel
+            canSave={canUseActions}
+            loadCurrentConversation={loadCurrentConversationForLibrary}
           />
           <PreviewPanel
             disabled={!canUseActions}
