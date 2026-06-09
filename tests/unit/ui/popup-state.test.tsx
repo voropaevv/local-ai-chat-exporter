@@ -281,10 +281,33 @@ describe("popup state", () => {
     });
 
     expect(finished.selectedMessageCount).toBe(0);
-    expect(getSelectionStatusText(finished)).toBe(
-      "No selected messages. Click Select messages again."
-    );
+    expect(getSelectionStatusText(finished)).toBe("No selected messages. Select messages again.");
     expect(getScopedPreviewMessages(finished)).toEqual([]);
+  });
+
+  test("never reports selected messages when the content script count is zero", () => {
+    const selectedState = popupReducer(
+      createInitialPopupState(),
+      { scope: "selected", type: "set_scope" }
+    );
+
+    expect(getSelectionStatusText(selectedState)).toBe(
+      "No selected messages. Select messages again."
+    );
+
+    const reset = popupReducer(
+      {
+        ...selectedState,
+        previewMessages: [
+          { authorLabel: "User", index: 0, role: "user", selected: true, text: "First prompt" }
+        ],
+        selectedMessageCount: 1
+      },
+      { selectedMessageCount: 0, type: "selection_count_changed" }
+    );
+
+    expect(reset.previewMessages[0].selected).toBe(false);
+    expect(getSelectionStatusText(reset)).toBe("No selected messages. Select messages again.");
   });
 
   test("builds export status with exported scope count", () => {
@@ -342,5 +365,30 @@ describe("popup state", () => {
 
     expect(state.options.rangeStartIndex).toBe(2);
     expect(state.options.rangeEndIndex).toBe(2);
+  });
+
+  test("clamps custom range values to the scanned one-based message count", () => {
+    const scanned = popupReducer(createInitialPopupState(), {
+      scan: {
+        completeness,
+        messageCount: 3,
+        platformLabel: "ChatGPT",
+        previewMessages: [],
+        selectedMessageCount: 0,
+        sourceUrl: "https://chatgpt.com/c/example"
+      },
+      type: "scan_succeeded"
+    });
+    const state = popupReducer(
+      popupReducer(scanned, { rangeStartIndex: 20, type: "set_range_start" }),
+      { rangeEndIndex: 99, type: "set_range_end" }
+    );
+
+    expect(state.options.rangeStartIndex).toBe(3);
+    expect(state.options.rangeEndIndex).toBe(3);
+    expect(buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options?.range).toEqual({
+      endIndex: 2,
+      startIndex: 2
+    });
   });
 });

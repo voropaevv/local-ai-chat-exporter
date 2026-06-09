@@ -197,7 +197,7 @@ export function createContentRequestHandler(
     if (request.options.scope === "selected" && exportedMessageCount === 0) {
       throw new ExportPipelineError(
         "no_messages_found",
-        "No selected messages. Click Select messages again."
+        "No selected messages. Select messages again."
       );
     }
 

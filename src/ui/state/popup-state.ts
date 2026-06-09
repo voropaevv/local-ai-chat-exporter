@@ -287,7 +287,10 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         }
       };
     case "set_range_start": {
-      const rangeStartIndex = normalizeOneBasedIndex(action.rangeStartIndex);
+      const rangeStartIndex = normalizeOneBasedIndex(
+        action.rangeStartIndex,
+        state.completeness?.messageCount
+      );
 
       return {
         ...state,
@@ -299,7 +302,10 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       };
     }
     case "set_range_end": {
-      const rangeEndIndex = normalizeOneBasedIndex(action.rangeEndIndex);
+      const rangeEndIndex = normalizeOneBasedIndex(
+        action.rangeEndIndex,
+        state.completeness?.messageCount
+      );
 
       return {
         ...state,
@@ -504,7 +510,7 @@ export function getSelectionStatusText(state: PopupState): string | undefined {
   }
 
   if (state.selectedMessageCount === 0) {
-    return "No selected messages. Click Select messages again.";
+    return "No selected messages. Select messages again.";
   }
 
   return `Selected messages: ${state.selectedMessageCount}`;
@@ -522,8 +528,16 @@ export function buildExportStatusMessage(result: ExportStatusMessageInput): stri
   return `Exported ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot. Prepared local output.${copied}`;
 }
 
-function normalizeOneBasedIndex(value: number): number {
-  return Number.isInteger(value) && value > 0 ? value : 1;
+function normalizeOneBasedIndex(value: number, maxValue: number | undefined): number {
+  if (!Number.isInteger(value) || value < 1) {
+    return 1;
+  }
+
+  if (maxValue !== undefined && maxValue > 0) {
+    return Math.min(value, maxValue);
+  }
+
+  return value;
 }
 
 function getBatchExportFormats(state: PopupState): readonly PopupFileFormat[] {

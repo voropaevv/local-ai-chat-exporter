@@ -327,7 +327,7 @@ describe("content request handler scan cache", () => {
       })
     ).rejects.toMatchObject({
       code: "no_messages_found",
-      message: "No selected messages. Click Select messages again."
+      message: "No selected messages. Select messages again."
     });
   });
 });
