@@ -15,7 +15,7 @@ import { requestBatchHostPermissions, requestBatchTabsPermission } from "./batch
 import { readStoredExportSettings } from "./export-settings-storage";
 import { getCachedScanSummary } from "./popup-cache";
 import { ActionBar } from "./components/ActionBar";
-import { BatchExport } from "./components/BatchExport";
+import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
 import { CompletenessReport } from "./components/CompletenessReport";
 import { ExportOptionsForm } from "./components/ExportOptionsForm";
 import { PopupFooter } from "./components/PopupFooter";
@@ -236,6 +236,15 @@ export function PopupApp() {
     }
 
     const selectedTabs = batchCandidates.filter((tab) => batchSelectedTabIds.includes(tab.id));
+
+    if (selectedTabs.length !== batchSelectedTabIds.length) {
+      setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatus(
+        "Some selected tabs are no longer available. Review the updated selection and export again."
+      );
+      return;
+    }
+
     const permission = await requestBatchHostPermissions(selectedTabs);
 
     if (!permission.granted) {
@@ -244,6 +253,15 @@ export function PopupApp() {
     }
 
     setBatchBusy(true);
+    setBatchStatus("Checking selected open tabs...");
+
+    const preflightedTabs = await preflightBatchTabs(batchSelectedTabIds);
+
+    if (preflightedTabs === undefined) {
+      setBatchBusy(false);
+      return;
+    }
+
     setBatchStatus("Exporting selected tabs locally into one ZIP...");
 
     const response = await sendRuntimeMessage<BatchExportSuccess>(
@@ -255,18 +273,15 @@ export function PopupApp() {
         (result) => result.status === "success"
       ).length;
       const failedCount = response.value.results.length - successCount;
+      const resultSummary = formatBatchExportSummary(successCount, failedCount);
 
       try {
         setBatchResults(response.value.results);
         if (response.value.zipFile === undefined || response.value.zipFilename === undefined) {
-          setBatchStatus(
-            `No ZIP downloaded. ${formatCount(successCount, "tab")} exported, ${formatCount(failedCount, "tab")} failed.`
-          );
+          setBatchStatus(`No ZIP downloaded. ${resultSummary}.`);
         } else {
           await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
-          setBatchStatus(
-            `Saved one ZIP: ${response.value.zipFilename}. ${formatCount(successCount, "tab")} exported, ${formatCount(failedCount, "tab")} failed.`
-          );
+          setBatchStatus(`Saved one ZIP: ${response.value.zipFilename}. ${resultSummary}.`);
         }
       } catch (error) {
         setBatchResults(response.value.results);
@@ -277,6 +292,31 @@ export function PopupApp() {
     }
 
     setBatchBusy(false);
+  }
+
+  async function preflightBatchTabs(
+    selectedTabIds: readonly number[]
+  ): Promise<readonly BatchCandidateTab[] | undefined> {
+    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+
+    if (!response.ok) {
+      setBatchStatus(response.error.message);
+      return undefined;
+    }
+
+    const tabs = response.value.tabs;
+    const selectedTabs = tabs.filter((tab) => selectedTabIds.includes(tab.id));
+    setBatchCandidates(tabs);
+
+    if (selectedTabs.length !== selectedTabIds.length) {
+      setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatus(
+        "Some selected tabs are no longer available. Review the updated selection and export again."
+      );
+      return undefined;
+    }
+
+    return selectedTabs;
   }
 
   async function runExportAction(request: ReturnType<typeof buildDownloadRequest>) {

@@ -38,14 +38,13 @@ export function BatchExport({
           Find open tabs
         </button>
       </div>
-      <p className="muted">
-        Batch export lists open supported AI chat tabs and downloads successful exports as one ZIP.
-      </p>
+      <p className="muted">Export already-open AI chat tabs.</p>
       <details className="inline-details">
         <summary>Permission details</summary>
         <p className="muted">
           Approve tabs permission to list open chats, then approve site access for selected chats.
-          Content is processed locally.
+          Content is processed locally. Successful exports download as one ZIP; failed tabs are
+          listed in the manifest.
         </p>
       </details>
       {candidates.length > 0 ? (
@@ -81,10 +80,10 @@ export function BatchExport({
                   type="checkbox"
                 />
                 <span>
-                  <strong>{tab.platformLabel}</strong> {tab.title}
-                  <span className="muted"> - {formatBatchTabSummary(tab)}</span>
+                  <strong>{tab.title}</strong>
+                  <span className="muted"> - {formatBatchTabContext(tab, candidates)}</span>
                   <details className="inline-details">
-                    <summary>Details</summary>
+                    <summary>Advanced details</summary>
                     <span className="muted">{formatBatchTabDetail(tab)}</span>
                   </details>
                 </span>
@@ -123,17 +122,18 @@ export function BatchExport({
 }
 
 export function formatBatchTabDetail(tab: BatchCandidateTab): string {
-  const fallback = `tab ${tab.id}`;
+  return `Full URL: ${tab.url || "unknown URL"}; Tab ID: ${tab.id}`;
+}
 
-  try {
-    const url = new URL(tab.url);
-    const path = `${url.pathname}${url.search}`.replace(/\/$/u, "");
-    const shortPath = path.length > 0 ? path : "/";
+export function formatBatchTabContext(
+  tab: BatchCandidateTab,
+  candidates: readonly BatchCandidateTab[]
+): string {
+  const duplicateCount = candidates.filter(
+    (candidate) => normalizeTitle(candidate.title) === normalizeTitle(tab.title)
+  ).length;
 
-    return `${url.host}${shortPath} - ${fallback}`;
-  } catch {
-    return `${tab.url || "unknown URL"} - ${fallback}`;
-  }
+  return duplicateCount > 1 ? formatBatchTabHostPath(tab) : formatBatchTabSummary(tab);
 }
 
 export function formatBatchTabSummary(tab: BatchCandidateTab): string {
@@ -142,4 +142,23 @@ export function formatBatchTabSummary(tab: BatchCandidateTab): string {
   } catch {
     return "unknown host";
   }
+}
+
+export function formatBatchExportSummary(exportedCount: number, failedCount: number): string {
+  return `${exportedCount} exported, ${failedCount} failed`;
+}
+
+function formatBatchTabHostPath(tab: BatchCandidateTab): string {
+  try {
+    const url = new URL(tab.url);
+    const path = url.pathname.replace(/\/$/u, "") || "/";
+
+    return path === "/" ? url.host : `${url.host}${path}`;
+  } catch {
+    return "unknown host";
+  }
+}
+
+function normalizeTitle(title: string): string {
+  return title.trim().toLocaleLowerCase();
 }

@@ -28,6 +28,15 @@ describe("batch permission prompts", () => {
     );
   });
 
+  test("explains tabs permission denial without implying broad access", async () => {
+    const permissions = makePermissionsApi(false);
+
+    await expect(requestBatchTabsPermission(permissions)).resolves.toEqual({
+      granted: false,
+      message: "Tabs permission is needed to find already-open AI chat tabs."
+    });
+  });
+
   test("requests all selected host origins in one prompt", async () => {
     const permissions = makePermissionsApi(true);
     const tabs = getBatchCandidateTabs([
@@ -53,7 +62,7 @@ describe("batch permission prompts", () => {
 
     await expect(requestBatchHostPermissions(tabs, permissions)).resolves.toEqual({
       granted: false,
-      message: "Site access is required for batch export: chatgpt.com."
+      message: "Approve site access for selected AI chat tabs: chatgpt.com."
     });
   });
 });

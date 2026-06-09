@@ -10,6 +10,8 @@ import {
   type BatchExportResult
 } from "../../../src/core/batch";
 import {
+  formatBatchExportSummary,
+  formatBatchTabContext,
   formatBatchTabDetail,
   formatBatchTabSummary
 } from "../../../src/ui/components/BatchExport";
@@ -117,7 +119,44 @@ describe("batch export core helpers", () => {
     };
 
     expect(formatBatchTabSummary(tab)).toBe("chatgpt.com");
-    expect(formatBatchTabDetail(tab)).toBe("chatgpt.com/c/abc123?model=test - tab 9");
+    expect(formatBatchTabDetail(tab)).toBe(
+      "Full URL: https://chatgpt.com/c/abc123?model=test; Tab ID: 9"
+    );
+  });
+
+  test("adds short host and path context only for duplicate titles", () => {
+    const tabs = [
+      {
+        id: 1,
+        platform: "chatgpt" as const,
+        platformLabel: "ChatGPT" as const,
+        title: "Research",
+        url: "https://chatgpt.com/c/one"
+      },
+      {
+        id: 2,
+        platform: "chatgpt" as const,
+        platformLabel: "ChatGPT" as const,
+        title: "Research",
+        url: "https://chatgpt.com/c/two?model=test"
+      },
+      {
+        id: 3,
+        platform: "claude" as const,
+        platformLabel: "Claude" as const,
+        title: "Planning",
+        url: "https://claude.ai/chat/three"
+      }
+    ];
+
+    expect(formatBatchTabContext(tabs[0], tabs)).toBe("chatgpt.com/c/one");
+    expect(formatBatchTabContext(tabs[1], tabs)).toBe("chatgpt.com/c/two");
+    expect(formatBatchTabContext(tabs[2], tabs)).toBe("claude.ai");
+  });
+
+  test("formats batch export result summary without noisy tab nouns", () => {
+    expect(formatBatchExportSummary(3, 1)).toBe("3 exported, 1 failed");
+    expect(formatBatchExportSummary(0, 2)).toBe("0 exported, 2 failed");
   });
 
   test("creates a manifest with success files and failed tabs", () => {

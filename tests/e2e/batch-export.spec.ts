@@ -38,8 +38,17 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchUiSource).toContain("Find open tabs");
   expect(batchUiSource).toContain("Select all");
   expect(batchUiSource).toContain("Clear selection");
+  expect(batchUiSource).toContain("Export already-open AI chat tabs.");
   expect(batchUiSource).toContain("one ZIP");
   expect(batchUiSource).toContain("Export selected");
   expect(batchUiSource).toContain("formatBatchTabSummary");
+  expect(batchUiSource).toContain("Advanced details");
+  expect(batchUiSource).toContain("Full URL");
+  expect(batchUiSource).toContain("Tab ID");
   expect(batchUiSource).toContain("<details");
+  expect(popupSource).toContain("Checking selected open tabs");
+  expect(popupSource).toContain("formatBatchExportSummary");
+  expect(popupSource.indexOf("requestBatchHostPermissions(selectedTabs)")).toBeLessThan(
+    popupSource.indexOf("await preflightBatchTabs(batchSelectedTabIds)")
+  );
 });

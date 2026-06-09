@@ -13,7 +13,7 @@ export async function requestBatchTabsPermission(
   permissions: BatchPermissionsApi | undefined = getCurrentPermissionsApi()
 ): Promise<BatchPermissionResult> {
   return requestPermission(permissions, { permissions: ["tabs"] }, {
-    deniedMessage: "Tabs permission is required to find open AI chat tabs."
+    deniedMessage: "Tabs permission is needed to find already-open AI chat tabs."
   });
 }
 
@@ -31,7 +31,7 @@ export async function requestBatchHostPermissions(
   }
 
   return requestPermission(permissions, { origins: [...origins] }, {
-    deniedMessage: `Site access is required for batch export: ${formatOriginList(origins)}.`
+    deniedMessage: `Approve site access for selected AI chat tabs: ${formatOriginList(origins)}.`
   });
 }
 
