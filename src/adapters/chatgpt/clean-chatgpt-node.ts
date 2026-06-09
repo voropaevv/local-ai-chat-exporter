@@ -27,6 +27,14 @@ const REMOVABLE_SELECTORS = [
   "[data-testid*='copy' i]",
   "[data-testid*='feedback' i]",
   "[data-testid*='regenerate' i]",
+  "[data-logthread-advanced-kind='thinking']",
+  "[data-logthread-advanced-kind='reasoning']",
+  "[data-testid*='thinking' i]",
+  "[data-testid*='reasoning' i]",
+  "[data-testid*='thought' i]",
+  "[data-logthread-canvas]",
+  "[data-testid*='canvas' i]",
+  "[data-logthread-source-list]",
   ".sr-only"
 ].join(",");
 

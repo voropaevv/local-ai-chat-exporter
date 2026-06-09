@@ -9,6 +9,11 @@ import {
   sanitizeConversationImagesForOutput
 } from "../core/image-safety";
 import { renderFilenameTemplate } from "../utils/filename-template";
+import {
+  formatCanvasPlain,
+  formatSourcePlain,
+  formatThinkingPlain
+} from "./advanced-content";
 import { renderHtml } from "./html";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettings } from "./pdf-settings";
 import type { RenderedFile, RendererOptions } from "./types";
@@ -222,6 +227,21 @@ function renderMessage(layout: PdfLayout, message: ExportedMessage): void {
   if (message.images.length > 0) {
     layout.heading("Images", 3);
     layout.list(message.images.map(renderImageReference), false);
+  }
+
+  if ((message.sources?.length ?? 0) > 0) {
+    layout.heading("Sources", 3);
+    layout.list(message.sources!.map(formatSourcePlain), false);
+  }
+
+  if ((message.canvas?.length ?? 0) > 0) {
+    layout.heading("Canvas", 3);
+    layout.list(message.canvas!.map(formatCanvasPlain), false);
+  }
+
+  if ((message.thinkingBlocks?.length ?? 0) > 0) {
+    layout.heading("Visible thinking / reasoning", 3);
+    layout.list(message.thinkingBlocks!.map(formatThinkingPlain), false);
   }
 
   layout.space(6);

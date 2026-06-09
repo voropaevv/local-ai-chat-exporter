@@ -2,8 +2,11 @@ import {
   isChatPlatform,
   isChatRole,
   isCompletenessStatus,
+  type ExportedSourceKind,
   type ConversationExport
 } from "./schema";
+
+const SOURCE_KINDS = new Set<ExportedSourceKind>(["citation", "deep_research", "web_search"]);
 
 export type ValidationResult<T> =
   | {
@@ -72,6 +75,7 @@ function validateMessage(input: unknown, path: string, errors: string[]): void {
   }
 
   requireString(input, "authorLabel", errors, path);
+  requireOptionalString(input, "participant", errors, path);
   requireString(input, "text", errors, path);
   requireOptionalString(input, "markdown", errors, path);
   requireOptionalString(input, "html", errors, path);
@@ -81,9 +85,58 @@ function validateMessage(input: unknown, path: string, errors: string[]): void {
   validateArray(input.codeBlocks, `${path}.codeBlocks`, validateCodeBlock, errors);
   validateArray(input.images, `${path}.images`, validateImageRef, errors);
 
+  if (input.sources !== undefined) {
+    validateArray(input.sources, `${path}.sources`, validateSourceRef, errors);
+  }
+
+  if (input.thinkingBlocks !== undefined) {
+    validateArray(input.thinkingBlocks, `${path}.thinkingBlocks`, validateThinkingBlock, errors);
+  }
+
+  if (input.canvas !== undefined) {
+    validateArray(input.canvas, `${path}.canvas`, validateCanvasRef, errors);
+  }
+
   if (!isRecord(input.metadata)) {
     errors.push(`${path}.metadata must be a record`);
   }
+}
+
+function validateSourceRef(input: unknown, path: string, errors: string[]): void {
+  if (!isRecord(input)) {
+    errors.push(`${path} must be a record`);
+    return;
+  }
+
+  requireOptionalString(input, "id", errors, path);
+  if (typeof input.kind !== "string" || !SOURCE_KINDS.has(input.kind as ExportedSourceKind)) {
+    errors.push(`${path}.kind must be a supported source kind`);
+  }
+  requireString(input, "title", errors, path);
+  requireString(input, "url", errors, path);
+  requireOptionalString(input, "snippet", errors, path);
+}
+
+function validateThinkingBlock(input: unknown, path: string, errors: string[]): void {
+  if (!isRecord(input)) {
+    errors.push(`${path} must be a record`);
+    return;
+  }
+
+  requireOptionalString(input, "title", errors, path);
+  requireString(input, "text", errors, path);
+}
+
+function validateCanvasRef(input: unknown, path: string, errors: string[]): void {
+  if (!isRecord(input)) {
+    errors.push(`${path} must be a record`);
+    return;
+  }
+
+  requireOptionalString(input, "title", errors, path);
+  requireOptionalString(input, "text", errors, path);
+  requireOptionalString(input, "url", errors, path);
+  requireOptionalString(input, "warning", errors, path);
 }
 
 function validateCodeBlock(input: unknown, path: string, errors: string[]): void {

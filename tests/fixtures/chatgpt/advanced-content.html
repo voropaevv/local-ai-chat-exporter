@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <main>
+      <article data-testid="conversation-turn-1">
+        <div
+          data-created-at="2026-06-01T10:00:00.000Z"
+          data-message-author-role="user"
+          data-message-id="user-advanced-1"
+          data-participant-name="Ava Researcher"
+        >
+          <div class="markdown">
+            <p>Run a Deep Research review with citations, code, a table, and math.</p>
+          </div>
+        </div>
+      </article>
+
+      <article
+        data-created-at="2026-06-01T10:05:00.000Z"
+        data-model="GPT-4o Deep Research"
+        data-testid="conversation-turn-2"
+      >
+        <div
+          data-logthread-content-type="deep_research"
+          data-message-author-role="assistant"
+          data-message-id="assistant-advanced-1"
+        >
+          <time datetime="2026-06-01T10:05:00.000Z">June 1, 2026</time>
+          <div class="markdown">
+            <h1>Deep Research Report</h1>
+            <p>
+              Genome-wide evidence supports a cautious interpretation
+              <sup data-testid="citation">
+                <a data-source-id="dr-citation-1" href="https://example.org/genome-paper">1</a>
+              </sup>
+              while current web results show updated guidance.
+            </p>
+            <p>Formula-like text: \(p &lt; 0.05\).</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Variant</th>
+                  <th>Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>rs123</td>
+                  <td>Moderate</td>
+                </tr>
+              </tbody>
+            </table>
+            <pre><code class="language-ts">const risk = "moderate";
+console.log(risk);
+</code></pre>
+          </div>
+
+          <details open data-testid="thinking">
+            <summary>Thinking</summary>
+            <p>Need to compare source quality before finalizing.</p>
+          </details>
+
+          <section data-logthread-source-list data-testid="sources">
+            <h2>Sources</h2>
+            <ol>
+              <li>
+                <a
+                  data-logthread-source-kind="deep_research"
+                  data-source-id="deep-source-1"
+                  href="https://example.org/genome-paper"
+                >
+                  Genome Paper
+                </a>
+                <p>Peer-reviewed source for the Deep Research report.</p>
+              </li>
+              <li>
+                <a
+                  data-logthread-source-kind="web_search"
+                  data-source-id="web-source-1"
+                  href="https://example.com/current-guidance"
+                >
+                  Current Guidance
+                </a>
+                <p>Web Search source captured from visible source links.</p>
+              </li>
+            </ol>
+          </section>
+
+          <section data-logthread-canvas data-testid="canvas-panel" data-title="Canvas draft">
+            <a href="https://chatgpt.com/canvas/local-canvas">Open canvas</a>
+          </section>
+        </div>
+      </article>
+    </main>
+  </body>
+</html>

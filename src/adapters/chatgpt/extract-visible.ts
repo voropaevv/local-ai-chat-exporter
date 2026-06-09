@@ -4,6 +4,7 @@ import { stableHash } from "../../utils/hash";
 import type { PlatformAdapter } from "../types";
 import { cleanChatGptNode } from "./clean-chatgpt-node";
 import { CHAT_GPT_HOSTNAMES, detectChatGpt } from "./detect";
+import { extractChatGptAdvancedContent } from "./extract-advanced";
 import { chatGptSelectors } from "./selectors";
 
 export const chatGptAdapter: PlatformAdapter = {
@@ -31,6 +32,7 @@ export function extractVisibleChatGptMessages(
     }
 
     const role = normalizeRole(messageElement.getAttribute("data-message-author-role"));
+    const advancedContent = extractChatGptAdvancedContent(messageElement);
     const cleanedNode = cleanChatGptNode(messageElement);
 
     if (cleanedNode.text.length === 0 && cleanedNode.codeBlocks.length === 0) {
@@ -43,13 +45,27 @@ export function extractVisibleChatGptMessages(
       id,
       index: messages.length,
       role,
-      authorLabel: role === "assistant" ? "ChatGPT" : defaultAuthorLabel(role),
+      authorLabel:
+        role === "assistant" ? "ChatGPT" : advancedContent.participant ?? defaultAuthorLabel(role),
+      ...(advancedContent.participant !== undefined
+        ? { participant: advancedContent.participant }
+        : {}),
       text: cleanedNode.text,
       markdown: cleanedNode.markdown,
       html: cleanedNode.html,
       codeBlocks: cleanedNode.codeBlocks,
       images: cleanedNode.images,
-      metadata: {}
+      ...(advancedContent.sources.length > 0 ? { sources: advancedContent.sources } : {}),
+      ...(advancedContent.thinkingBlocks.length > 0
+        ? { thinkingBlocks: advancedContent.thinkingBlocks }
+        : {}),
+      ...(advancedContent.canvas.length > 0 ? { canvas: advancedContent.canvas } : {}),
+      ...(advancedContent.createdAt !== undefined ? { createdAt: advancedContent.createdAt } : {}),
+      ...(advancedContent.model !== undefined ? { model: advancedContent.model } : {}),
+      metadata:
+        advancedContent.contentKind !== undefined
+          ? { contentKind: advancedContent.contentKind }
+          : {}
     });
   }
 

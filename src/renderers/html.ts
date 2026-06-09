@@ -9,6 +9,7 @@ import {
   renderImageReferenceText,
   sanitizeConversationImagesForOutput
 } from "../core/image-safety";
+import { formatSourceKindLabel } from "./advanced-content";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const HTML_CSS = `:root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -29,6 +30,10 @@ a { color: #0969da; }
 .image-refs ul { margin: 0; padding-left: 20px; }
 .image-refs li { overflow-wrap: anywhere; }
 .image-refs img { display: block; height: auto; max-width: min(100%, 640px); }
+.advanced-section { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
+.advanced-section h3 { font-size: 0.95rem; margin: 0 0 8px; }
+.advanced-section ul { margin: 0; padding-left: 20px; }
+.advanced-section li { overflow-wrap: anywhere; }
 pre { background: #f6f8fa; border: 1px solid #d8dee4; overflow: auto; padding: 12px; }
 code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
 table { border-collapse: collapse; display: block; margin: 12px 0; overflow-x: auto; width: 100%; }
@@ -126,6 +131,7 @@ function renderMessageMeta(message: ExportedMessage): string {
 
 function renderMessageBody(message: ExportedMessage): string {
   const imageRefs = renderImageRefs(message.images);
+  const advancedContent = renderAdvancedSections(message);
   let body: string;
 
   if (message.markdown !== undefined && message.markdown.trim().length > 0) {
@@ -134,7 +140,71 @@ function renderMessageBody(message: ExportedMessage): string {
     body = textToHtml(message.text, message.codeBlocks);
   }
 
-  return `${body}${imageRefs}`;
+  return `${body}${imageRefs}${advancedContent}`;
+}
+
+function renderAdvancedSections(message: ExportedMessage): string {
+  return [
+    renderSourcesSection(message),
+    renderCanvasSection(message),
+    renderThinkingSection(message)
+  ].join("");
+}
+
+function renderSourcesSection(message: ExportedMessage): string {
+  const sources = message.sources ?? [];
+
+  if (sources.length === 0) {
+    return "";
+  }
+
+  return `<section class="advanced-section" aria-label="Sources"><h3>Sources</h3><ul>${sources
+    .map(
+      (source) =>
+        `<li>${escapeHtml(formatSourceKindLabel(source.kind))}: <a href="${safeHref(
+          source.url
+        )}" rel="noreferrer">${escapeHtml(source.title)}</a>${source.snippet ? ` - ${escapeHtml(source.snippet)}` : ""}</li>`
+    )
+    .join("")}</ul></section>`;
+}
+
+function renderCanvasSection(message: ExportedMessage): string {
+  const canvases = message.canvas ?? [];
+
+  if (canvases.length === 0) {
+    return "";
+  }
+
+  return `<section class="advanced-section" aria-label="Canvas"><h3>Canvas</h3><ul>${canvases
+    .map((canvas) => {
+      const title = escapeHtml(canvas.title ?? "Canvas");
+      const link =
+        canvas.url !== undefined
+          ? ` <a href="${safeHref(canvas.url)}" rel="noreferrer">Open canvas</a>`
+          : "";
+      const body = [canvas.text, canvas.warning]
+        .filter((part): part is string => part !== undefined && part.length > 0)
+        .map(escapeHtml)
+        .join(" ");
+
+      return `<li>${title}${link}${body.length > 0 ? ` - ${body}` : ""}</li>`;
+    })
+    .join("")}</ul></section>`;
+}
+
+function renderThinkingSection(message: ExportedMessage): string {
+  const blocks = message.thinkingBlocks ?? [];
+
+  if (blocks.length === 0) {
+    return "";
+  }
+
+  return `<section class="advanced-section" aria-label="Visible thinking or reasoning"><h3>Visible thinking / reasoning</h3><ul>${blocks
+    .map((block) => {
+      const title = block.title !== undefined ? `${block.title}: ` : "";
+      return `<li>${escapeHtml(`${title}${block.text}`)}</li>`;
+    })
+    .join("")}</ul></section>`;
 }
 
 function markdownToHtml(markdown: string, codeBlocks: readonly ExportedCodeBlock[]): string {

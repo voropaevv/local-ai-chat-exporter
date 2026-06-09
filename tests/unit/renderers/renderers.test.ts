@@ -363,6 +363,10 @@ describe("renderHtml", () => {
       .image-refs ul { margin: 0; padding-left: 20px; }
       .image-refs li { overflow-wrap: anywhere; }
       .image-refs img { display: block; height: auto; max-width: min(100%, 640px); }
+      .advanced-section { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
+      .advanced-section h3 { font-size: 0.95rem; margin: 0 0 8px; }
+      .advanced-section ul { margin: 0; padding-left: 20px; }
+      .advanced-section li { overflow-wrap: anywhere; }
       pre { background: #f6f8fa; border: 1px solid #d8dee4; overflow: auto; padding: 12px; }
       code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
       table { border-collapse: collapse; display: block; margin: 12px 0; overflow-x: auto; width: 100%; }

@@ -1,4 +1,12 @@
-import type { ChatRole, ExportedCodeBlock, ExportedImageRef, ExportedMessage } from "./schema";
+import type {
+  ChatRole,
+  ExportedCanvasRef,
+  ExportedCodeBlock,
+  ExportedImageRef,
+  ExportedMessage,
+  ExportedSourceRef,
+  ExportedThinkingBlock
+} from "./schema";
 import { cleanText } from "../utils/text";
 import { stableHash } from "../utils/hash";
 
@@ -7,11 +15,15 @@ export interface NormalizableMessage {
   readonly index?: number;
   readonly role?: string;
   readonly authorLabel?: string;
+  readonly participant?: string;
   readonly text?: string;
   readonly markdown?: string;
   readonly html?: string;
   readonly codeBlocks?: readonly ExportedCodeBlock[];
   readonly images?: readonly ExportedImageRef[];
+  readonly sources?: readonly ExportedSourceRef[];
+  readonly thinkingBlocks?: readonly ExportedThinkingBlock[];
+  readonly canvas?: readonly ExportedCanvasRef[];
   readonly createdAt?: string;
   readonly model?: string;
   readonly metadata?: Record<string, unknown>;
@@ -87,11 +99,19 @@ export function normalizeMessagesWithStats(
       index: normalizedMessages.length,
       role,
       authorLabel: normalizeOptionalString(message.authorLabel) ?? defaultAuthorLabel(role),
+      ...(message.participant !== undefined
+        ? { participant: normalizeOptionalString(message.participant) }
+        : {}),
       text,
       ...(message.markdown !== undefined ? { markdown: cleanText(message.markdown) } : {}),
       ...(message.html !== undefined ? { html: message.html } : {}),
       codeBlocks: normalizeCodeBlocks(message.codeBlocks),
       images: normalizeImageRefs(message.images),
+      ...(message.sources !== undefined ? { sources: normalizeSourceRefs(message.sources) } : {}),
+      ...(message.thinkingBlocks !== undefined
+        ? { thinkingBlocks: normalizeThinkingBlocks(message.thinkingBlocks) }
+        : {}),
+      ...(message.canvas !== undefined ? { canvas: normalizeCanvasRefs(message.canvas) } : {}),
       ...(message.createdAt !== undefined ? { createdAt: message.createdAt } : {}),
       ...(message.model !== undefined ? { model: message.model } : {}),
       metadata: isRecord(message.metadata) ? { ...message.metadata } : {}
@@ -102,6 +122,40 @@ export function normalizeMessagesWithStats(
     duplicateCount,
     messages: normalizedMessages
   };
+}
+
+function normalizeSourceRefs(
+  sources: readonly ExportedSourceRef[] | undefined
+): readonly ExportedSourceRef[] {
+  return (sources ?? []).map((source) => ({
+    ...(source.id !== undefined ? { id: cleanText(source.id) } : {}),
+    kind: source.kind,
+    title: cleanText(source.title),
+    url: cleanText(source.url),
+    ...(source.snippet !== undefined ? { snippet: cleanText(source.snippet) } : {})
+  }));
+}
+
+function normalizeThinkingBlocks(
+  blocks: readonly ExportedThinkingBlock[] | undefined
+): readonly ExportedThinkingBlock[] {
+  return (blocks ?? [])
+    .map((block) => ({
+      ...(block.title !== undefined ? { title: cleanText(block.title) } : {}),
+      text: cleanText(block.text)
+    }))
+    .filter((block) => block.text.length > 0);
+}
+
+function normalizeCanvasRefs(
+  canvases: readonly ExportedCanvasRef[] | undefined
+): readonly ExportedCanvasRef[] {
+  return (canvases ?? []).map((canvas) => ({
+    ...(canvas.title !== undefined ? { title: cleanText(canvas.title) } : {}),
+    ...(canvas.text !== undefined ? { text: cleanText(canvas.text) } : {}),
+    ...(canvas.url !== undefined ? { url: cleanText(canvas.url) } : {}),
+    ...(canvas.warning !== undefined ? { warning: cleanText(canvas.warning) } : {})
+  }));
 }
 
 function normalizeCodeBlocks(

@@ -10,6 +10,7 @@ import {
   renderImageReferenceText,
   sanitizeConversationImagesForOutput
 } from "../core/image-safety";
+import { renderAdvancedTextLines } from "./advanced-content";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -67,7 +68,10 @@ function renderMessage(message: ExportedMessage): readonly string[] {
     ...renderMarkdownTables(message.markdown),
     ...bodyParagraphs.map((paragraph) => renderParagraph(paragraph)),
     ...message.codeBlocks.map(renderCodeBlock),
-    ...renderImageRefs(message.images)
+    ...renderImageRefs(message.images),
+    ...renderAdvancedTextLines(message)
+      .filter((line) => line.length > 0)
+      .map((line) => renderParagraph(line))
   ];
 }
 

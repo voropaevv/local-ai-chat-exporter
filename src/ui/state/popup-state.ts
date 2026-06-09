@@ -37,8 +37,10 @@ export interface PopupOptionsState {
   readonly filenameTemplate: string;
   readonly formats: readonly ExportFormat[];
   readonly bundleFormats: readonly PopupFileFormat[];
+  readonly includeAdvancedContent: boolean;
   readonly includeMetadata: boolean;
   readonly includeCompletenessReport: boolean;
+  readonly includeReasoning: boolean;
   readonly markdownProfile: MarkdownProfile;
   readonly outputMode: PopupOutputMode;
   readonly pdfSettings: PdfSettingsInput;
@@ -87,7 +89,9 @@ export type PopupAction =
   | { readonly type: "set_scope"; readonly scope: ExportOptions["scope"] }
   | { readonly type: "set_markdown_profile"; readonly markdownProfile: MarkdownProfile }
   | { readonly type: "set_filename_template"; readonly filenameTemplate: string }
+  | { readonly type: "set_include_advanced_content"; readonly includeAdvancedContent: boolean }
   | { readonly type: "set_include_metadata"; readonly includeMetadata: boolean }
+  | { readonly type: "set_include_reasoning"; readonly includeReasoning: boolean }
   | { readonly type: "set_pdf_settings"; readonly pdfSettings: PdfSettingsInput }
   | { readonly type: "set_redact"; readonly redact: boolean }
   | { readonly type: "set_redaction_settings"; readonly redaction: RedactionSettings }
@@ -99,8 +103,10 @@ const DEFAULT_OPTIONS: PopupOptionsState = {
   bundleFormats: ["md", "json", "html"],
   filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
   formats: ["md"],
+  includeAdvancedContent: true,
   includeMetadata: true,
   includeCompletenessReport: true,
+  includeReasoning: false,
   markdownProfile: "default",
   outputMode: "separate",
   pdfSettings: DEFAULT_PDF_SETTINGS,
@@ -229,10 +235,20 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         ...state,
         options: { ...state.options, filenameTemplate: action.filenameTemplate }
       };
+    case "set_include_advanced_content":
+      return {
+        ...state,
+        options: { ...state.options, includeAdvancedContent: action.includeAdvancedContent }
+      };
     case "set_include_metadata":
       return {
         ...state,
         options: { ...state.options, includeMetadata: action.includeMetadata }
+      };
+    case "set_include_reasoning":
+      return {
+        ...state,
+        options: { ...state.options, includeReasoning: action.includeReasoning }
       };
     case "set_pdf_settings":
       return {
@@ -431,8 +447,10 @@ export function buildExportOptions(
   return {
     filenameTemplate: state.options.filenameTemplate,
     formats: [...requestedFormats],
+    includeAdvancedContent: state.options.includeAdvancedContent,
     includeCompletenessReport: state.options.includeCompletenessReport,
     includeMetadata: state.options.includeMetadata,
+    includeReasoning: state.options.includeReasoning,
     markdownProfile: state.options.markdownProfile,
     pdfSettings: normalizePdfSettings(state.options.pdfSettings),
     ...(state.options.scope === "range"

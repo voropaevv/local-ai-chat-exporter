@@ -10,6 +10,7 @@ import {
   renderDimensions,
   sanitizeConversationImagesForOutput
 } from "../core/image-safety";
+import { renderAdvancedMarkdown } from "./advanced-content";
 import { renderFrontmatter, type FrontmatterField } from "./frontmatter";
 
 export const MARKDOWN_PROFILES = [
@@ -345,7 +346,8 @@ function renderMessageMarkdown(message: ExportedMessage, options: MessageMarkdow
   const body = normalizeMarkdown(message.markdown ?? message.text);
   const safeBody = options.escapeHtml ? escapeHtmlOutsideCodeFences(body) : body;
   const imageRefs = renderImageRefs(message.images, safeBody);
-  const bodyWithImages = [safeBody, imageRefs].filter(Boolean).join("\n\n");
+  const advancedContent = renderAdvancedMarkdown(message);
+  const bodyWithImages = [safeBody, imageRefs, advancedContent].filter(Boolean).join("\n\n");
 
   if (message.codeBlocks.length === 0 || containsFence(bodyWithImages)) {
     return bodyWithImages;

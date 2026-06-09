@@ -41,16 +41,42 @@ export interface ExportedImageRef {
   readonly height?: number;
 }
 
+export type ExportedSourceKind = "citation" | "web_search" | "deep_research";
+
+export interface ExportedSourceRef {
+  readonly id?: string;
+  readonly kind: ExportedSourceKind;
+  readonly title: string;
+  readonly url: string;
+  readonly snippet?: string;
+}
+
+export interface ExportedThinkingBlock {
+  readonly title?: string;
+  readonly text: string;
+}
+
+export interface ExportedCanvasRef {
+  readonly title?: string;
+  readonly text?: string;
+  readonly url?: string;
+  readonly warning?: string;
+}
+
 export interface ExportedMessage {
   readonly id: string;
   readonly index: number;
   readonly role: ChatRole;
   readonly authorLabel: string;
+  readonly participant?: string;
   readonly text: string;
   readonly markdown?: string;
   readonly html?: string;
   readonly codeBlocks: readonly ExportedCodeBlock[];
   readonly images: readonly ExportedImageRef[];
+  readonly sources?: readonly ExportedSourceRef[];
+  readonly thinkingBlocks?: readonly ExportedThinkingBlock[];
+  readonly canvas?: readonly ExportedCanvasRef[];
   readonly createdAt?: string;
   readonly model?: string;
   readonly metadata: Readonly<Record<string, unknown>>;

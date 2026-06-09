@@ -320,8 +320,14 @@ export function PopupApp() {
             onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
             onClearSelection={handleClearSelection}
             onFormatToggle={(format) => dispatch({ format, type: "set_format" })}
+            onIncludeAdvancedContentChange={(includeAdvancedContent) =>
+              dispatch({ includeAdvancedContent, type: "set_include_advanced_content" })
+            }
             onIncludeMetadataChange={(includeMetadata) =>
               dispatch({ includeMetadata, type: "set_include_metadata" })
+            }
+            onIncludeReasoningChange={(includeReasoning) =>
+              dispatch({ includeReasoning, type: "set_include_reasoning" })
             }
             onMarkdownProfileChange={(markdownProfile) =>
               dispatch({ markdownProfile, type: "set_markdown_profile" })

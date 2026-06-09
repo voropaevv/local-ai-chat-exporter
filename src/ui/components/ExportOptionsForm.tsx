@@ -35,7 +35,9 @@ interface ExportOptionsFormProps {
   readonly onBundleFormatToggle: (format: PopupFileFormat) => void;
   readonly onFormatToggle: (format: ExportFormat) => void;
   readonly onClearSelection: () => void;
+  readonly onIncludeAdvancedContentChange: (value: boolean) => void;
   readonly onIncludeMetadataChange: (value: boolean) => void;
+  readonly onIncludeReasoningChange: (value: boolean) => void;
   readonly onMarkdownProfileChange: (value: MarkdownProfile) => void;
   readonly onOutputModeChange: (value: PopupOutputMode) => void;
   readonly onPdfSettingsChange: (value: PdfSettingsInput) => void;
@@ -53,7 +55,9 @@ export function ExportOptionsForm({
   onClearSelection,
   onBundleFormatToggle,
   onFormatToggle,
+  onIncludeAdvancedContentChange,
   onIncludeMetadataChange,
+  onIncludeReasoningChange,
   onMarkdownProfileChange,
   onOutputModeChange,
   onPdfSettingsChange,
@@ -243,6 +247,31 @@ export function ExportOptionsForm({
         Metadata is written only into local output files and is never sent to a server. It can
         include source URL, title, conversation ID, export time, message count, completeness,
         warnings, and model labels and timestamps when available.
+      </p>
+
+      <label className="check-row">
+        <input
+          checked={options.includeAdvancedContent}
+          onChange={(event) => onIncludeAdvancedContentChange(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span>Include citations, source links, and Canvas notes</span>
+      </label>
+      <p className="muted">
+        Includes visible citations, Web Search links, Deep Research sources, and Canvas fallback
+        warnings in local exports when the page exposes them.
+      </p>
+
+      <label className="check-row">
+        <input
+          checked={options.includeReasoning}
+          onChange={(event) => onIncludeReasoningChange(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span>Include visible thinking / reasoning</span>
+      </label>
+      <p className="muted">
+        Adds Thought, Thinking, or Reasoning blocks only when already visible in the page DOM.
       </p>
 
       <label className="field-row">

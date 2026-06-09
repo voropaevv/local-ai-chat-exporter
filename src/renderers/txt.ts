@@ -1,5 +1,6 @@
 import type { ConversationExport, ExportedCodeBlock, ExportedMessage } from "../core/schema";
 import { sanitizeConversationImagesForOutput } from "../core/image-safety";
+import { renderAdvancedTextLines } from "./advanced-content";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 const MESSAGE_SEPARATOR = "=".repeat(80);
@@ -54,6 +55,8 @@ function renderMessage(message: ExportedMessage): readonly string[] {
   for (const codeBlock of message.codeBlocks) {
     lines.push("", renderCodeBlock(codeBlock));
   }
+
+  lines.push(...renderAdvancedTextLines(message));
 
   return lines;
 }

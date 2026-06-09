@@ -100,4 +100,81 @@ describe("extractVisibleChatGptMessages", () => {
     ]);
     expect(message.text).toContain("Here is the diagram.");
   });
+
+  test("extracts advanced ChatGPT content without leaking thinking into the body", () => {
+    const messages = extractVisibleChatGptMessages(loadFixture("advanced-content.html"));
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      authorLabel: "Ava Researcher",
+      createdAt: "2026-06-01T10:00:00.000Z",
+      participant: "Ava Researcher",
+      role: "user"
+    });
+
+    const assistant = messages[1];
+
+    expect(assistant).toMatchObject({
+      createdAt: "2026-06-01T10:05:00.000Z",
+      model: "GPT-4o Deep Research",
+      metadata: { contentKind: "deep_research" }
+    });
+    expect(assistant.markdown).toContain("| Variant | Evidence |");
+    expect(assistant.markdown).toContain("\\(p < 0.05\\)");
+    expect(assistant.codeBlocks[0]).toEqual({
+      code: 'const risk = "moderate";\nconsole.log(risk);\n',
+      language: "ts"
+    });
+    expect(assistant.text).not.toContain("Need to compare source quality");
+    expect(assistant.markdown).not.toContain("Need to compare source quality");
+    expect(assistant.sources).toEqual([
+      {
+        id: "dr-citation-1",
+        kind: "citation",
+        snippet:
+          "Genome-wide evidence supports a cautious interpretation 1 while current web results show updated guidance.",
+        title: "1",
+        url: "https://example.org/genome-paper"
+      },
+      {
+        id: "deep-source-1",
+        kind: "deep_research",
+        snippet: "Genome Paper Peer-reviewed source for the Deep Research report.",
+        title: "Genome Paper",
+        url: "https://example.org/genome-paper"
+      },
+      {
+        id: "web-source-1",
+        kind: "web_search",
+        snippet: "Current Guidance Web Search source captured from visible source links.",
+        title: "Current Guidance",
+        url: "https://example.com/current-guidance"
+      }
+    ]);
+    expect(assistant.thinkingBlocks).toEqual([
+      {
+        text: "Need to compare source quality before finalizing.",
+        title: "Thinking"
+      }
+    ]);
+    expect(assistant.canvas).toEqual([
+      {
+        title: "Canvas draft",
+        url: "https://chatgpt.com/canvas/local-canvas",
+        warning:
+          "Canvas content was detected but could not be extracted from the current DOM. Open the canvas link or capture it manually."
+      }
+    ]);
+  });
+
+  test("extracts accessible anonymous ChatGPT-like conversations without account state", () => {
+    const messages = extractVisibleChatGptMessages(
+      loadFixture("advanced-content.html", "https://example.com/share/local")
+    );
+
+    expect(messages.map((message) => message.id)).toEqual([
+      "user-advanced-1",
+      "assistant-advanced-1"
+    ]);
+  });
 });

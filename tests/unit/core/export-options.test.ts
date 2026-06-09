@@ -168,6 +168,108 @@ describe("renderConversationFiles", () => {
     expect(exported.messages[0].metadata).toEqual({});
   });
 
+  test("keeps advanced sources and canvas notes but excludes visible thinking by default", () => {
+    const files = renderConversationFiles(
+      makeConversation([
+        makeMessage({
+          authorLabel: "ChatGPT",
+          canvas: [
+            {
+              title: "Canvas draft",
+              url: "https://chatgpt.com/canvas/local",
+              warning:
+                "Canvas content was detected but could not be extracted from the current DOM. Open the canvas link or capture it manually."
+            }
+          ],
+          id: "assistant-advanced",
+          role: "assistant",
+          sources: [
+            {
+              id: "source-1",
+              kind: "deep_research",
+              snippet: "Peer-reviewed source.",
+              title: "Genome Paper",
+              url: "https://example.org/genome-paper"
+            },
+            {
+              id: "source-2",
+              kind: "web_search",
+              title: "Current Guidance",
+              url: "https://example.com/current-guidance"
+            }
+          ],
+          text: "Deep Research answer.",
+          thinkingBlocks: [
+            {
+              text: "Need to compare source quality before finalizing.",
+              title: "Thinking"
+            }
+          ]
+        })
+      ]),
+      makeOptions({ formats: ["json", "md"] })
+    );
+
+    const exported = JSON.parse(expectTextBytes(files[0].bytes)) as ConversationExport;
+    const markdown = expectTextBytes(files[1].bytes);
+
+    expect(exported.messages[0].sources).toHaveLength(2);
+    expect(exported.messages[0].canvas).toHaveLength(1);
+    expect(exported.messages[0].thinkingBlocks).toBeUndefined();
+    expect(markdown).toContain("[^assistant-advanced-source-1]: Deep Research source");
+    expect(markdown).toContain("[Genome Paper](https://example.org/genome-paper)");
+    expect(markdown).toContain("Canvas content was detected but could not be extracted");
+    expect(markdown).not.toContain("Need to compare source quality");
+  });
+
+  test("includes visible thinking only when the reasoning toggle is enabled", () => {
+    const files = renderConversationFiles(
+      makeConversation([
+        makeMessage({
+          authorLabel: "ChatGPT",
+          id: "assistant-thinking",
+          role: "assistant",
+          text: "Final answer.",
+          thinkingBlocks: [
+            {
+              text: "Visible reasoning text.",
+              title: "Thinking"
+            }
+          ]
+        })
+      ]),
+      makeOptions({ formats: ["md"], includeReasoning: true })
+    );
+    const markdown = expectTextBytes(files[0].bytes);
+
+    expect(markdown).toContain("Visible thinking / reasoning");
+    expect(markdown).toContain("Visible reasoning text.");
+  });
+
+  test("can exclude advanced source and canvas sections from exports", () => {
+    const files = renderConversationFiles(
+      makeConversation([
+        makeMessage({
+          canvas: [{ title: "Canvas", warning: "Canvas fallback warning." }],
+          sources: [
+            {
+              kind: "web_search",
+              title: "Current Guidance",
+              url: "https://example.com/current-guidance"
+            }
+          ],
+          text: "Answer."
+        })
+      ]),
+      makeOptions({ formats: ["json"], includeAdvancedContent: false })
+    );
+
+    const exported = JSON.parse(expectTextBytes(files[0].bytes)) as ConversationExport;
+
+    expect(exported.messages[0].sources).toBeUndefined();
+    expect(exported.messages[0].canvas).toBeUndefined();
+  });
+
   test("omits markdown frontmatter and export metadata when metadata is disabled", () => {
     const files = renderConversationFiles(
       makeConversation(),

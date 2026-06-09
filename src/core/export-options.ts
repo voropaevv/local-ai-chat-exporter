@@ -46,7 +46,9 @@ export interface ExportOptions {
   readonly redact: boolean;
   readonly redaction: RedactionSettings;
   readonly filenameTemplate: string;
+  readonly includeAdvancedContent: boolean;
   readonly pdfSettings: PdfSettingsInput;
+  readonly includeReasoning: boolean;
   readonly range?: SelectionRange;
   readonly zipFormats?: readonly LocalRendererFormat[];
 }
@@ -62,6 +64,8 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   markdownProfile: "default",
   includeMetadata: true,
   includeCompletenessReport: true,
+  includeAdvancedContent: true,
+  includeReasoning: false,
   redact: false,
   redaction: DEFAULT_REDACTION_SETTINGS,
   filenameTemplate: "{datetime}_{platform}_{title}.{format}",
@@ -215,6 +219,22 @@ function prepareMessage(
       prepareCodeBlock(codeBlock, options.redaction)
     ),
     images: message.images.map((image) => prepareImageRef(image, options.redaction)),
+    ...(options.includeMetadata && message.participant !== undefined
+      ? { participant: redactIfNeeded(message.participant, options.redaction) }
+      : {}),
+    ...(options.includeAdvancedContent && message.sources !== undefined
+      ? { sources: message.sources.map((source) => prepareSourceRef(source, options.redaction)) }
+      : {}),
+    ...(options.includeAdvancedContent && message.canvas !== undefined
+      ? { canvas: message.canvas.map((canvas) => prepareCanvasRef(canvas, options.redaction)) }
+      : {}),
+    ...(options.includeReasoning && message.thinkingBlocks !== undefined
+      ? {
+          thinkingBlocks: message.thinkingBlocks.map((block) =>
+            prepareThinkingBlock(block, options.redaction)
+          )
+        }
+      : {}),
     ...(options.includeMetadata && message.createdAt !== undefined
       ? { createdAt: redactIfNeeded(message.createdAt, options.redaction) }
       : {}),
@@ -222,6 +242,43 @@ function prepareMessage(
       ? { model: redactIfNeeded(message.model, options.redaction) }
       : {}),
     metadata: options.includeMetadata ? { ...message.metadata } : {}
+  };
+}
+
+function prepareSourceRef(
+  source: NonNullable<ExportedMessage["sources"]>[number],
+  redaction: RedactionSettings
+): NonNullable<ExportedMessage["sources"]>[number] {
+  return {
+    ...(source.id !== undefined ? { id: redactIfNeeded(source.id, redaction) } : {}),
+    kind: source.kind,
+    title: redactIfNeeded(source.title, redaction),
+    url: redactIfNeeded(source.url, redaction),
+    ...(source.snippet !== undefined ? { snippet: redactIfNeeded(source.snippet, redaction) } : {})
+  };
+}
+
+function prepareCanvasRef(
+  canvas: NonNullable<ExportedMessage["canvas"]>[number],
+  redaction: RedactionSettings
+): NonNullable<ExportedMessage["canvas"]>[number] {
+  return {
+    ...(canvas.title !== undefined ? { title: redactIfNeeded(canvas.title, redaction) } : {}),
+    ...(canvas.text !== undefined
+      ? { text: omitDataImagePayloads(redactIfNeeded(canvas.text, redaction)) }
+      : {}),
+    ...(canvas.url !== undefined ? { url: redactIfNeeded(canvas.url, redaction) } : {}),
+    ...(canvas.warning !== undefined ? { warning: redactIfNeeded(canvas.warning, redaction) } : {})
+  };
+}
+
+function prepareThinkingBlock(
+  block: NonNullable<ExportedMessage["thinkingBlocks"]>[number],
+  redaction: RedactionSettings
+): NonNullable<ExportedMessage["thinkingBlocks"]>[number] {
+  return {
+    ...(block.title !== undefined ? { title: redactIfNeeded(block.title, redaction) } : {}),
+    text: omitDataImagePayloads(redactIfNeeded(block.text, redaction))
   };
 }
 

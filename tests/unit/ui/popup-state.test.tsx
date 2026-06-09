@@ -94,6 +94,8 @@ describe("popup state", () => {
         ...createInitialPopupState().options,
         filenameTemplate: "{title}.{format}",
         formats: ["md", "html"],
+        includeAdvancedContent: false,
+        includeReasoning: true,
         markdownProfile: "github",
         redact: true,
         scope: "assistant_only"
@@ -106,6 +108,8 @@ describe("popup state", () => {
       options: {
         filenameTemplate: "{title}.{format}",
         formats: ["md", "html"],
+        includeAdvancedContent: false,
+        includeReasoning: true,
         markdownProfile: "github",
         redact: true,
         scope: "assistant_only"

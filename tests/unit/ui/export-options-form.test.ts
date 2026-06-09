@@ -39,6 +39,9 @@ describe("export options UI source", () => {
     expect(source).toContain("Table of contents");
     expect(source).toContain("CJK");
     expect(source).toContain("formula");
+    expect(source).toContain("Include citations, source links, and Canvas notes");
+    expect(source).toContain("Include visible thinking / reasoning");
+    expect(source).toContain("only when already visible in the page DOM");
     expect(source).not.toContain("format.toUpperCase()");
     expect(source).not.toContain("onRedactChange");
     expect(source).not.toContain("FilenameTemplateBuilder");

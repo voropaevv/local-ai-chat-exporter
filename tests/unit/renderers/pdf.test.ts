@@ -95,6 +95,43 @@ describe("renderPdf", () => {
     expect(body).toContain("Print-ready answer");
   });
 
+  test("renders advanced sources, canvas fallback, and visible thinking in local PDF", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            canvas: [
+              {
+                title: "Canvas draft",
+                url: "https://chatgpt.com/canvas/local",
+                warning:
+                  "Canvas content was detected but could not be extracted from the current DOM. Open the canvas link or capture it manually."
+              }
+            ],
+            sources: [
+              {
+                kind: "deep_research",
+                snippet: "Peer-reviewed source.",
+                title: "Genome Paper",
+                url: "https://example.org/genome-paper"
+              }
+            ],
+            thinkingBlocks: [{ text: "Visible reasoning text.", title: "Thinking" }]
+          })
+        ]
+      })
+    );
+    const body = textFromBytes(rendered.bytes);
+
+    expect(body).toContain("Sources");
+    expect(body).toContain("Deep Research source");
+    expect(body).toContain("Genome Paper");
+    expect(body).toContain("Canvas");
+    expect(body).toContain("Canvas content was detected");
+    expect(body).toContain("Visible thinking / reasoning");
+    expect(body).toContain("Visible reasoning text.");
+  });
+
   test("falls back to local PDF-ready HTML with a visible warning if PDF generation fails", () => {
     const rendered = renderPdfFromNormalizedConversation(makeConversation(), {}, () => {
       throw new Error("synthetic pdf failure");
