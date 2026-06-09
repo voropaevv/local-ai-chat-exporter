@@ -20,11 +20,7 @@ interface FilenameTemplateBuilderProps {
   readonly value: string;
 }
 
-export function FilenameTemplateBuilder({
-  format,
-  onChange,
-  value
-}: FilenameTemplateBuilderProps) {
+export function FilenameTemplateBuilder({ format, onChange, value }: FilenameTemplateBuilderProps) {
   const [customText, setCustomText] = useState("");
   const segments = parseFilenameTemplate(value);
   const preview = createFilenamePreview(value, {
@@ -72,7 +68,9 @@ export function FilenameTemplateBuilder({
             <FilenameTemplateSegmentChip
               index={index}
               key={`${segment.kind}-${index}-${renderSegmentLabel(segment)}`}
-              onMove={(offset) => updateSegments(moveFilenameTemplateSegment(segments, index, offset))}
+              onMove={(offset) =>
+                updateSegments(moveFilenameTemplateSegment(segments, index, offset))
+              }
               onMoveTo={(sourceIndex) => moveSegmentToIndex(sourceIndex, index)}
               onRemove={() => updateSegments(removeFilenameTemplateSegment(segments, index))}
               segment={segment}
@@ -92,6 +90,11 @@ export function FilenameTemplateBuilder({
           </button>
         ))}
       </div>
+      <p className="muted">
+        Click or drag tokens to build the filename. Available tokens: {"{date}"}, {"{time}"},{" "}
+        {"{datetime}"}, {"{platform}"}, {"{title}"}, {"{conversationId}"}, {"{format}"}. Custom text
+        is sanitized before preview and download.
+      </p>
       <label className="field-row">
         <span>Custom text or separator</span>
         <input
@@ -159,10 +162,18 @@ function FilenameTemplateSegmentChip({
       }}
     >
       <span>{renderSegmentLabel(segment)}</span>
-      <button aria-label={`Move segment ${index + 1} left`} onClick={() => onMove(-1)} type="button">
+      <button
+        aria-label={`Move segment ${index + 1} left`}
+        onClick={() => onMove(-1)}
+        type="button"
+      >
         &lt;
       </button>
-      <button aria-label={`Move segment ${index + 1} right`} onClick={() => onMove(1)} type="button">
+      <button
+        aria-label={`Move segment ${index + 1} right`}
+        onClick={() => onMove(1)}
+        type="button"
+      >
         &gt;
       </button>
       <button aria-label={`Remove segment ${index + 1}`} onClick={onRemove} type="button">

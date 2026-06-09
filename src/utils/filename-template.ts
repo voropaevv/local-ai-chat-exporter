@@ -49,6 +49,7 @@ export function sanitizeFilename(value: string): string {
     .split("")
     .map(replaceInvalidFilenameChar)
     .join("")
+    .replace(/\.\.+/g, "-")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^[.-]+/g, "")

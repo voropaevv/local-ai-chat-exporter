@@ -46,16 +46,30 @@ describe("filename template builder helpers", () => {
     const moved = moveFilenameTemplateSegment(segments, 2, -2);
 
     expect(createFilenameTemplate(moved)).toBe("{date}{title}-.{format}");
-    expect(createFilenamePreview("{datetime}_{platform}_{title}.{format}", {
-      conversationId: "abc123",
-      datetime: "2026-06-03T10-20-30",
-      format: "md",
-      platform: "chatgpt",
-      title: "Research Notes"
-    })).toBe("2026-06-03T10-20-30_chatgpt_Research Notes.md");
+    expect(
+      createFilenamePreview("{datetime}_{platform}_{title}.{format}", {
+        conversationId: "abc123",
+        datetime: "2026-06-03T10-20-30",
+        format: "md",
+        platform: "chatgpt",
+        title: "Research Notes"
+      })
+    ).toBe("2026-06-03T10-20-30_chatgpt_Research-Notes.md");
   });
 
-  test("keeps raw template editing out of the default filename builder UI", () => {
+  test("shows a sanitized filename preview for path traversal and invalid custom text", () => {
+    expect(
+      createFilenamePreview("../{title}/../../{conversationId}:{format}", {
+        conversationId: "../conv:1",
+        datetime: "2026-06-03T10-20-30",
+        format: "md",
+        platform: "chatgpt",
+        title: "../Secrets: Research/Notes"
+      })
+    ).toBe("Secrets-Research-Notes-conv-1-md");
+  });
+
+  test("keeps raw template editing out of the default filename builder UI and lists tokens", () => {
     const source = readFileSync(
       resolve(import.meta.dirname, "../../../src/ui/components/FilenameTemplateBuilder.tsx"),
       "utf8"
@@ -63,7 +77,14 @@ describe("filename template builder helpers", () => {
 
     expect(source).toContain("Reset to default");
     expect(source).toContain("+ Custom text");
+    expect(source).toContain("Click or drag tokens");
+    expect(source).toContain("{date}");
+    expect(source).toContain("{time}");
+    expect(source).toContain("{datetime}");
+    expect(source).toContain("{platform}");
+    expect(source).toContain("{title}");
+    expect(source).toContain("{conversationId}");
+    expect(source).toContain("{format}");
     expect(source).not.toContain("Stored template string");
-    expect(source).not.toContain("Tokens:");
   });
 });

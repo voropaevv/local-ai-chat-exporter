@@ -11,6 +11,9 @@ import {
 import { MarkdownProfileSelector } from "./MarkdownProfileSelector";
 import { ScopeSelector } from "./ScopeSelector";
 
+const REDACTION_PRESET_HELP =
+  "Off leaves text unchanged. Basic redacts emails and phone numbers. Strict also redacts token-like secrets. Custom uses the regex list saved in Settings. Strict matches the previous Redact common secrets checkbox behavior.";
+
 interface ExportOptionsFormProps {
   readonly onBundleFormatToggle: (format: PopupFileFormat) => void;
   readonly onFormatToggle: (format: ExportFormat) => void;
@@ -78,9 +81,7 @@ export function ExportOptionsForm({
                   : options.formats.includes(format)
               }
               onChange={() =>
-                options.outputMode === "zip"
-                  ? onBundleFormatToggle(format)
-                  : onFormatToggle(format)
+                options.outputMode === "zip" ? onBundleFormatToggle(format) : onFormatToggle(format)
               }
               type="checkbox"
             />
@@ -110,16 +111,18 @@ export function ExportOptionsForm({
           onChange={(event) => onIncludeMetadataChange(event.currentTarget.checked)}
           type="checkbox"
         />
-        <span title="Adds local export metadata such as platform, source URL, title, export time, model labels when available, and completeness status.">
+        <span title="Adds source URL, title, conversation ID, export time, message count, completeness, warnings, and model labels and timestamps when available.">
           Include metadata
         </span>
       </label>
       <p className="muted">
-        Metadata is written only into local output files and is never sent to a server.
+        Metadata is written only into local output files and is never sent to a server. It can
+        include source URL, title, conversation ID, export time, message count, completeness,
+        warnings, and model labels and timestamps when available.
       </p>
 
       <label className="field-row">
-        <span title="Off leaves text unchanged. Basic redacts emails and phone numbers. Strict also redacts common token-like secrets. Custom uses the regex list saved in Options.">
+        <span title="Off leaves text unchanged. Basic redacts emails and phone numbers. Strict also redacts token-like secrets. Custom uses the regex list saved in Settings.">
           Redaction preset
         </span>
         <select
@@ -134,7 +137,7 @@ export function ExportOptionsForm({
           <option value="custom">Custom</option>
         </select>
       </label>
-      <p className="muted">Strict matches the previous Redact common secrets checkbox behavior.</p>
+      <p className="muted">{REDACTION_PRESET_HELP}</p>
     </section>
   );
 }

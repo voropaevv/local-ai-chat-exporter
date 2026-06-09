@@ -142,6 +142,15 @@ export function OptionsApp() {
         <p className="muted" id="custom-regex-note">
           One JavaScript regex per line. Matches use [REDACTED_SECRET].
         </p>
+        <div className="settings-examples" aria-label="Redaction preset examples">
+          <p className="muted">Examples</p>
+          <ul className="compact-list">
+            <li>Off: keeps admin@example.com and sk-proj-example unchanged.</li>
+            <li>Basic: redacts admin@example.com and +1 415 555 2671.</li>
+            <li>Strict: redacts Basic matches plus token-like secrets.</li>
+            <li>Custom: applies Basic redaction plus the regex list above.</li>
+          </ul>
+        </div>
         <p className="status-text" role="status">
           {redactionSaveStatus}
         </p>

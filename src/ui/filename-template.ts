@@ -1,4 +1,5 @@
 import type { ExportFormat } from "../core/schema";
+import { sanitizeFilename, sanitizeFilenamePart } from "../utils/filename-template";
 
 export const DEFAULT_FILENAME_TEMPLATE = "{datetime}_{platform}_{title}.{format}";
 
@@ -119,25 +120,24 @@ export function removeFilenameTemplateSegment(
   return segments.filter((_segment, segmentIndex) => segmentIndex !== index);
 }
 
-export function createFilenamePreview(
-  template: string,
-  context: FilenamePreviewContext
-): string {
+export function createFilenamePreview(template: string, context: FilenamePreviewContext): string {
   const date = context.date ?? context.datetime.slice(0, 10);
   const time = context.time ?? context.datetime.slice(11).replace(/Z$/u, "");
   const values: Readonly<Record<FilenameTemplateToken, string>> = {
-    conversationId: context.conversationId ?? "conversation",
-    date,
-    datetime: context.datetime,
-    format: context.format,
-    platform: context.platform,
-    time,
-    title: context.title
+    conversationId: sanitizeFilenamePart(context.conversationId ?? "conversation"),
+    date: sanitizeFilenamePart(date),
+    datetime: sanitizeFilenamePart(context.datetime),
+    format: sanitizeFilenamePart(context.format),
+    platform: sanitizeFilenamePart(context.platform),
+    time: sanitizeFilenamePart(time),
+    title: sanitizeFilenamePart(context.title)
   };
 
-  return parseFilenameTemplate(template)
-    .map((segment) => (segment.kind === "token" ? values[segment.token] : segment.value))
-    .join("");
+  return sanitizeFilename(
+    parseFilenameTemplate(template)
+      .map((segment) => (segment.kind === "token" ? values[segment.token] : segment.value))
+      .join("")
+  );
 }
 
 export function getFilenameTemplateTokenLabel(token: FilenameTemplateToken): string {

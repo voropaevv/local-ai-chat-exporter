@@ -32,6 +32,13 @@ describe("redactText", () => {
     );
   });
 
+  test("strict preset does not redact normal prose, dates, versions, or short identifiers", () => {
+    const normalText =
+      "Meeting on 2026-06-03 about LogThread v0.1.0, issue LT-42, and export format markdown.";
+
+    expect(redactText(normalText, { preset: "strict" })).toBe(normalText);
+  });
+
   test("custom preset applies local regex patterns with secret placeholders", () => {
     expect(
       redactText("Project ACME-123 belongs to admin@example.com.", {

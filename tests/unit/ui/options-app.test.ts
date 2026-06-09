@@ -16,6 +16,11 @@ describe("options app source", () => {
     expect(optionsSource).toContain('id="filename-settings"');
     expect(optionsSource).toContain("FilenameTemplateBuilder");
     expect(optionsSource).toContain("writeStoredExportSettings");
+    expect(optionsSource).toContain("Examples");
+    expect(optionsSource).toContain("Off: keeps");
+    expect(optionsSource).toContain("Basic: redacts");
+    expect(optionsSource).toContain("Strict: redacts");
+    expect(optionsSource).toContain("Custom: applies");
     expect(popupSource).not.toContain("FilenameTemplateBuilder");
   });
 });

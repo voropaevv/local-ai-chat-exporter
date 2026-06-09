@@ -14,6 +14,17 @@ describe("export options UI source", () => {
     expect(source).toContain("Redaction preset");
     expect(source).toContain("Strict matches the previous Redact common secrets checkbox behavior");
     expect(source).toContain("Metadata is written only into local output files");
+    expect(source).toContain("source URL");
+    expect(source).toContain("conversation ID");
+    expect(source).toContain("export time");
+    expect(source).toContain("message count");
+    expect(source).toContain("completeness");
+    expect(source).toContain("warnings");
+    expect(source).toContain("model labels and timestamps");
+    expect(source).toContain("Off leaves text unchanged");
+    expect(source).toContain("Basic redacts emails and phone numbers");
+    expect(source).toContain("Strict also redacts token-like secrets");
+    expect(source).toContain("Custom uses the regex list saved in Settings");
     expect(source).toContain("ZIP bundle");
     expect(source).not.toContain("onRedactChange");
     expect(source).not.toContain("FilenameTemplateBuilder");
