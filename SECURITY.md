@@ -9,7 +9,8 @@ LogThread is designed to be local-first:
 - No LogThread account is required.
 - No broad permissions such as `all_urls`, `cookies`, `history`, `webRequest`, or `debugger`.
 - All export actions are user-initiated.
-- Conversation content is not persisted unless a future explicit local library feature is implemented.
+- Conversation content is not persisted by default. The optional Local Library stores full
+  conversation content locally in browser IndexedDB only after explicit user action.
 
 ## Reporting Issues
 

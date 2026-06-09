@@ -18,9 +18,11 @@
     "icons:build": "node scripts/build-icons.mjs",
     "icons:check": "node scripts/check-palette.mjs",
     "palette:check": "node scripts/check-palette.mjs",
+    "site:build": "node scripts/build-site.mjs",
+    "store-assets:build": "node scripts/build-store-assets.mjs",
     "check:content-script": "node scripts/check-content-script-classic.mjs",
     "check:preview": "node scripts/check-preview-build.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm icons:check && pnpm build && pnpm check:content-script && pnpm check:preview"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm icons:check && pnpm build && pnpm check:content-script && pnpm check:preview && pnpm site:build"
   },
   "dependencies": {
     "fflate": "^0.8.3",

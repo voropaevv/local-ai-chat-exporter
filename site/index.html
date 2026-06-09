@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LogThread - Local AI chat exports</title>
+    <meta
+      name="description"
+      content="LogThread exports AI chats locally with no account, no upload, and no telemetry."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="LogThread home">
+        <img src="assets/icon.svg" alt="" />
+        <span>LogThread</span>
+      </a>
+      <nav aria-label="Primary">
+        <a href="#formats">Formats</a>
+        <a href="#privacy-model">Privacy</a>
+        <a href="#comparison">Compare</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Free, open-source browser extension</p>
+          <h1>Export AI chats locally. No account. No upload. Open source.</h1>
+          <p>
+            LogThread turns the chat you are viewing into clean Markdown, JSON, HTML, PDF, DOCX,
+            PNG, or ZIP files. Export starts only when you click.
+          </p>
+          <div class="hero-actions" aria-label="Project links">
+            <a class="button button-primary" href="#formats">See formats</a>
+            <a class="button" href="#github-sponsor">GitHub / Sponsor</a>
+          </div>
+        </div>
+        <div class="product-shot" aria-label="LogThread popup preview">
+          <div class="shot-window">
+            <div class="shot-top">
+              <img src="assets/icon.svg" alt="" />
+              <strong>LogThread</strong>
+              <span>Simple</span>
+            </div>
+            <div class="shot-card">
+              <b>Scan</b>
+              <button>Scan conversation</button>
+              <p>Scanned 51 messages. Ready to export.</p>
+            </div>
+            <div class="shot-card muted-card">
+              <b>Export</b>
+              <p>Markdown, HTML, PDF, DOCX, ZIP and local image snapshots.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="formats" class="section-grid">
+        <div>
+          <p class="eyebrow">Formats</p>
+          <h2>Clean files for notes, audits, and research logs.</h2>
+        </div>
+        <div class="cards">
+          <article>Markdown and Obsidian profiles</article>
+          <article>TXT, JSON, CSV, and semantic HTML</article>
+          <article>Local PDF, DOCX, PNG, and ZIP bundles</article>
+        </div>
+      </section>
+
+      <section id="privacy-model" class="section-grid">
+        <div>
+          <p class="eyebrow">Privacy model</p>
+          <h2>No telemetry, no remote rendering, no export server.</h2>
+        </div>
+        <p>
+          The extension processes the current tab locally after an explicit user action. Browser
+          storage is used for preferences and only stores conversation content if you opt into the
+          Local Library.
+        </p>
+      </section>
+
+      <section id="long-chat-support" class="section-grid">
+        <div>
+          <p class="eyebrow">Long chat support</p>
+          <h2>Scroll collection and completeness checks for long threads.</h2>
+        </div>
+        <p>
+          LogThread tracks first and last messages, duplicate counts, scan warnings, selected ranges,
+          and platform-specific limitations so exports do not silently overclaim coverage.
+        </p>
+      </section>
+
+      <section id="research-exports" class="section-grid">
+        <div>
+          <p class="eyebrow">Research exports</p>
+          <h2>Preserve citations, code, tables, reasoning settings, and metadata.</h2>
+        </div>
+        <p>
+          Advanced ChatGPT extraction keeps rich content structured where fixtures support it, while
+          redaction settings help prepare safer files for review.
+        </p>
+      </section>
+
+      <section id="obsidian-markdown" class="section-grid">
+        <div>
+          <p class="eyebrow">Obsidian / Markdown</p>
+          <h2>Profiles for default archives, Obsidian, GitHub, GitBook, and research logs.</h2>
+        </div>
+        <p>
+          Filename templates and frontmatter options make exports predictable without turning the
+          popup into a cloud workspace.
+        </p>
+      </section>
+
+      <section id="batch-export" class="section-grid">
+        <div>
+          <p class="eyebrow">Batch export</p>
+          <h2>Export already-open AI chat tabs into one ZIP.</h2>
+        </div>
+        <p>
+          Batch export remains user-initiated, requests optional permissions only when needed, and
+          includes manifest warnings when a selected tab fails.
+        </p>
+      </section>
+
+      <section id="comparison" class="section-grid">
+        <div>
+          <p class="eyebrow">Compare with paid exporters</p>
+          <h2>A local-first option when you do not need hosted sync.</h2>
+        </div>
+        <div class="comparison-table" role="table" aria-label="Comparison with paid exporters">
+          <div role="row">
+            <span role="columnheader">Area</span>
+            <span role="columnheader">LogThread</span>
+            <span role="columnheader">Hosted exporters</span>
+          </div>
+          <div role="row">
+            <span role="cell">Core exports</span>
+            <span role="cell">Free in v1</span>
+            <span role="cell">Often bundled with paid plans</span>
+          </div>
+          <div role="row">
+            <span role="cell">Data path</span>
+            <span role="cell">Local extension files</span>
+            <span role="cell">May include hosted processing or sync</span>
+          </div>
+          <div role="row">
+            <span role="cell">Best fit</span>
+            <span role="cell">Personal archives and local research notes</span>
+            <span role="cell">Teams that need managed cloud workflows</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="faq" class="section-grid">
+        <div>
+          <p class="eyebrow">FAQ</p>
+          <h2>Common questions before installing.</h2>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>Does LogThread upload chats?</summary>
+            <p>No. Export rendering runs locally in the extension.</p>
+          </details>
+          <details>
+            <summary>Is there a pricing wall?</summary>
+            <p>No pricing wall in v1. Donation and support links are optional.</p>
+          </details>
+          <details>
+            <summary>Does it export account history?</summary>
+            <p>No. It exports the current supported chat tab after you click.</p>
+          </details>
+        </div>
+      </section>
+
+      <section id="github-sponsor" class="section-grid">
+        <div>
+          <p class="eyebrow">GitHub / Sponsor</p>
+          <h2>Open-source project with optional support.</h2>
+        </div>
+        <p>
+          Review the source, build locally, and sponsor ongoing maintenance if the tool saves you
+          time. Core export features stay free in v1.
+        </p>
+      </section>
+
+      <section id="privacy" class="section-grid">
+        <div>
+          <p class="eyebrow">Privacy</p>
+          <h2>Local processing after explicit user action.</h2>
+        </div>
+        <p>
+          No account, telemetry, analytics, ads, trackers, session replay, remote logging, remote
+          code, or export server.
+        </p>
+      </section>
+
+      <section id="security" class="section-grid">
+        <div>
+          <p class="eyebrow">Security</p>
+          <h2>Minimal Manifest V3 permissions.</h2>
+        </div>
+        <p>
+          LogThread avoids broad hosts and sensitive permissions. Optional downloads, tabs, and host
+          access are requested only for user-facing workflows.
+        </p>
+      </section>
+
+      <section id="changelog" class="section-grid">
+        <div>
+          <p class="eyebrow">Changelog</p>
+          <h2>Current release: 0.1.0.</h2>
+        </div>
+        <p>
+          Rebrand to LogThread, local PDF/image/ZIP improvements, advanced ChatGPT content, provider
+          status hardening, and an opt-in Local Library.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

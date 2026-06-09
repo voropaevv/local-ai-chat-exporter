@@ -10,11 +10,15 @@ LogThread is a local-first browser extension for exporting AI chat threads to fi
 - No LogThread account is required.
 - LogThread does not include telemetry, analytics, ads, trackers, session replay, or remote logging.
 - Conversation content is not stored by default.
+- The optional Local Library stores full conversation content locally in browser IndexedDB only
+  after the user clicks `Save to local library`.
 - PDF and other export formats are produced locally from the captured conversation data in the extension.
 
 ## Browser Storage
 
-LogThread uses extension storage only for local preferences such as filename settings and redaction settings. These settings do not contain conversation transcript content by design.
+LogThread uses extension storage for local preferences such as filename settings and redaction
+settings. These settings do not contain conversation transcript content by design. Local Library
+records are separate, opt-in browser IndexedDB records that can be deleted or exported as a backup.
 
 ## Permissions
 
