@@ -14,6 +14,17 @@ import { ScopeSelector } from "./ScopeSelector";
 const REDACTION_PRESET_HELP =
   "Off leaves text unchanged. Basic redacts emails and phone numbers. Strict also redacts token-like secrets. Custom uses the regex list saved in Settings. Strict matches the previous Redact common secrets checkbox behavior.";
 
+const POPUP_FORMAT_LABELS: Readonly<Record<PopupFileFormat, string>> = {
+  csv: "CSV",
+  docx: "DOCX",
+  html: "HTML",
+  json: "JSON",
+  md: "MD",
+  pdf: "Print-ready HTML",
+  png: "PNG",
+  txt: "TXT"
+};
+
 interface ExportOptionsFormProps {
   readonly onBundleFormatToggle: (format: PopupFileFormat) => void;
   readonly onFormatToggle: (format: ExportFormat) => void;
@@ -85,7 +96,7 @@ export function ExportOptionsForm({
               }
               type="checkbox"
             />
-            <span>{format.toUpperCase()}</span>
+            <span>{getPopupFormatLabel(format)}</span>
           </label>
         ))}
       </fieldset>
@@ -140,4 +151,8 @@ export function ExportOptionsForm({
       <p className="muted">{REDACTION_PRESET_HELP}</p>
     </section>
   );
+}
+
+function getPopupFormatLabel(format: PopupFileFormat): string {
+  return POPUP_FORMAT_LABELS[format];
 }

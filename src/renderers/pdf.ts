@@ -10,20 +10,26 @@ export function renderPdf(
   const html = renderHtml(conversation, options).bytes;
   const bytes = html.replace(
     "<p>This export was generated locally by extension.</p>",
-    "<p>This export was generated locally by extension.</p>\n        <p>Use your browser print dialog to save this page as PDF.</p>"
+    "<p>This export was generated locally by extension.</p>\n        <p>Print-ready HTML export. Use your browser print dialog to save this page as PDF.</p>"
   );
 
   return {
     format: "pdf",
-    filename: `${renderFilenameTemplate(options.filenameTemplate ?? "", {
-      conversationId: conversation.conversationId,
-      exportedAt: conversation.exportedAt,
-      format: "pdf",
-      platform: conversation.platform,
-      title: conversation.title
-    })}.html`,
+    filename: ensureHtmlExtension(
+      renderFilenameTemplate(options.filenameTemplate ?? "", {
+        conversationId: conversation.conversationId,
+        exportedAt: conversation.exportedAt,
+        format: "print-ready-html",
+        platform: conversation.platform,
+        title: conversation.title
+      })
+    ),
     mimeType: "text/html;charset=utf-8",
     encoding: "utf-8",
     bytes
   };
+}
+
+function ensureHtmlExtension(filename: string): string {
+  return filename.endsWith(".html") ? filename : `${filename}.html`;
 }

@@ -48,12 +48,18 @@ describe("renderPdf", () => {
     const rendered = renderPdf(makeConversation());
 
     expect(rendered.format).toBe("pdf");
-    expect(rendered.filename).toBe("2026-05-31T10-20-30Z_chatgpt_PDF-Export.pdf.html");
+    expect(rendered.filename).toBe("2026-05-31T10-20-30Z_chatgpt_PDF-Export.print-ready-html.html");
+    expect(rendered.filename).not.toContain(".pdf.html");
     expect(rendered.mimeType).toBe("text/html;charset=utf-8");
+    expect(rendered.bytes).toContain("Print-ready HTML export");
     expect(rendered.bytes).toContain("Use your browser print dialog to save this page as PDF.");
     expect(rendered.bytes).toContain("@media print");
     expect(rendered.bytes).toContain("<pre><code");
     expect(rendered.bytes).not.toContain("https://fonts.");
     expect(rendered.bytes).not.toContain("<script");
+    expect(rendered.bytes).not.toContain("data-testid");
+    expect(rendered.bytes).not.toContain("markdown prose");
+    expect(rendered.bytes).not.toContain("flex w-full");
+    expect(rendered.bytes).not.toContain("user-message-bubble-color");
   });
 });

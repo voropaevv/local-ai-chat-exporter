@@ -86,7 +86,7 @@ describe("popup state", () => {
     expect(stillHasJson.options.formats).toEqual(["json"]);
   });
 
-  test("builds download, copy markdown, and print-ready PDF requests", () => {
+  test("builds download, copy markdown, and print-ready HTML requests", () => {
     const state: PopupState = {
       ...createInitialPopupState(),
       options: {

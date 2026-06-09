@@ -26,6 +26,9 @@ describe("export options UI source", () => {
     expect(source).toContain("Strict also redacts token-like secrets");
     expect(source).toContain("Custom uses the regex list saved in Settings");
     expect(source).toContain("ZIP bundle");
+    expect(source).toContain("getPopupFormatLabel");
+    expect(source).toContain("Print-ready HTML");
+    expect(source).not.toContain("format.toUpperCase()");
     expect(source).not.toContain("onRedactChange");
     expect(source).not.toContain("FilenameTemplateBuilder");
     expect(source).not.toContain("onFilenameTemplateChange");

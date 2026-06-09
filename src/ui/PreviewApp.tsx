@@ -96,7 +96,7 @@ export function PreviewApp() {
     }
 
     openRenderedFile(renderState.pdf);
-    setActionStatus("Opened print-ready PDF from scanned snapshot.");
+    setActionStatus("Opened print-ready HTML from scanned snapshot.");
   }
 
   function handleClose() {
@@ -118,7 +118,12 @@ export function PreviewApp() {
           </div>
         </div>
         <div className="preview-toolbar" aria-label="Preview actions">
-          <button className="primary-action" disabled={!isReady} onClick={handleDownload} type="button">
+          <button
+            className="primary-action"
+            disabled={!isReady}
+            onClick={handleDownload}
+            type="button"
+          >
             Download
           </button>
           <button
@@ -129,8 +134,13 @@ export function PreviewApp() {
           >
             Copy Markdown
           </button>
-          <button className="secondary-action" disabled={!isReady} onClick={handleOpenPdf} type="button">
-            Open print-ready PDF
+          <button
+            className="secondary-action"
+            disabled={!isReady}
+            onClick={handleOpenPdf}
+            type="button"
+          >
+            Open print-ready HTML
           </button>
           <button className="secondary-action" onClick={handleClose} type="button">
             Close

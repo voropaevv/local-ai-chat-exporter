@@ -20,7 +20,7 @@ export function ActionBar({ disabled, onCopyMarkdown, onDownload, onOpenPdf }: A
         Copy Markdown
       </button>
       <button className="secondary-action" disabled={disabled} onClick={onOpenPdf} type="button">
-        Open print-ready PDF
+        Open print-ready HTML
       </button>
     </section>
   );
