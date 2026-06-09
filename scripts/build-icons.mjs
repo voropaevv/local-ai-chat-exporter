@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const sourceIconPath = resolve(projectRoot, "assets/icon/icon.svg");
+const sourceIconPath = resolve(projectRoot, "src/assets/brand/icon-source.svg");
 const outputDir = resolve(projectRoot, "extension/icons");
 const iconSizes = [16, 32, 48, 128, 512];
 

@@ -64,6 +64,7 @@ describe("landing site and store assets", () => {
     for (const asset of [
       "site/store-assets/icons/icon-128.png",
       "site/store-assets/icons/icon-512.png",
+      "site/store-assets/icons/store-icon-128.png",
       "site/store-assets/store-screens/01-simple-popup.png",
       "site/store-assets/store-screens/02-advanced-export.png",
       "site/store-assets/store-screens/03-preview.png",

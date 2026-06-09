@@ -1,14 +1,17 @@
 :root {
   color-scheme: light;
-  --ink: #102033;
-  --muted: #58667a;
-  --panel: #ffffff;
-  --paper: #f4f7fb;
-  --line: #d4deea;
-  --blue: #2f62f2;
-  --indigo: #5746d8;
-  --violet: #7b35d8;
-  --teal: #117d75;
+  --ink: #111827;
+  --muted: #64748B;
+  --panel: #FFFFFF;
+  --paper: #1A1040;
+  --soft: #F8FAFC;
+  --line: #E5E7EB;
+  --blue: #06B6D4;
+  --indigo: #0E7490;
+  --violet: #0EA5E9;
+  --teal: #0E7490;
+  --fold: #D7DEEA;
+  --rear: #B8C4D6;
   font-family:
     Inter,
     ui-sans-serif,
@@ -18,7 +21,7 @@
     "Segoe UI",
     sans-serif;
   background: var(--paper);
-  color: var(--ink);
+  color: var(--soft);
 }
 
 * {
@@ -44,7 +47,7 @@ a {
   justify-content: space-between;
   gap: 24px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--paper) 94%, white);
+  background: color-mix(in srgb, var(--paper) 92%, black);
   padding: 16px clamp(20px, 5vw, 72px);
 }
 
@@ -69,7 +72,7 @@ a {
 
 .site-header nav {
   flex-wrap: wrap;
-  color: var(--muted);
+  color: var(--fold);
   font-size: 14px;
   font-weight: 700;
 }
@@ -99,7 +102,7 @@ main {
 
 .eyebrow {
   margin: 0;
-  color: var(--teal);
+  color: var(--blue);
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -126,9 +129,8 @@ h2 {
 }
 
 .hero-copy > p:not(.eyebrow),
-.section-grid > p,
-.faq-list p {
-  color: var(--muted);
+.section-grid > p {
+  color: var(--fold);
   font-size: 18px;
   line-height: 1.55;
 }
@@ -148,7 +150,7 @@ h2 {
 
 .button-primary {
   border: 0;
-  background: linear-gradient(135deg, var(--blue), var(--indigo) 56%, var(--violet));
+  background: linear-gradient(135deg, var(--blue), var(--violet));
   color: white;
 }
 
@@ -164,7 +166,8 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--panel);
-  box-shadow: 0 22px 50px rgb(16 32 51 / 0.14);
+  color: var(--ink);
+  box-shadow: 0 22px 50px rgb(26 16 64 / 0.2);
   padding: 18px;
 }
 
@@ -183,7 +186,7 @@ h2 {
 .shot-top span {
   border-radius: 999px;
   padding: 5px 10px;
-  background: #e8edff;
+  background: var(--fold);
   color: var(--indigo);
   font-size: 12px;
   font-weight: 800;
@@ -207,7 +210,7 @@ h2 {
 }
 
 .muted-card {
-  background: #f7f9fc;
+  background: var(--soft);
 }
 
 .section-grid {
@@ -230,6 +233,7 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
+  color: var(--ink);
   padding: 16px;
 }
 
@@ -258,7 +262,7 @@ h2 {
 }
 
 .comparison-table div:first-child span {
-  background: #f7f9fc;
+  background: var(--soft);
   color: var(--ink);
   font-weight: 800;
 }
@@ -273,6 +277,12 @@ h2 {
   gap: 10px;
   margin: 0;
   padding-left: 18px;
+  color: var(--fold);
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.faq-list p {
   color: var(--muted);
   font-size: 18px;
   line-height: 1.55;
@@ -296,12 +306,12 @@ h2 {
 
 .site-footer strong {
   display: block;
-  color: var(--ink);
+  color: var(--soft);
   font-size: 18px;
 }
 
 .site-footer p {
-  color: var(--muted);
+  color: var(--fold);
   font-size: 14px;
   line-height: 1.4;
 }

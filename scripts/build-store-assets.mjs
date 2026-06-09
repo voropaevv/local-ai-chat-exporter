@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const sourceIconPath = resolve(projectRoot, "assets/icon/icon.svg");
+const sourceIconPath = resolve(projectRoot, "src/assets/brand/icon-source.svg");
 const outputRoot = resolve(projectRoot, "site/store-assets");
 const iconOutputRoot = resolve(outputRoot, "icons");
 const screenOutputRoot = resolve(outputRoot, "store-screens");
@@ -72,6 +72,16 @@ async function main() {
     await writeFile(resolve(iconOutputRoot, `icon-${size}.png`), renderer.render().asPng());
   }
 
+  const storeIconRenderer = new Resvg(renderStoreIconSvg(iconSvg), {
+    background: "transparent",
+    fitTo: { mode: "width", value: 128 },
+    font: { loadSystemFonts: false }
+  });
+  await writeFile(
+    resolve(iconOutputRoot, "store-icon-128.png"),
+    storeIconRenderer.render().asPng()
+  );
+
   for (const screenshot of screenshots) {
     const renderer = new Resvg(renderScreenshotSvg(screenshot), {
       background: "white",
@@ -81,7 +91,29 @@ async function main() {
     await writeFile(resolve(screenOutputRoot, screenshot.file), renderer.render().asPng());
   }
 
-  console.log(`Wrote ${iconSizes.length} icons and ${screenshots.length} screenshots.`);
+  console.log(`Wrote ${iconSizes.length + 1} icons and ${screenshots.length} screenshots.`);
+}
+
+function renderStoreIconSvg(svg) {
+  const innerSvg = extractInnerSvg(svg);
+  const scale = 96 / 448;
+
+  return `
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(16 16) scale(${scale})">
+    ${innerSvg}
+  </g>
+</svg>`;
+}
+
+function extractInnerSvg(svg) {
+  const match = svg.match(/<svg\b[^>]*>(?<body>[\s\S]*)<\/svg>\s*$/u);
+
+  if (match?.groups?.body === undefined) {
+    throw new Error("Could not extract source SVG body.");
+  }
+
+  return match.groups.body;
 }
 
 function renderScreenshotSvg({ title, subtitle, panelTitle, bullets }) {
@@ -89,7 +121,7 @@ function renderScreenshotSvg({ title, subtitle, panelTitle, bullets }) {
     .map(
       (bullet, index) => `
         <g transform="translate(760 ${276 + index * 72})">
-          <circle cx="0" cy="0" r="10" fill="#10B981"/>
+          <circle cx="0" cy="0" r="10" fill="#06B6D4"/>
           <text x="28" y="8" class="body">${escapeXml(bullet)}</text>
         </g>`
     )
@@ -99,42 +131,43 @@ function renderScreenshotSvg({ title, subtitle, panelTitle, bullets }) {
 <svg width="1280" height="800" viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="brand" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#2F62F2"/>
-      <stop offset="0.55" stop-color="#5746D8"/>
-      <stop offset="1" stop-color="#7B35D8"/>
+      <stop offset="0" stop-color="#06B6D4"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
     </linearGradient>
     <style>
-      .title { font: 800 58px Inter, Arial, sans-serif; fill: #102033; }
-      .subtitle { font: 500 25px Inter, Arial, sans-serif; fill: #58667A; }
-      .label { font: 800 22px Inter, Arial, sans-serif; fill: #102033; }
-      .body { font: 650 24px Inter, Arial, sans-serif; fill: #102033; }
+      .title { font: 800 58px Inter, Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 500 25px Inter, Arial, sans-serif; fill: #64748B; }
+      .label { font: 800 22px Inter, Arial, sans-serif; fill: #111827; }
+      .body { font: 650 24px Inter, Arial, sans-serif; fill: #111827; }
       .body-invert { font: 650 24px Inter, Arial, sans-serif; fill: #FFFFFF; }
-      .muted { font: 600 18px Inter, Arial, sans-serif; fill: #58667A; }
+      .muted { font: 600 18px Inter, Arial, sans-serif; fill: #64748B; }
     </style>
   </defs>
-  <rect width="1280" height="800" fill="#F4F7FB"/>
-  <rect x="72" y="64" width="1136" height="672" rx="34" fill="#FFFFFF" stroke="#D4DEEA"/>
+  <rect width="1280" height="800" fill="#1A1040"/>
+  <rect x="72" y="64" width="1136" height="672" rx="34" fill="#FFFFFF" stroke="#E5E7EB"/>
   <g transform="translate(112 104)">
-    <rect width="72" height="72" rx="16" fill="url(#brand)"/>
-    <rect x="18" y="18" width="38" height="29" rx="6" fill="#FFFFFF"/>
-    <path d="M24 52 L33 44 H55" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round"/>
+    <rect width="72" height="72" rx="16" fill="#1A1040"/>
+    <path d="M25 16 L51 16 L58 23 L58 58 L25 58 Z" fill="#FFFFFF"/>
+    <path d="M51 16 L58 23 L51 23 Z" fill="#B8C4D6"/>
+    <rect x="25" y="49" width="33" height="9" fill="#06B6D4"/>
+    <path d="M17 26 H41 V41 H24 L18 49 V41 H17 Z" fill="#06B6D4"/>
     <text x="92" y="45" class="label">LogThread</text>
     <text x="92" y="70" class="muted">Local AI chat exporter</text>
   </g>
   <text x="112" y="252" class="title">${escapeXml(title)}</text>
   <foreignObject x="112" y="286" width="560" height="160">
-    <div xmlns="http://www.w3.org/1999/xhtml" style="font:500 25px Inter,Arial,sans-serif;color:#58667A;line-height:1.38">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font:500 25px Inter,Arial,sans-serif;color:#64748B;line-height:1.38">
       ${escapeXml(subtitle)}
     </div>
   </foreignObject>
   <g transform="translate(112 494)">
-    <rect width="470" height="134" rx="20" fill="#F8FAFD" stroke="#D4DEEA"/>
+    <rect width="470" height="134" rx="20" fill="#F8FAFC" stroke="#E5E7EB"/>
     <text x="28" y="48" class="label">No account. No upload.</text>
     <text x="28" y="84" class="muted">Exports run locally after user action.</text>
   </g>
   <g transform="translate(704 144)">
-    <rect width="424" height="504" rx="28" fill="#F8FAFD" stroke="#D4DEEA"/>
-    <rect x="34" y="34" width="356" height="72" rx="16" fill="#FFFFFF" stroke="#D4DEEA"/>
+    <rect width="424" height="504" rx="28" fill="#F8FAFC" stroke="#E5E7EB"/>
+    <rect x="34" y="34" width="356" height="72" rx="16" fill="#FFFFFF" stroke="#E5E7EB"/>
     <text x="58" y="78" class="label">${escapeXml(panelTitle)}</text>
     <rect x="34" y="136" width="356" height="62" rx="14" fill="url(#brand)"/>
     <text x="58" y="176" class="body-invert">Export locally</text>

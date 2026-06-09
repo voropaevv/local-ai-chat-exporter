@@ -4,6 +4,8 @@
 
 - 128 icon: `site/store-assets/icons/icon-128.png`
 - 512 icon: `site/store-assets/icons/icon-512.png`
+- Chrome Web Store 128 icon with 96px content and transparent padding:
+  `site/store-assets/icons/store-icon-128.png`
 - Screenshots:
   - `site/store-assets/store-screens/01-simple-popup.png`
   - `site/store-assets/store-screens/02-advanced-export.png`
