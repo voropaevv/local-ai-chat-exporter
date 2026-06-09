@@ -155,4 +155,36 @@ describe("security release scripts", () => {
       expect(result.stderr).toContain("dynamic import");
     });
   });
+
+  test("check-export-output-hygiene passes clean local export files", () => {
+    withTempDir((directory) => {
+      writeFileSync(resolve(directory, "conversation.md"), "# Clean export\n\nNo embedded images.\n");
+      writeFileSync(
+        resolve(directory, "conversation.html"),
+        "<!doctype html><article><p>Clean exported text.</p></article>\n"
+      );
+
+      const result = runNodeScript("scripts/check-export-output-hygiene.mjs", [directory]);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Export output hygiene checks passed");
+    });
+  });
+
+  test("check-export-output-hygiene fails embedded image data and provider DOM markers", () => {
+    withTempDir((directory) => {
+      writeFileSync(
+        resolve(directory, "bad.html"),
+        '<div class="markdown prose text-token-text-primary"><img src="data:image/png;base64,iVBORbad"/></div>\n'
+      );
+
+      const result = runNodeScript("scripts/check-export-output-hygiene.mjs", [directory]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("embedded data image");
+      expect(result.stderr).toContain("base64 marker");
+      expect(result.stderr).toContain("PNG base64 marker");
+      expect(result.stderr).toContain("provider DOM marker");
+    });
+  });
 });
