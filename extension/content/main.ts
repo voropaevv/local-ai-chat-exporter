@@ -8,7 +8,7 @@ import { downloadRenderedFiles } from "../../src/utils/download";
 import { createSelectionOverlay } from "./selection-overlay";
 import { createContentRequestHandler, isContentRequest } from "./request-handler";
 
-const LISTENER_STATE_KEY = "__localAiChatExporterContentListenerRegistered";
+const LISTENER_STATE_KEY = "__logThreadContentListenerRegistered";
 
 const contentGlobal = globalThis as typeof globalThis & {
   [LISTENER_STATE_KEY]?: boolean;

@@ -100,14 +100,14 @@ describe("security release scripts", () => {
       mkdirSync(releaseDir, { recursive: true });
       writeFileSync(
         resolve(distDir, "content/main.js"),
-        '(()=>{const ready = true; globalThis.__localAiChatExporterReady = ready;})();\n'
+        '(()=>{const ready = true; globalThis.__logThreadReady = ready;})();\n'
       );
       writeFileSync(
         resolve(releaseDir, "logthread-v0.1.0.zip"),
         Buffer.from(
           zipSync({
             "content/main.js": new TextEncoder().encode(
-              '(()=>{const ready = true; globalThis.__localAiChatExporterReady = ready;})();\n'
+              '(()=>{const ready = true; globalThis.__logThreadReady = ready;})();\n'
             ),
             "manifest.json": new TextEncoder().encode('{"manifest_version":3}')
           })
