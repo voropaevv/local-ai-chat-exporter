@@ -19,8 +19,8 @@ function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage 
   };
 }
 
-function makeConversation(): ConversationExport {
-  const messages = [makeMessage()];
+function makeConversation(overrides: Partial<ConversationExport> = {}): ConversationExport {
+  const messages = overrides.messages ?? [makeMessage()];
 
   return {
     schemaVersion: "1.0",
@@ -40,13 +40,18 @@ function makeConversation(): ConversationExport {
       duplicateCount: 0,
       platformWarnings: []
     },
-    messages
+    messages,
+    ...overrides
   };
 }
 
 describe("renderZip", () => {
-  test("bundles requested local formats and a manifest into one ZIP", () => {
-    const rendered = renderZip(makeConversation(), { zipFormats: ["md", "json"] });
+  test("bundles requested local formats under canonical names with hashes and settings", () => {
+    const rendered = renderZip(makeConversation(), {
+      includeMetadata: false,
+      markdownProfile: "github",
+      zipFormats: ["md", "json"]
+    });
 
     expect(rendered.format).toBe("zip");
     expect(rendered.mimeType).toBe("application/zip");
@@ -56,31 +61,112 @@ describe("renderZip", () => {
     const names = Object.keys(zip).sort();
     const manifest = JSON.parse(strFromU8(zip["manifest.json"])) as {
       readonly generatedBy: string;
-      readonly files: readonly { readonly filename: string; readonly format: string }[];
+      readonly messageCount: number;
+      readonly settings: {
+        readonly formats: readonly string[];
+        readonly includeMetadata: boolean;
+        readonly markdownProfile?: string;
+      };
+      readonly files: readonly {
+        readonly filename: string;
+        readonly format: string;
+        readonly hash: string;
+        readonly size: number;
+      }[];
     };
 
-    expect(names).toEqual([
-      "2026-05-31T10-20-30Z_chatgpt_ZIP-Export.json",
-      "2026-05-31T10-20-30Z_chatgpt_ZIP-Export.md",
-      "manifest.json"
-    ]);
-    expect(strFromU8(zip["2026-05-31T10-20-30Z_chatgpt_ZIP-Export.md"])).toContain("# ZIP Export");
-    expect(strFromU8(zip["2026-05-31T10-20-30Z_chatgpt_ZIP-Export.json"])).toContain(
-      '"title": "ZIP Export"'
-    );
+    expect(names).toEqual(["conversation.json", "conversation.md", "manifest.json"]);
+    expect(strFromU8(zip["conversation.md"])).toContain("# ZIP Export");
+    expect(strFromU8(zip["conversation.json"])).toContain('"title": "ZIP Export"');
     expect(manifest.generatedBy).toBe("logthread");
-    expect(manifest.files).toEqual([
+    expect(manifest.messageCount).toBe(1);
+    expect(manifest.settings).toEqual({
+      formats: ["md", "json"],
+      includeMetadata: false,
+      markdownProfile: "github"
+    });
+    expect(manifest.files).toMatchObject([
       {
-        filename: "2026-05-31T10-20-30Z_chatgpt_ZIP-Export.md",
+        filename: "conversation.md",
         format: "md",
         mimeType: "text/markdown;charset=utf-8"
       },
       {
-        filename: "2026-05-31T10-20-30Z_chatgpt_ZIP-Export.json",
+        filename: "conversation.json",
         format: "json",
         mimeType: "application/json;charset=utf-8"
       }
     ]);
+    expect(manifest.files.every((file) => /^h[0-9a-z]{7}$/u.test(file.hash))).toBe(true);
+    expect(manifest.files.every((file) => file.size > 0)).toBe(true);
+  });
+
+  test("preserves embedded image assets in ZIP assets with hashed filenames", () => {
+    const dataImage =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+    const rendered = renderZip(
+      makeConversation({
+        messages: [
+          makeMessage({
+            images: [
+              {
+                alt: "Uploaded diagram",
+                dataUri: dataImage,
+                height: 1,
+                width: 1
+              }
+            ],
+            markdown: `![Uploaded diagram](${dataImage})`,
+            text: `Embedded image ${dataImage}`
+          })
+        ]
+      }),
+      { zipFormats: ["md", "json"] }
+    );
+    const zip = unzipSync(rendered.bytes);
+    const names = Object.keys(zip).sort();
+    const assetName = names.find((name) => name.startsWith("assets/h") && name.endsWith(".png"));
+    const manifest = JSON.parse(strFromU8(zip["manifest.json"])) as {
+      readonly assets: readonly {
+        readonly filename: string;
+        readonly hash: string;
+        readonly mimeType: string;
+      }[];
+    };
+
+    expect(assetName).toBeDefined();
+    expect(zip[assetName ?? ""]?.subarray(0, 8)).toEqual(
+      Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    );
+    expect(strFromU8(zip["conversation.md"])).toContain("Image omitted: embedded PNG");
+    expect(strFromU8(zip["conversation.md"])).not.toContain("data:image");
+    expect(strFromU8(zip["conversation.json"])).not.toContain("data:image");
+    expect(manifest.assets).toEqual([
+      {
+        filename: assetName,
+        hash: expect.stringMatching(/^h[0-9a-z]{7}$/u),
+        height: 1,
+        mimeType: "image/png",
+        size: zip[assetName ?? ""]?.byteLength,
+        width: 1
+      }
+    ]);
+  });
+
+  test("does not create a failed-only ZIP when all selected bundle formats are unavailable", () => {
+    const tooLong = makeConversation({
+      messages: Array.from({ length: 450 }, (_value, index) =>
+        makeMessage({
+          id: `msg-${index + 1}`,
+          index,
+          text: `Long image ${index + 1}. ${"This local PNG would exceed the limit. ".repeat(20)}`
+        })
+      )
+    });
+
+    expect(() => renderZip(tooLong, { zipFormats: ["png"] })).toThrow(
+      "ZIP bundle has no successful files to include."
+    );
   });
 
   test("export pipeline can produce a ZIP bundle format", () => {
@@ -145,20 +231,27 @@ describe("renderBatchZip", () => {
     });
     const zip = unzipSync(rendered.bytes);
     const names = Object.keys(zip).sort();
-    const manifest = JSON.parse(
-      strFromU8(zip["local-ai-chat-export-2026-05-31/manifest.json"])
-    ) as { readonly results: readonly { readonly status: string; readonly error?: string }[] };
+    const manifest = JSON.parse(strFromU8(zip["logthread-export-2026-05-31/manifest.json"])) as {
+      readonly results: readonly (
+        | {
+            readonly files: readonly {
+              readonly hash?: string;
+              readonly size?: number;
+            }[];
+            readonly status: "success";
+          }
+        | { readonly error?: string; readonly status: "failed" }
+      )[];
+    };
 
-    expect(rendered.filename).toBe("local-ai-chat-export-2026-05-31.zip");
+    expect(rendered.filename).toBe("logthread-export-2026-05-31.zip");
     expect(names).toEqual([
-      "local-ai-chat-export-2026-05-31/chatgpt-first-chat-1.json",
-      "local-ai-chat-export-2026-05-31/chatgpt-first-chat-1.md",
-      "local-ai-chat-export-2026-05-31/manifest.json"
+      "logthread-export-2026-05-31/chatgpt-first-chat-1.json",
+      "logthread-export-2026-05-31/chatgpt-first-chat-1.md",
+      "logthread-export-2026-05-31/manifest.json"
     ]);
-    expect(strFromU8(zip["local-ai-chat-export-2026-05-31/chatgpt-first-chat-1.md"])).toBe(
-      "# First\n"
-    );
-    expect(manifest.results).toEqual([
+    expect(strFromU8(zip["logthread-export-2026-05-31/chatgpt-first-chat-1.md"])).toBe("# First\n");
+    expect(manifest.results).toMatchObject([
       {
         files: [
           {
@@ -190,5 +283,33 @@ describe("renderBatchZip", () => {
         warnings: ["Skipped after failure"]
       }
     ]);
+    expect(
+      manifest.results[0].status === "success" &&
+        manifest.results[0].files.every(
+          (file) => /^h[0-9a-z]{7}$/u.test(file.hash ?? "") && (file.size ?? 0) > 0
+        )
+    ).toBe(true);
+  });
+
+  test("does not create a batch ZIP when every selected tab failed", () => {
+    expect(() =>
+      renderBatchZip({
+        exportedAt: "2026-05-31T10:20:30.000Z",
+        results: [
+          {
+            error: "No messages were found.",
+            status: "failed",
+            tab: {
+              id: 1,
+              platform: "chatgpt",
+              platformLabel: "ChatGPT",
+              title: "Failed chat",
+              url: "https://chatgpt.com/c/failed"
+            },
+            warnings: []
+          }
+        ]
+      })
+    ).toThrow("Batch ZIP has no successful files to include.");
   });
 });

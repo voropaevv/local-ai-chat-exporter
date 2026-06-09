@@ -9,7 +9,12 @@ import {
   type BatchExportSuccess,
   type BatchManifestFile
 } from "../core/batch";
+import {
+  collectEmbeddedImageAssets,
+  sanitizeConversationImagesForOutput
+} from "../core/image-safety";
 import type { ConversationExport } from "../core/schema";
+import { stableHash } from "../utils/hash";
 import {
   createRenderedFile,
   type LocalRendererFormat,
@@ -30,31 +35,84 @@ const DEFAULT_ZIP_FORMATS: readonly LocalRendererFormat[] = ["md", "json", "html
 interface ZipManifestFile {
   readonly filename: string;
   readonly format: LocalRendererFormat;
+  readonly hash: string;
   readonly mimeType: string;
+  readonly size: number;
+}
+
+interface ZipManifestAsset {
+  readonly filename: string;
+  readonly hash: string;
+  readonly height?: number;
+  readonly mimeType: string;
+  readonly size: number;
+  readonly width?: number;
 }
 
 interface ZipManifest {
+  readonly assets: readonly ZipManifestAsset[];
+  readonly completeness: ConversationExport["completeness"];
   readonly generatedBy: "logthread";
   readonly exportedAt: string;
-  readonly sourceUrl: string;
-  readonly title?: string;
+  readonly messageCount: number;
+  readonly settings: ZipManifestSettings;
+  readonly source: {
+    readonly conversationId?: string;
+    readonly platform: string;
+    readonly platformLabel: string;
+    readonly sourceUrl: string;
+    readonly title?: string;
+  };
   readonly files: readonly ZipManifestFile[];
+}
+
+interface ZipManifestSettings {
+  readonly formats: readonly LocalRendererFormat[];
+  readonly includeMetadata?: boolean;
+  readonly markdownProfile?: string;
+  readonly pdfSettings?: unknown;
+}
+
+interface ZipBundleFile {
+  readonly entryName: string;
+  readonly rendered: RenderedFile<string | Uint8Array>;
 }
 
 export function renderZip(
   conversation: ConversationExport,
   options: RendererOptions = {}
 ): RenderedFile<Uint8Array> {
-  const files = resolveZipFormats(options.zipFormats).map((format) =>
-    renderBundleFormat(conversation, format, options)
+  const formats = resolveZipFormats(options.zipFormats);
+  const files = formats
+    .map((format) => renderBundleFormat(conversation, format, options))
+    .filter(isSuccessfulBundleFile)
+    .map((rendered) => ({
+      entryName: getCanonicalZipFilename(rendered),
+      rendered
+    }));
+
+  if (files.length === 0) {
+    throw new Error("ZIP bundle has no successful files to include.");
+  }
+
+  const assets = collectEmbeddedImageAssets(conversation);
+  const manifest = renderManifest(
+    sanitizeConversationImagesForOutput(conversation),
+    files,
+    assets,
+    formats,
+    options
   );
-  const manifest = renderManifest(conversation, files);
   const zipEntries: Record<string, Uint8Array> = {
     "manifest.json": strToU8(`${JSON.stringify(manifest, null, 2)}\n`)
   };
 
   for (const file of files) {
-    zipEntries[file.filename] = toUint8Array(file.bytes);
+    zipEntries[file.entryName] = toUint8Array(file.rendered.bytes);
+  }
+
+  for (const asset of assets) {
+    zipEntries[asset.filename] = asset.bytes;
   }
 
   return createRenderedFile(conversation, "zip", "application/zip", zipSync(zipEntries), options);
@@ -75,6 +133,7 @@ export function renderBatchZip(input: BatchZipInput): RenderedFile<Uint8Array> {
   const rootDirectory = createBatchRootDirectory(input.exportedAt);
   const zipEntries: Record<string, Uint8Array> = {};
   const manifestResults = createBatchZipManifestResults(input.results);
+  let fileCount = 0;
 
   input.results.forEach((result, index) => {
     if (result.status === "failed") {
@@ -91,8 +150,14 @@ export function renderBatchZip(input: BatchZipInput): RenderedFile<Uint8Array> {
       zipEntries[`${rootDirectory}/${manifestResult.files[fileIndex].filename}`] = toUint8Array(
         file.bytes
       );
+      fileCount += 1;
     });
   });
+
+  if (fileCount === 0) {
+    throw new Error("Batch ZIP has no successful files to include.");
+  }
+
   const manifest = createBatchManifest({
     exportedAt: input.exportedAt,
     results: manifestResults,
@@ -122,7 +187,9 @@ export function createBatchZipManifestResults(
     const files = result.files.map((file) => ({
       filename: `${base}.${file.format}`,
       format: file.format,
-      mimeType: file.mimeType
+      hash: hashBytes(file.bytes),
+      mimeType: file.mimeType,
+      size: toUint8Array(file.bytes).byteLength
     })) satisfies readonly BatchManifestFile[];
 
     return {
@@ -169,21 +236,91 @@ function renderBundleFormat(
 
 function renderManifest(
   conversation: ConversationExport,
-  files: readonly RenderedFile<string | Uint8Array>[]
+  files: readonly ZipBundleFile[],
+  assets: ReturnType<typeof collectEmbeddedImageAssets>,
+  formats: readonly LocalRendererFormat[],
+  options: RendererOptions
 ): ZipManifest {
   return {
+    assets: assets.map((asset) => ({
+      filename: asset.filename,
+      hash: asset.hash,
+      ...(asset.height !== undefined ? { height: asset.height } : {}),
+      mimeType: asset.mimeType,
+      size: asset.bytes.byteLength,
+      ...(asset.width !== undefined ? { width: asset.width } : {})
+    })),
+    completeness: conversation.completeness,
     generatedBy: "logthread",
     exportedAt: conversation.exportedAt,
-    sourceUrl: conversation.sourceUrl,
-    ...(conversation.title !== undefined ? { title: conversation.title } : {}),
+    messageCount: conversation.messageCount,
+    settings: {
+      formats,
+      ...(options.includeMetadata !== undefined
+        ? { includeMetadata: options.includeMetadata }
+        : {}),
+      ...(options.markdownProfile !== undefined
+        ? { markdownProfile: options.markdownProfile }
+        : {}),
+      ...(options.pdfSettings !== undefined ? { pdfSettings: options.pdfSettings } : {})
+    },
+    source: {
+      ...(conversation.conversationId !== undefined
+        ? { conversationId: conversation.conversationId }
+        : {}),
+      platform: conversation.platform,
+      platformLabel: conversation.platformLabel,
+      sourceUrl: conversation.sourceUrl,
+      ...(conversation.title !== undefined ? { title: conversation.title } : {})
+    },
     files: files.map((file) => ({
-      filename: file.filename,
-      format: file.format,
-      mimeType: file.mimeType
+      filename: file.entryName,
+      format: file.rendered.format,
+      hash: hashBytes(file.rendered.bytes),
+      mimeType: file.rendered.mimeType,
+      size: toUint8Array(file.rendered.bytes).byteLength
     }))
   };
 }
 
+function getCanonicalZipFilename(file: RenderedFile<string | Uint8Array>): string {
+  if (file.format === "pdf" && file.mimeType !== "application/pdf") {
+    return "conversation.pdf-ready.html";
+  }
+
+  return `conversation.${getBundleExtension(file)}`;
+}
+
+function getBundleExtension(file: RenderedFile<string | Uint8Array>): string {
+  if (file.format === "md") {
+    return "md";
+  }
+
+  if (file.format === "png" && file.mimeType !== "image/png") {
+    return "png-unavailable.txt";
+  }
+
+  return file.format;
+}
+
+function isSuccessfulBundleFile(file: RenderedFile<string | Uint8Array>): boolean {
+  return !(file.format === "png" && file.mimeType !== "image/png");
+}
+
 function toUint8Array(bytes: string | Uint8Array): Uint8Array {
   return typeof bytes === "string" ? strToU8(bytes) : bytes;
+}
+
+function hashBytes(bytes: string | Uint8Array): string {
+  if (typeof bytes === "string") {
+    return stableHash(bytes);
+  }
+
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return stableHash(binary);
 }

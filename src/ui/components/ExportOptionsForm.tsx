@@ -108,6 +108,11 @@ export function ExportOptionsForm({
           </label>
         ))}
       </fieldset>
+      <p className="muted">
+        ZIP bundle saves the selected formats into one archive with a manifest and preserved
+        embedded image assets in assets/. PNG creates a local semantic long image for moderate
+        selected or range exports; longer chats fall back at the maximum local PNG height.
+      </p>
 
       <ScopeSelector
         onClearSelection={onClearSelection}

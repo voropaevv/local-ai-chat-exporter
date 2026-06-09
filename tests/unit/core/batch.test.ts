@@ -9,7 +9,10 @@ import {
   getBatchCandidateTabs,
   type BatchExportResult
 } from "../../../src/core/batch";
-import { formatBatchTabDetail, formatBatchTabSummary } from "../../../src/ui/components/BatchExport";
+import {
+  formatBatchTabDetail,
+  formatBatchTabSummary
+} from "../../../src/ui/components/BatchExport";
 
 describe("batch export core helpers", () => {
   test("lists only supported opened AI chat tabs with tab ids", () => {
@@ -89,7 +92,7 @@ describe("batch export core helpers", () => {
   test("creates deterministic batch root and unique entry names", () => {
     const root = createBatchRootDirectory("2026-05-31T10:20:30.000Z");
 
-    expect(root).toBe("local-ai-chat-export-2026-05-31");
+    expect(root).toBe("logthread-export-2026-05-31");
     expect(
       createBatchEntryBase(
         {
@@ -156,13 +159,13 @@ describe("batch export core helpers", () => {
       createBatchManifest({
         exportedAt: "2026-05-31T10:20:30.000Z",
         results,
-        rootDirectory: "local-ai-chat-export-2026-05-31"
+        rootDirectory: "logthread-export-2026-05-31"
       })
     ).toEqual({
       exportedAt: "2026-05-31T10:20:30.000Z",
       generatedBy: "logthread",
       resultCount: 2,
-      rootDirectory: "local-ai-chat-export-2026-05-31",
+      rootDirectory: "logthread-export-2026-05-31",
       results: [
         {
           files: [

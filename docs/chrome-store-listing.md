@@ -12,7 +12,7 @@ Export AI chat threads locally. No account, no telemetry, no server upload.
 
 LogThread is a free, open-source, local-first browser extension for exporting AI chat conversations to local files.
 
-Supported outputs include Markdown, TXT, JSON, CSV, HTML, PDF, DOCX, PNG snapshots, and ZIP bundles. ChatGPT is the primary supported platform. Claude, Gemini, Perplexity, and NotebookLM are visible-message adapters and should be verified before relying on an export.
+Supported outputs include Markdown, TXT, JSON, CSV, HTML, PDF, DOCX, local semantic PNG snapshots for moderate selected or range exports, and ZIP bundles with manifests. ChatGPT is the primary supported platform. Claude, Gemini, Perplexity, and NotebookLM are visible-message adapters and should be verified before relying on an export.
 
 LogThread does not include telemetry, analytics, ads, trackers, remote logging, remote rendering, or external export servers. Export actions are initiated by the user and run locally in the browser extension.
 

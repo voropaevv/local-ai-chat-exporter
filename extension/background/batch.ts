@@ -56,8 +56,10 @@ export async function handlePopupBatchExportRequest(
 
   const rootDirectory = createBatchRootDirectory(exportedAt);
   const manifestResults = createBatchZipManifestResults(results);
-  const successCount = results.filter((result) => result.status === "success").length;
-  const zipFile = successCount > 0 ? renderBatchZip({ exportedAt, results }) : undefined;
+  const hasSuccessfulFiles = results.some(
+    (result) => result.status === "success" && result.files.length > 0
+  );
+  const zipFile = hasSuccessfulFiles ? renderBatchZip({ exportedAt, results }) : undefined;
 
   return {
     downloaded: [],

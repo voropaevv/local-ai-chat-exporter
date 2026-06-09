@@ -92,7 +92,7 @@ describe("batch export background flow", () => {
     expect(requestPermission).not.toHaveBeenCalled();
     expect(exportRequest?.options.formats).toEqual(["html", "txt"]);
     expect(response.zipFile?.format).toBe("zip");
-    expect(response.zipFilename).toMatch(/local-ai-chat-export-\d{4}-\d{2}-\d{2}\.zip/u);
+    expect(response.zipFilename).toMatch(/logthread-export-\d{4}-\d{2}-\d{2}\.zip/u);
   });
 
   test("fails before scanning when selected tab host access was not pre-approved", async () => {
@@ -104,8 +104,9 @@ describe("batch export background flow", () => {
 
     vi.stubGlobal("chrome", {
       permissions: {
-        contains: vi.fn((permissions: chrome.permissions.Permissions, callback: (granted: boolean) => void) =>
-          callback(permissions.permissions?.includes("tabs") === true)
+        contains: vi.fn(
+          (permissions: chrome.permissions.Permissions, callback: (granted: boolean) => void) =>
+            callback(permissions.permissions?.includes("tabs") === true)
         ),
         request: requestPermission
       },
@@ -176,6 +177,65 @@ describe("batch export background flow", () => {
         title: "Broken chat",
         url: "https://chatgpt.com/c/broken",
         warnings: []
+      }
+    ]);
+  });
+
+  test("does not return a downloadable ZIP when selected tabs produce no files", async () => {
+    vi.stubGlobal("chrome", {
+      permissions: {
+        contains: vi.fn((_permissions, callback: (granted: boolean) => void) => callback(true)),
+        request: vi.fn((_permissions, callback: (granted: boolean) => void) => callback(true))
+      },
+      scripting: {
+        executeScript: vi.fn(async () => [])
+      },
+      tabs: {
+        query: vi.fn(async () => [
+          {
+            id: 10,
+            title: "Empty files chat",
+            url: "https://chatgpt.com/c/empty"
+          }
+        ]),
+        sendMessage: vi.fn(async (_tabId: number, request: { readonly type: string }) => {
+          if (request.type === CONTENT_SCAN_MESSAGE) {
+            return {
+              ok: true,
+              value: makeScanSummary()
+            } satisfies RuntimeResponse<ScanSummary>;
+          }
+
+          return {
+            ok: true,
+            value: {
+              downloaded: [],
+              exportedMessageCount: 2,
+              files: [],
+              messageCount: 2,
+              warnings: []
+            }
+          } satisfies RuntimeResponse<ContentExportSuccess>;
+        })
+      }
+    });
+
+    const response = await handlePopupBatchExportRequest({
+      options: { formats: ["png"] },
+      tabIds: [10],
+      type: "logthread/export-open-chat-tabs"
+    });
+
+    expect(response.zipFile).toBeUndefined();
+    expect(response.zipFilename).toBeUndefined();
+    expect(response.results).toMatchObject([
+      {
+        files: [],
+        platform: "chatgpt",
+        status: "success",
+        tabId: 10,
+        title: "Empty files chat",
+        url: "https://chatgpt.com/c/empty"
       }
     ]);
   });

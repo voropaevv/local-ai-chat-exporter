@@ -20,7 +20,9 @@ export interface BatchCandidateTab {
 export interface BatchManifestFile {
   readonly filename: string;
   readonly format: LocalRendererFormat;
+  readonly hash?: string;
   readonly mimeType: string;
+  readonly size?: number;
 }
 
 export interface BatchExportSuccess {
@@ -152,7 +154,7 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
 }
 
 export function createBatchRootDirectory(exportedAt: string): string {
-  return `local-ai-chat-export-${exportedAt.slice(0, 10)}`;
+  return `logthread-export-${exportedAt.slice(0, 10)}`;
 }
 
 export function createBatchEntryBase(tab: BatchCandidateTab, index: number): string {

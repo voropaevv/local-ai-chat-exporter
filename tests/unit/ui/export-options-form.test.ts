@@ -26,6 +26,9 @@ describe("export options UI source", () => {
     expect(source).toContain("Strict also redacts token-like secrets");
     expect(source).toContain("Custom uses the regex list saved in Settings");
     expect(source).toContain("ZIP bundle");
+    expect(source).toContain("manifest");
+    expect(source).toContain("image assets in assets/");
+    expect(source).toContain("maximum local PNG height");
     expect(source).toContain("getPopupFormatLabel");
     expect(source).toContain("PDF settings");
     expect(source).toContain("Page size");

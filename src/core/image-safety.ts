@@ -12,6 +12,16 @@ const MARKDOWN_DATA_IMAGE_PATTERN =
 
 export const EMBEDDED_IMAGE_OMITTED_REASON = "embedded_image_omitted";
 
+export interface EmbeddedImageAsset {
+  readonly alt?: string;
+  readonly bytes: Uint8Array;
+  readonly filename: string;
+  readonly hash: string;
+  readonly height?: number;
+  readonly mimeType: string;
+  readonly width?: number;
+}
+
 export function sanitizeConversationImagesForOutput(
   conversation: ConversationExport
 ): ConversationExport {
@@ -19,7 +29,9 @@ export function sanitizeConversationImagesForOutput(
     ...conversation,
     platformLabel: omitDataImagePayloads(conversation.platformLabel),
     sourceUrl: omitDataImagePayloads(conversation.sourceUrl),
-    ...(conversation.title !== undefined ? { title: omitDataImagePayloads(conversation.title) } : {}),
+    ...(conversation.title !== undefined
+      ? { title: omitDataImagePayloads(conversation.title) }
+      : {}),
     ...(conversation.conversationId !== undefined
       ? { conversationId: omitDataImagePayloads(conversation.conversationId) }
       : {}),
@@ -41,7 +53,9 @@ export function sanitizeMessageImagesForOutput(message: ExportedMessage): Export
       code: omitDataImagePayloads(codeBlock.code)
     })),
     images: message.images.map(sanitizeImageRefForOutput),
-    metadata: sanitizeUnknownDataImagePayloads(message.metadata) as Readonly<Record<string, unknown>>
+    metadata: sanitizeUnknownDataImagePayloads(message.metadata) as Readonly<
+      Record<string, unknown>
+    >
   };
 }
 
@@ -60,6 +74,28 @@ export function sanitizeImageRefForOutput(image: ExportedImageRef): ExportedImag
     mimeType: metadata.mimeType,
     omittedReason: EMBEDDED_IMAGE_OMITTED_REASON
   };
+}
+
+export function collectEmbeddedImageAssets(
+  conversation: ConversationExport
+): readonly EmbeddedImageAsset[] {
+  const assets = new Map<string, EmbeddedImageAsset>();
+
+  for (const message of conversation.messages) {
+    for (const image of message.images) {
+      if (image.dataUri === undefined) {
+        continue;
+      }
+
+      const asset = createEmbeddedImageAsset(image);
+
+      if (asset !== undefined && !assets.has(asset.hash)) {
+        assets.set(asset.hash, asset);
+      }
+    }
+  }
+
+  return [...assets.values()];
 }
 
 export function omitDataImagePayloads(value: string): string {
@@ -110,7 +146,9 @@ export function renderOmittedEmbeddedImageText(image: ExportedImageRef): string 
 
   return [
     `Image omitted: embedded ${metadata.label}`,
-    ...(image.alt !== undefined && image.alt.trim().length > 0 ? [`alt "${image.alt.trim()}"`] : []),
+    ...(image.alt !== undefined && image.alt.trim().length > 0
+      ? [`alt "${image.alt.trim()}"`]
+      : []),
     ...(renderDimensions(image).length > 0 ? [renderDimensions(image)] : []),
     ...(metadata.hash !== undefined ? [`hash ${metadata.hash}`] : [])
   ].join("; ");
@@ -124,9 +162,7 @@ export function renderDimensions(image: Pick<ExportedImageRef, "width" | "height
   return `${image.width}x${image.height}`;
 }
 
-function sanitizeCompletenessImagesForOutput(
-  completeness: CompletenessReport
-): CompletenessReport {
+function sanitizeCompletenessImagesForOutput(completeness: CompletenessReport): CompletenessReport {
   return {
     ...completeness,
     warnings: completeness.warnings.map(omitDataImagePayloads),
@@ -187,6 +223,65 @@ function getEmbeddedImageMetadata(dataUri: string): {
     label: getImageLabelFromMimeType(mimeType),
     mimeType
   };
+}
+
+function createEmbeddedImageAsset(image: ExportedImageRef): EmbeddedImageAsset | undefined {
+  if (image.dataUri === undefined) {
+    return undefined;
+  }
+
+  const metadata = getEmbeddedImageMetadata(image.dataUri);
+  const extension = getImageExtension(metadata.mimeType);
+  const bytes = decodeDataImageBytes(image.dataUri);
+
+  if (bytes === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(image.alt !== undefined ? { alt: image.alt } : {}),
+    bytes,
+    filename: `assets/${metadata.hash}.${extension}`,
+    hash: metadata.hash,
+    ...(image.height !== undefined ? { height: image.height } : {}),
+    mimeType: metadata.mimeType,
+    ...(image.width !== undefined ? { width: image.width } : {})
+  };
+}
+
+function decodeDataImageBytes(dataUri: string): Uint8Array | undefined {
+  const base64 = dataUri.match(/^data:image\/[a-z0-9.+-]+;base64,([\s\S]+)$/iu)?.[1];
+
+  if (base64 === undefined) {
+    return undefined;
+  }
+
+  try {
+    const binary = atob(base64.replace(/\s+/gu, ""));
+    const bytes = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return bytes;
+  } catch {
+    return undefined;
+  }
+}
+
+function getImageExtension(mimeType: string): string {
+  const subtype = mimeType.split("/")[1]?.toLocaleLowerCase();
+
+  if (subtype === "jpeg") {
+    return "jpg";
+  }
+
+  if (subtype === "png" || subtype === "gif" || subtype === "webp" || subtype === "jpg") {
+    return subtype;
+  }
+
+  return "bin";
 }
 
 function getImageLabelFromMimeType(mimeType: string | undefined): string {
