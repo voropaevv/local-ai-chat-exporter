@@ -96,7 +96,11 @@ export function PreviewApp() {
     }
 
     openRenderedFile(renderState.pdf);
-    setActionStatus("Opened print-ready HTML from scanned snapshot.");
+    setActionStatus(
+      renderState.pdf.mimeType === "application/pdf"
+        ? "Opened PDF from scanned snapshot."
+        : "PDF generation fell back to PDF-ready HTML. No conversation content was uploaded."
+    );
   }
 
   function handleClose() {
@@ -140,7 +144,7 @@ export function PreviewApp() {
             onClick={handleOpenPdf}
             type="button"
           >
-            Open print-ready HTML
+            Open PDF
           </button>
           <button className="secondary-action" onClick={handleClose} type="button">
             Close

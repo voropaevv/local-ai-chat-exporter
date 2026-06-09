@@ -63,7 +63,13 @@ describe("preview rendering", () => {
     expect(rendered.markdown.bytes).toContain("Cached answer");
     expect(rendered.html.bytes).toContain("Cached preview");
     expect(rendered.html.bytes).toContain("Cached answer");
-    expect(rendered.pdf.bytes).toContain("Use your browser print dialog");
+    expect(rendered.pdf.filename).toBe("2026-06-01T08-00-00Z_chatgpt_Cached-preview.pdf");
+    expect(rendered.pdf.mimeType).toBe("application/pdf");
+    expect(rendered.pdf.encoding).toBe("binary");
+    expect(rendered.pdf.bytes).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder("latin1").decode(rendered.pdf.bytes as Uint8Array)).toContain(
+      "Cached answer"
+    );
   });
 
   test("returns a clear missing-cache message", () => {

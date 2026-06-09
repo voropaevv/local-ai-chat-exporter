@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import type { ConversationExport, ExportedMessage } from "../../../src/core/schema";
-import { renderPdf } from "../../../src/renderers/pdf";
+import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../../../src/renderers/pdf-settings";
+import { renderPdf, renderPdfFromNormalizedConversation } from "../../../src/renderers/pdf";
 
 function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage {
   return {
@@ -18,8 +19,121 @@ function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage 
   };
 }
 
-function makeConversation(): ConversationExport {
-  const messages = [makeMessage()];
+describe("renderPdf", () => {
+  test("creates a local real PDF from semantic conversation content", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            markdown:
+              "Print-ready answer.\n\n- First item\n- Second item\n\n| Format | Use |\n| --- | --- |\n| PDF | Archive |\n\n```ts\nconsole.log('local');\n```"
+          })
+        ]
+      })
+    );
+    const body = textFromBytes(rendered.bytes);
+
+    expect(rendered.format).toBe("pdf");
+    expect(rendered.filename).toBe("2026-05-31T10-20-30Z_chatgpt_PDF-Export.pdf");
+    expect(rendered.mimeType).toBe("application/pdf");
+    expect(rendered.encoding).toBe("binary");
+    expect(rendered.bytes).toBeInstanceOf(Uint8Array);
+    expect(body).toMatch(/^%PDF-1\.[34]/u);
+    expect(body).toContain("%%EOF");
+    expect(body).toContain("PDF Export");
+    expect(body).toContain("ChatGPT");
+    expect(body).toContain("First item");
+    expect(body).toContain("Format");
+    expect(body).toContain("console.log");
+    expect(body).not.toContain("<html");
+    expect(body).not.toContain("<script");
+    expect(body).not.toContain("data-testid");
+    expect(body).not.toContain("markdown prose");
+    expect(body).not.toContain("flex w-full");
+    expect(body).not.toContain("user-message-bubble-color");
+  });
+
+  test("applies normalized PDF settings including page size, orientation, template, and TOC", () => {
+    const rendered = renderPdf(makeConversation(), {
+      pdfSettings: {
+        fontSizePt: 10,
+        includeToc: true,
+        marginPt: 36,
+        orientation: "landscape",
+        pageSize: "letter",
+        template: "dark"
+      }
+    });
+    const body = textFromBytes(rendered.bytes);
+
+    expect(body).toContain("/MediaBox [0 0 792 612]");
+    expect(body).toContain("Table of contents");
+    expect(body).toContain("PDF Export");
+    expect(body).toContain("0.067 0.094 0.153 rg");
+  });
+
+  test("adds pages automatically for long conversations", () => {
+    const messages = Array.from({ length: 35 }, (_, index) =>
+      makeMessage({
+        id: `msg-${index + 1}`,
+        index,
+        markdown: `Long paragraph ${index + 1}. ${"This is local PDF content. ".repeat(12)}`
+      })
+    );
+    const rendered = renderPdf(makeConversation({ messages }));
+    const pageCount = textFromBytes(rendered.bytes).match(/\/Type \/Page\b/gu)?.length ?? 0;
+
+    expect(pageCount).toBeGreaterThan(1);
+  });
+
+  test("can omit source metadata when metadata is disabled", () => {
+    const rendered = renderPdf(makeConversation(), { includeMetadata: false });
+    const body = textFromBytes(rendered.bytes);
+
+    expect(body).not.toContain("Source:");
+    expect(body).not.toContain("https://chatgpt.com/c/pdf");
+    expect(body).toContain("Print-ready answer");
+  });
+
+  test("falls back to local PDF-ready HTML with a visible warning if PDF generation fails", () => {
+    const rendered = renderPdfFromNormalizedConversation(makeConversation(), {}, () => {
+      throw new Error("synthetic pdf failure");
+    });
+
+    expect(rendered.format).toBe("pdf");
+    expect(rendered.filename).toBe("2026-05-31T10-20-30Z_chatgpt_PDF-Export.print-ready-html.html");
+    expect(rendered.mimeType).toBe("text/html;charset=utf-8");
+    expect(rendered.encoding).toBe("utf-8");
+    expect(rendered.bytes).toContain("PDF generation failed locally.");
+    expect(rendered.bytes).toContain("No conversation content was uploaded or sent to a server.");
+    expect(rendered.bytes).toContain("synthetic pdf failure");
+  });
+});
+
+describe("normalizePdfSettings", () => {
+  test("normalizes PDF settings conservatively", () => {
+    expect(normalizePdfSettings()).toEqual(DEFAULT_PDF_SETTINGS);
+    expect(
+      normalizePdfSettings({
+        fontSizePt: 40,
+        includeToc: true,
+        marginPt: -1,
+        orientation: "sideways",
+        pageSize: "poster",
+        template: "dark"
+      })
+    ).toEqual({
+      ...DEFAULT_PDF_SETTINGS,
+      fontSizePt: DEFAULT_PDF_SETTINGS.fontSizePt,
+      includeToc: true,
+      marginPt: DEFAULT_PDF_SETTINGS.marginPt,
+      template: "dark"
+    });
+  });
+});
+
+function makeConversation(overrides: Partial<ConversationExport> = {}): ConversationExport {
+  const messages = overrides.messages ?? [makeMessage()];
 
   return {
     schemaVersion: "1.0",
@@ -39,27 +153,13 @@ function makeConversation(): ConversationExport {
       duplicateCount: 0,
       platformWarnings: []
     },
-    messages
+    messages,
+    ...overrides
   };
 }
 
-describe("renderPdf", () => {
-  test("creates a local print-ready HTML flow with save-as-PDF instructions", () => {
-    const rendered = renderPdf(makeConversation());
+function textFromBytes(bytes: string | Uint8Array): string {
+  expect(bytes).toBeInstanceOf(Uint8Array);
 
-    expect(rendered.format).toBe("pdf");
-    expect(rendered.filename).toBe("2026-05-31T10-20-30Z_chatgpt_PDF-Export.print-ready-html.html");
-    expect(rendered.filename).not.toContain(".pdf.html");
-    expect(rendered.mimeType).toBe("text/html;charset=utf-8");
-    expect(rendered.bytes).toContain("Print-ready HTML export");
-    expect(rendered.bytes).toContain("Use your browser print dialog to save this page as PDF.");
-    expect(rendered.bytes).toContain("@media print");
-    expect(rendered.bytes).toContain("<pre><code");
-    expect(rendered.bytes).not.toContain("https://fonts.");
-    expect(rendered.bytes).not.toContain("<script");
-    expect(rendered.bytes).not.toContain("data-testid");
-    expect(rendered.bytes).not.toContain("markdown prose");
-    expect(rendered.bytes).not.toContain("flex w-full");
-    expect(rendered.bytes).not.toContain("user-message-bubble-color");
-  });
-});
+  return new TextDecoder("latin1").decode(bytes as Uint8Array);
+}

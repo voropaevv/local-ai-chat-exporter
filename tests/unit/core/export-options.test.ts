@@ -4,9 +4,11 @@ import type { ConversationExport, ExportedMessage } from "../../../src/core/sche
 import {
   DEFAULT_EXPORT_OPTIONS,
   ExportPipelineError,
+  normalizeExportOptions,
   renderConversationFiles,
   type ExportOptions
 } from "../../../src/core/export-options";
+import { DEFAULT_PDF_SETTINGS } from "../../../src/renderers/pdf-settings";
 
 const fakeProjectKey = ["sk", "proj", "abcdefghijklmnopqrstuvwxyz1234567890"].join("-");
 
@@ -61,6 +63,29 @@ function makeOptions(overrides: Partial<ExportOptions> = {}): ExportOptions {
 }
 
 describe("renderConversationFiles", () => {
+  test("normalizes PDF settings for renderer options", () => {
+    expect(normalizeExportOptions().pdfSettings).toEqual(DEFAULT_PDF_SETTINGS);
+    expect(
+      normalizeExportOptions({
+        pdfSettings: {
+          fontSizePt: 12,
+          includeToc: true,
+          marginPt: 42,
+          orientation: "landscape",
+          pageSize: "letter",
+          template: "simple"
+        }
+      }).pdfSettings
+    ).toEqual({
+      fontSizePt: 12,
+      includeToc: true,
+      marginPt: 42,
+      orientation: "landscape",
+      pageSize: "letter",
+      template: "simple"
+    });
+  });
+
   test("renders requested local formats with filename template and markdown profile options", () => {
     const files = renderConversationFiles(
       makeConversation(),
@@ -163,6 +188,34 @@ describe("renderConversationFiles", () => {
     expect(markdown).not.toContain("| Exported |");
     expect(markdown).not.toContain("| Completeness |");
     expect(markdown).toContain("Contact admin@example.com");
+  });
+
+  test("renders real local PDF files from export options", () => {
+    const files = renderConversationFiles(
+      makeConversation(),
+      makeOptions({
+        formats: ["pdf"],
+        pdfSettings: {
+          fontSizePt: 10,
+          includeToc: true,
+          marginPt: 36,
+          orientation: "landscape",
+          pageSize: "letter",
+          template: "simple"
+        }
+      })
+    );
+
+    expect(files[0]).toMatchObject({
+      encoding: "binary",
+      filename: "chatgpt-Export-pipeline.pdf",
+      format: "pdf",
+      mimeType: "application/pdf"
+    });
+    expect(files[0].bytes).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder("latin1").decode(files[0].bytes as Uint8Array)).toContain(
+      "Table of contents"
+    );
   });
 
   test("reports a user-readable no-messages error after scope filtering", () => {

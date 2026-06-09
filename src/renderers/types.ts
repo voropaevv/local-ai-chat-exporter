@@ -1,5 +1,6 @@
 import type { ConversationExport, ExportFormat } from "../core/schema";
 import type { MarkdownProfile } from "./markdown-profiles";
+import type { PdfSettingsInput } from "./pdf-settings";
 import { renderFilenameTemplate } from "../utils/filename-template";
 export { MARKDOWN_PROFILES, type MarkdownProfile } from "./markdown-profiles";
 
@@ -14,6 +15,7 @@ export interface RendererOptions {
   readonly filenameTemplate?: string;
   readonly includeMetadata?: boolean;
   readonly markdownProfile?: MarkdownProfile;
+  readonly pdfSettings?: PdfSettingsInput;
   readonly zipFormats?: readonly LocalRendererFormat[];
 }
 

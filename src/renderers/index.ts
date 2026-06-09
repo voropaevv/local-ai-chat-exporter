@@ -5,6 +5,18 @@ export { renderJson } from "./json";
 export { renderMarkdown } from "./markdown";
 export { getPngAvailability, renderPng, type PngAvailability } from "./png";
 export { renderPdf } from "./pdf";
+export {
+  DEFAULT_PDF_SETTINGS,
+  PDF_ORIENTATIONS,
+  PDF_PAGE_SIZES,
+  PDF_TEMPLATES,
+  normalizePdfSettings,
+  type PdfOrientation,
+  type PdfPageSize,
+  type PdfSettings,
+  type PdfSettingsInput,
+  type PdfTemplate
+} from "./pdf-settings";
 export { renderTxt } from "./txt";
 export { renderZip } from "./zip";
 export {

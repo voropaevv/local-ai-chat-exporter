@@ -416,6 +416,14 @@ legend {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.pdf-settings-grid {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  grid-template-columns: 1fr;
+}
+
 .segmented-control {
   display: grid;
   gap: 8px;

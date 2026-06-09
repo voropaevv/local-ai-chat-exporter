@@ -20,7 +20,7 @@ This project is not affiliated with, endorsed by, or sponsored by OpenAI, Anthro
 - JSON `.json`
 - CSV `.csv`
 - HTML `.html`
-- PDF-ready HTML `.pdf.html`
+- PDF `.pdf`
 - DOCX `.docx`
 - PNG snapshot `.png`
 - ZIP bundle `.zip`
@@ -84,7 +84,8 @@ pnpm test:e2e
 - ChatGPT is the primary v1 platform.
 - Secondary platform adapters are best-effort and currently scan visible loaded messages only.
 - The extension exports the current conversation only; it does not scrape account-wide history in the background.
-- PDF output is generated from local print-ready HTML.
+- PDF output is generated locally from the normalized conversation model. If local PDF generation fails, LogThread falls back to local PDF-ready HTML and shows a warning.
+- PDF v1 uses built-in PDF fonts. CJK text, complex emoji, and advanced formula layout may use fallback glyphs; formulas are preserved as plain text.
 - Some AI platform UI changes may require fixture and selector updates.
 
 ## Troubleshooting

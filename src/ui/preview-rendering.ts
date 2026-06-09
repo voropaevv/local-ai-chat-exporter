@@ -3,6 +3,7 @@ import {
   renderHtml,
   renderMarkdown,
   renderPdf,
+  type RenderedBytes,
   type RenderedFile
 } from "../renderers";
 import { formatCount } from "./pluralize";
@@ -13,9 +14,9 @@ export const PREVIEW_MISSING_CACHE_MESSAGE =
 export type PreviewRenderState =
   | {
       readonly conversation: ConversationExport;
-      readonly html: RenderedFile;
-      readonly markdown: RenderedFile;
-      readonly pdf: RenderedFile;
+      readonly html: RenderedFile<string>;
+      readonly markdown: RenderedFile<string>;
+      readonly pdf: RenderedFile<RenderedBytes>;
       readonly status: "ready";
       readonly statusMessage: string;
     }

@@ -17,6 +17,7 @@ import {
   popupReducer,
   toggleFormat
 } from "../../../src/ui/state/popup-state";
+import { DEFAULT_PDF_SETTINGS } from "../../../src/renderers/pdf-settings";
 
 const completeness: CompletenessReport = {
   status: "partial",
@@ -86,7 +87,7 @@ describe("popup state", () => {
     expect(stillHasJson.options.formats).toEqual(["json"]);
   });
 
-  test("builds download, copy markdown, and print-ready HTML requests", () => {
+  test("builds download, copy markdown, and open PDF requests", () => {
     const state: PopupState = {
       ...createInitialPopupState(),
       options: {
@@ -125,7 +126,7 @@ describe("popup state", () => {
     expect(buildOpenPdfRequest(state)).toMatchObject({
       copyToClipboard: false,
       download: false,
-      options: { formats: ["pdf"] },
+      options: { formats: ["pdf"], pdfSettings: DEFAULT_PDF_SETTINGS },
       returnFiles: true
     });
     expect(buildGetScanCacheSummaryRequest()).toEqual({
@@ -133,6 +134,29 @@ describe("popup state", () => {
     });
     expect(buildOpenPreviewRequest()).toEqual({
       type: "logthread/open-preview"
+    });
+  });
+
+  test("updates PDF settings and includes them in export requests", () => {
+    const state = popupReducer(createInitialPopupState(), {
+      pdfSettings: {
+        fontSizePt: 10,
+        includeToc: true,
+        marginPt: 36,
+        orientation: "landscape",
+        pageSize: "letter",
+        template: "dark"
+      },
+      type: "set_pdf_settings"
+    });
+
+    expect(buildDownloadRequest(state).options?.pdfSettings).toEqual({
+      fontSizePt: 10,
+      includeToc: true,
+      marginPt: 36,
+      orientation: "landscape",
+      pageSize: "letter",
+      template: "dark"
     });
   });
 

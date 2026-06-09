@@ -13,17 +13,16 @@ import type {
   ExportedImageRef,
   ExportedMessage
 } from "./schema";
-import {
-  omitDataImagePayloads,
-  sanitizeImageRefForOutput
-} from "./image-safety";
+import { omitDataImagePayloads, sanitizeImageRefForOutput } from "./image-safety";
 import {
   renderers,
   type LocalRendererFormat,
   type MarkdownProfile,
+  type PdfSettingsInput,
   type RenderedBytes,
   type RenderedFile
 } from "../renderers";
+import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../renderers/pdf-settings";
 
 export type ExportScope = SelectionScope;
 
@@ -47,6 +46,7 @@ export interface ExportOptions {
   readonly redact: boolean;
   readonly redaction: RedactionSettings;
   readonly filenameTemplate: string;
+  readonly pdfSettings: PdfSettingsInput;
   readonly range?: SelectionRange;
   readonly zipFormats?: readonly LocalRendererFormat[];
 }
@@ -64,7 +64,8 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   includeCompletenessReport: true,
   redact: false,
   redaction: DEFAULT_REDACTION_SETTINGS,
-  filenameTemplate: "{datetime}_{platform}_{title}.{format}"
+  filenameTemplate: "{datetime}_{platform}_{title}.{format}",
+  pdfSettings: DEFAULT_PDF_SETTINGS
 };
 
 export class ExportPipelineError extends Error {
@@ -92,6 +93,7 @@ export function normalizeExportOptions(options: Partial<ExportOptions> = {}): Ex
       options.filenameTemplate !== undefined && options.filenameTemplate.trim().length > 0
         ? options.filenameTemplate
         : DEFAULT_EXPORT_OPTIONS.filenameTemplate,
+    pdfSettings: normalizePdfSettings(options.pdfSettings),
     redact: redaction.preset !== "off",
     redaction
   };
@@ -116,13 +118,16 @@ export function renderConversationFiles(
     : normalizedOptions.formats;
   const zipFormats =
     normalizedOptions.zipFormats ??
-    normalizedOptions.formats.filter((candidate): candidate is LocalRendererFormat => candidate !== "zip");
+    normalizedOptions.formats.filter(
+      (candidate): candidate is LocalRendererFormat => candidate !== "zip"
+    );
 
   return outputFormats.map((format) => {
     return renderers[format](preparedConversation, {
       filenameTemplate: normalizedOptions.filenameTemplate,
       includeMetadata: normalizedOptions.includeMetadata,
       markdownProfile: normalizedOptions.markdownProfile,
+      pdfSettings: normalizedOptions.pdfSettings,
       zipFormats
     });
   });

@@ -160,6 +160,13 @@ export function PopupApp() {
 
     if (pdfFile !== undefined) {
       openRenderedFile(pdfFile);
+      dispatch({
+        message:
+          pdfFile.mimeType === "application/pdf"
+            ? "Opened PDF from scanned snapshot."
+            : "PDF generation fell back to PDF-ready HTML. No conversation content was uploaded.",
+        type: "export_finished"
+      });
     }
   }
 
@@ -320,6 +327,9 @@ export function PopupApp() {
               dispatch({ markdownProfile, type: "set_markdown_profile" })
             }
             onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
+            onPdfSettingsChange={(pdfSettings) =>
+              dispatch({ pdfSettings, type: "set_pdf_settings" })
+            }
             onRangeEndChange={(rangeEndIndex) => dispatch({ rangeEndIndex, type: "set_range_end" })}
             onRangeStartChange={(rangeStartIndex) =>
               dispatch({ rangeStartIndex, type: "set_range_start" })

@@ -23,6 +23,7 @@ import {
   type ScanSummary
 } from "../../core/messages";
 import type { CompletenessReport, ExportFormat } from "../../core/schema";
+import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettingsInput } from "../../renderers";
 import type { MarkdownProfile } from "../../renderers";
 import { DEFAULT_FILENAME_TEMPLATE } from "../filename-template";
 import { formatCount } from "../pluralize";
@@ -40,6 +41,7 @@ export interface PopupOptionsState {
   readonly includeCompletenessReport: boolean;
   readonly markdownProfile: MarkdownProfile;
   readonly outputMode: PopupOutputMode;
+  readonly pdfSettings: PdfSettingsInput;
   readonly rangeEndIndex: number;
   readonly rangeStartIndex: number;
   readonly redact: boolean;
@@ -86,6 +88,7 @@ export type PopupAction =
   | { readonly type: "set_markdown_profile"; readonly markdownProfile: MarkdownProfile }
   | { readonly type: "set_filename_template"; readonly filenameTemplate: string }
   | { readonly type: "set_include_metadata"; readonly includeMetadata: boolean }
+  | { readonly type: "set_pdf_settings"; readonly pdfSettings: PdfSettingsInput }
   | { readonly type: "set_redact"; readonly redact: boolean }
   | { readonly type: "set_redaction_settings"; readonly redaction: RedactionSettings }
   | { readonly type: "set_redaction_preset"; readonly redactionPreset: RedactionPreset }
@@ -100,6 +103,7 @@ const DEFAULT_OPTIONS: PopupOptionsState = {
   includeCompletenessReport: true,
   markdownProfile: "default",
   outputMode: "separate",
+  pdfSettings: DEFAULT_PDF_SETTINGS,
   rangeEndIndex: 1,
   rangeStartIndex: 1,
   redact: false,
@@ -229,6 +233,14 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return {
         ...state,
         options: { ...state.options, includeMetadata: action.includeMetadata }
+      };
+    case "set_pdf_settings":
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          pdfSettings: normalizePdfSettings(action.pdfSettings)
+        }
       };
     case "set_redact":
       return {
@@ -422,6 +434,7 @@ export function buildExportOptions(
     includeCompletenessReport: state.options.includeCompletenessReport,
     includeMetadata: state.options.includeMetadata,
     markdownProfile: state.options.markdownProfile,
+    pdfSettings: normalizePdfSettings(state.options.pdfSettings),
     ...(state.options.scope === "range"
       ? {
           range: {

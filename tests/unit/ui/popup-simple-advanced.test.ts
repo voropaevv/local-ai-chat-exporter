@@ -24,15 +24,19 @@ describe("popup simple and advanced UX source", () => {
     expect(source).toContain("<PreviewPanel");
   });
 
-  test("simple mode exposes quick Markdown actions without print-ready HTML or batch controls", () => {
+  test("simple mode exposes quick Markdown actions without PDF or batch controls", () => {
     const simpleActionSource = readSource("src/ui/components/SimpleActionBar.tsx");
     const actionSource = readSource("src/ui/components/ActionBar.tsx");
+    const popupSource = readSource("src/ui/PopupApp.tsx");
+    const previewSource = readSource("src/ui/PreviewApp.tsx");
 
     expect(simpleActionSource).toContain("Download Markdown");
     expect(simpleActionSource).toContain("Copy Markdown");
     expect(simpleActionSource).toContain("Full preview");
-    expect(simpleActionSource).not.toContain("Open print-ready HTML");
-    expect(actionSource).toContain("Open print-ready HTML");
+    expect(simpleActionSource).not.toContain("Open PDF");
+    expect(actionSource).toContain("Open PDF");
+    expect(popupSource).toContain("PDF generation fell back to PDF-ready HTML");
+    expect(previewSource).toContain("PDF generation fell back to PDF-ready HTML");
   });
 
   test("popup CSS keeps the 390px popup compact with clamped text and no horizontal scroll", () => {

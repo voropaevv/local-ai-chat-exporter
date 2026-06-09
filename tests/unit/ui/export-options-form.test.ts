@@ -27,7 +27,15 @@ describe("export options UI source", () => {
     expect(source).toContain("Custom uses the regex list saved in Settings");
     expect(source).toContain("ZIP bundle");
     expect(source).toContain("getPopupFormatLabel");
-    expect(source).toContain("Print-ready HTML");
+    expect(source).toContain("PDF settings");
+    expect(source).toContain("Page size");
+    expect(source).toContain("Orientation");
+    expect(source).toContain("Margins");
+    expect(source).toContain("Font size");
+    expect(source).toContain("Template");
+    expect(source).toContain("Table of contents");
+    expect(source).toContain("CJK");
+    expect(source).toContain("formula");
     expect(source).not.toContain("format.toUpperCase()");
     expect(source).not.toContain("onRedactChange");
     expect(source).not.toContain("FilenameTemplateBuilder");
