@@ -6,6 +6,7 @@ import {
   buildExportStatusMessage,
   buildCopyMarkdownRequest,
   buildBatchExportRequest,
+  buildDownloadMarkdownRequest,
   buildDownloadRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
@@ -35,7 +36,7 @@ describe("popup state", () => {
     const scanning = popupReducer(createInitialPopupState(), { type: "scan_started" });
 
     expect(scanning.scanStatus).toBe("scanning");
-    expect(scanning.progressLabel).toBe("Scanning current conversation...");
+    expect(scanning.progressLabel).toBe("Preparing full conversation...");
     expect(scanning.canCancelScan).toBe(true);
 
     const scanned = popupReducer(scanning, {
@@ -59,7 +60,7 @@ describe("popup state", () => {
     expect(scanned.platformLabel).toBe("ChatGPT");
     expect(scanned.completeness?.warnings).toEqual(["Top was not reached"]);
     expect(scanned.previewMessages).toHaveLength(3);
-    expect(scanned.progressLabel).toBe("Scanned 3 messages. Ready to export.");
+    expect(scanned.progressLabel).toBe("Scanned 3 messages. Ready for Markdown export.");
     expect(scanned.partialWarning).toBe("This export may be partial.");
 
     const exporting = popupReducer(scanned, { type: "export_started" });
@@ -114,6 +115,11 @@ describe("popup state", () => {
     expect(buildCopyMarkdownRequest(state)).toMatchObject({
       copyToClipboard: true,
       download: false,
+      options: { formats: ["md"] }
+    });
+    expect(buildDownloadMarkdownRequest(state)).toMatchObject({
+      copyToClipboard: false,
+      download: true,
       options: { formats: ["md"] }
     });
     expect(buildOpenPdfRequest(state)).toMatchObject({
@@ -285,7 +291,10 @@ describe("popup state", () => {
 
     expect(state.options.rangeStartIndex).toBe(1);
     expect(state.options.rangeEndIndex).toBe(1);
-    expect(buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options?.range).toEqual({
+    expect(
+      buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options
+        ?.range
+    ).toEqual({
       endIndex: 0,
       startIndex: 0
     });

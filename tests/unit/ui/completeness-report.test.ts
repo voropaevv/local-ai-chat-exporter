@@ -11,16 +11,17 @@ describe("completeness report source", () => {
       "utf8"
     );
     const styles = readFileSync(resolve(projectRoot, "src/ui/styles.css"), "utf8");
+    const previewRule = styles.match(/\.report-preview \{(?<body>[^}]+)\}/u);
 
     expect(source).not.toContain("Show full preview details");
-    expect(source).not.toContain("completeness.firstMessagePreview ??");
-    expect(source).not.toContain("completeness.lastMessagePreview ??");
     expect(source).toContain("report-grid report-grid--summary");
     expect(source).toContain('className="report-preview"');
-    expect(source).toContain("PREVIEW_MAX_LENGTH = 48");
+    expect(source).toContain("PREVIEW_MAX_LENGTH = 100");
+    expect(source).toContain("showAdvancedDetails");
+    expect(source).toContain("Full first and last previews");
     expect(styles).toContain(".report-grid.report-grid--summary");
     expect(styles).toContain(".report-preview");
-    expect(styles).toContain("text-overflow: ellipsis;");
-    expect(styles).toContain("white-space: nowrap;");
+    expect(previewRule?.groups?.body).toContain("-webkit-line-clamp: 2;");
+    expect(previewRule?.groups?.body).not.toContain("white-space: nowrap;");
   });
 });

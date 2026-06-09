@@ -138,7 +138,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         ...state,
         canCancelScan: true,
         errorMessage: undefined,
-        progressLabel: "Scanning current conversation...",
+        progressLabel: "Preparing full conversation...",
         scanStatus: "scanning"
       };
     case "scan_succeeded":
@@ -153,7 +153,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
             : "This export may be partial.",
         platformLabel: action.scan.platformLabel,
         previewMessages: action.scan.previewMessages,
-        progressLabel: `Scanned ${formatCount(action.scan.messageCount, "message")}. Ready to export.`,
+        progressLabel: `Scanned ${formatCount(action.scan.messageCount, "message")}. Ready for Markdown export.`,
         scanStatus: "scanned",
         selectedMessageCount: action.scan.selectedMessageCount,
         sourceUrl: action.scan.sourceUrl,
@@ -258,32 +258,30 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
           redactionPreset: action.redactionPreset
         }
       };
-    case "set_range_start":
-      {
-        const rangeStartIndex = normalizeOneBasedIndex(action.rangeStartIndex);
+    case "set_range_start": {
+      const rangeStartIndex = normalizeOneBasedIndex(action.rangeStartIndex);
 
-        return {
-          ...state,
-          options: {
-            ...state.options,
-            rangeEndIndex: Math.max(state.options.rangeEndIndex, rangeStartIndex),
-            rangeStartIndex
-          }
-        };
-      }
-    case "set_range_end":
-      {
-        const rangeEndIndex = normalizeOneBasedIndex(action.rangeEndIndex);
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          rangeEndIndex: Math.max(state.options.rangeEndIndex, rangeStartIndex),
+          rangeStartIndex
+        }
+      };
+    }
+    case "set_range_end": {
+      const rangeEndIndex = normalizeOneBasedIndex(action.rangeEndIndex);
 
-        return {
-          ...state,
-          options: {
-            ...state.options,
-            rangeEndIndex,
-            rangeStartIndex: Math.min(state.options.rangeStartIndex, rangeEndIndex)
-          }
-        };
-      }
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          rangeEndIndex,
+          rangeStartIndex: Math.min(state.options.rangeStartIndex, rangeEndIndex)
+        }
+      };
+    }
   }
 }
 
@@ -371,6 +369,16 @@ export function buildDownloadRequest(state: PopupState): PopupExportRequest {
     copyToClipboard: false,
     download: true,
     options: buildExportOptions(state),
+    returnFiles: false,
+    type: POPUP_EXPORT_MESSAGE
+  };
+}
+
+export function buildDownloadMarkdownRequest(state: PopupState): PopupExportRequest {
+  return {
+    copyToClipboard: false,
+    download: true,
+    options: buildExportOptions(state, ["md"]),
     returnFiles: false,
     type: POPUP_EXPORT_MESSAGE
   };

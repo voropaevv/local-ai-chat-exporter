@@ -22,12 +22,14 @@ import { PopupFooter } from "./components/PopupFooter";
 import { PopupHeader } from "./components/PopupHeader";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { ScanControls } from "./components/ScanControls";
+import { SimpleActionBar } from "./components/SimpleActionBar";
 import {
   buildCancelScanRequest,
   buildBatchExportRequest,
   buildBatchListRequest,
   buildCopyMarkdownRequest,
   buildClearSelectionRequest,
+  buildDownloadMarkdownRequest,
   buildDownloadRequest,
   buildExportStatusMessage,
   buildGetScanCacheSummaryRequest,
@@ -54,8 +56,11 @@ interface PopupExportSuccess {
   readonly warnings: readonly string[];
 }
 
+type PopupMode = "simple" | "advanced";
+
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
+  const [mode, setMode] = useState<PopupMode>("simple");
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
@@ -63,6 +68,7 @@ export function PopupApp() {
   const [batchStatus, setBatchStatus] = useState("Batch export is idle.");
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions = state.completeness !== undefined && !busy;
+  const advancedMode = mode === "advanced";
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +144,10 @@ export function PopupApp() {
 
   async function handleDownload() {
     await runExportAction(buildDownloadRequest(state));
+  }
+
+  async function handleDownloadMarkdown() {
+    await runExportAction(buildDownloadMarkdownRequest(state));
   }
 
   async function handleCopyMarkdown() {
@@ -234,7 +244,9 @@ export function PopupApp() {
     );
 
     if (response.ok) {
-      const successCount = response.value.results.filter((result) => result.status === "success").length;
+      const successCount = response.value.results.filter(
+        (result) => result.status === "success"
+      ).length;
       const failedCount = response.value.results.length - successCount;
 
       try {
@@ -281,6 +293,7 @@ export function PopupApp() {
   return (
     <main className="app-shell app-shell--popup">
       <PopupHeader />
+      <PopupModeToggle mode={mode} onChange={setMode} />
       <ScanControls
         canCancelScan={state.canCancelScan}
         onCancelScan={handleCancelScan}
@@ -288,61 +301,110 @@ export function PopupApp() {
         progressLabel={state.progressLabel}
         scanStatus={state.scanStatus}
       />
-      <CompletenessReport completeness={state.completeness} partialWarning={state.partialWarning} />
-      <ExportOptionsForm
-        onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
-        onClearSelection={handleClearSelection}
-        onFormatToggle={(format) => dispatch({ format, type: "set_format" })}
-        onIncludeMetadataChange={(includeMetadata) =>
-          dispatch({ includeMetadata, type: "set_include_metadata" })
-        }
-        onMarkdownProfileChange={(markdownProfile) =>
-          dispatch({ markdownProfile, type: "set_markdown_profile" })
-        }
-        onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
-        onRangeEndChange={(rangeEndIndex) => dispatch({ rangeEndIndex, type: "set_range_end" })}
-        onRangeStartChange={(rangeStartIndex) =>
-          dispatch({ rangeStartIndex, type: "set_range_start" })
-        }
-        onRedactionPresetChange={(redactionPreset) =>
-          dispatch({ redactionPreset, type: "set_redaction_preset" })
-        }
-        onScopeChange={(scope) => dispatch({ scope, type: "set_scope" })}
-        onStartSelection={handleStartSelection}
-        messageCount={state.completeness?.messageCount}
-        options={state.options}
-        selectionStatusText={getSelectionStatusText(state)}
-      />
-      <BatchExport
-        busy={batchBusy || busy}
-        candidates={batchCandidates}
-        onExportSelected={handleBatchExport}
-        onClearSelection={handleClearBatchSelection}
-        onLoadCandidates={handleLoadBatchCandidates}
-        onSelectAll={handleSelectAllBatchTabs}
-        onToggleTab={handleToggleBatchTab}
-        results={batchResults}
-        selectedTabIds={batchSelectedTabIds}
-        status={batchStatus}
-      />
-      <PreviewPanel
-        disabled={!canUseActions}
-        messages={getScopedPreviewMessages(state)}
-        onOpenFullPreview={handleOpenFullPreview}
+      <CompletenessReport
+        completeness={state.completeness}
+        partialWarning={state.partialWarning}
+        showAdvancedDetails={advancedMode}
       />
       {state.errorMessage ? <p className="error-text">{state.errorMessage}</p> : null}
-      <ActionBar
-        disabled={!canUseActions}
-        onCopyMarkdown={handleCopyMarkdown}
-        onDownload={handleDownload}
-        onOpenPdf={handleOpenPdf}
-      />
+      {advancedMode ? (
+        <>
+          <ExportOptionsForm
+            onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
+            onClearSelection={handleClearSelection}
+            onFormatToggle={(format) => dispatch({ format, type: "set_format" })}
+            onIncludeMetadataChange={(includeMetadata) =>
+              dispatch({ includeMetadata, type: "set_include_metadata" })
+            }
+            onMarkdownProfileChange={(markdownProfile) =>
+              dispatch({ markdownProfile, type: "set_markdown_profile" })
+            }
+            onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
+            onRangeEndChange={(rangeEndIndex) => dispatch({ rangeEndIndex, type: "set_range_end" })}
+            onRangeStartChange={(rangeStartIndex) =>
+              dispatch({ rangeStartIndex, type: "set_range_start" })
+            }
+            onRedactionPresetChange={(redactionPreset) =>
+              dispatch({ redactionPreset, type: "set_redaction_preset" })
+            }
+            onScopeChange={(scope) => dispatch({ scope, type: "set_scope" })}
+            onStartSelection={handleStartSelection}
+            messageCount={state.completeness?.messageCount}
+            options={state.options}
+            selectionStatusText={getSelectionStatusText(state)}
+          />
+          <BatchExport
+            busy={batchBusy || busy}
+            candidates={batchCandidates}
+            onExportSelected={handleBatchExport}
+            onClearSelection={handleClearBatchSelection}
+            onLoadCandidates={handleLoadBatchCandidates}
+            onSelectAll={handleSelectAllBatchTabs}
+            onToggleTab={handleToggleBatchTab}
+            results={batchResults}
+            selectedTabIds={batchSelectedTabIds}
+            status={batchStatus}
+          />
+          <PreviewPanel
+            disabled={!canUseActions}
+            messages={getScopedPreviewMessages(state)}
+            onOpenFullPreview={handleOpenFullPreview}
+          />
+          <ActionBar
+            disabled={!canUseActions}
+            onCopyMarkdown={handleCopyMarkdown}
+            onDownload={handleDownload}
+            onOpenPdf={handleOpenPdf}
+          />
+        </>
+      ) : (
+        <SimpleActionBar
+          disabled={!canUseActions}
+          onCopyMarkdown={handleCopyMarkdown}
+          onDownloadMarkdown={handleDownloadMarkdown}
+          onOpenFullPreview={handleOpenFullPreview}
+        />
+      )}
       <p className="privacy-note" id="privacy">
         100% local processing. No telemetry, trackers, remote logging, remote rendering, or server
         uploads.
       </p>
       <PopupFooter />
     </main>
+  );
+}
+
+interface PopupModeToggleProps {
+  readonly mode: PopupMode;
+  readonly onChange: (mode: PopupMode) => void;
+}
+
+function PopupModeToggle({ mode, onChange }: PopupModeToggleProps) {
+  return (
+    <div className="popup-mode-toggle" role="group" aria-label="Popup mode">
+      <button
+        aria-pressed={mode === "simple"}
+        className={
+          mode === "simple" ? "mode-toggle-button mode-toggle-button--active" : "mode-toggle-button"
+        }
+        onClick={() => onChange("simple")}
+        type="button"
+      >
+        Simple
+      </button>
+      <button
+        aria-pressed={mode === "advanced"}
+        className={
+          mode === "advanced"
+            ? "mode-toggle-button mode-toggle-button--active"
+            : "mode-toggle-button"
+        }
+        onClick={() => onChange("advanced")}
+        type="button"
+      >
+        Advanced
+      </button>
+    </div>
   );
 }
 

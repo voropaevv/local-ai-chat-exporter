@@ -1,18 +1,25 @@
 import type { CompletenessReport as CompletenessReportModel } from "../../core/schema";
 
-const PREVIEW_MAX_LENGTH = 48;
+const PREVIEW_MAX_LENGTH = 100;
 
 interface CompletenessReportProps {
   readonly completeness?: CompletenessReportModel;
   readonly partialWarning?: string;
+  readonly showAdvancedDetails?: boolean;
 }
 
-export function CompletenessReport({ completeness, partialWarning }: CompletenessReportProps) {
+export function CompletenessReport({
+  completeness,
+  partialWarning,
+  showAdvancedDetails = false
+}: CompletenessReportProps) {
   if (completeness === undefined) {
     return (
       <section className="panel" aria-labelledby="completeness-title">
         <h2 id="completeness-title">Completeness</h2>
-        <p className="muted">Scan a supported conversation to see message counts and warnings.</p>
+        <p className="muted">
+          Scan a supported conversation to prepare Markdown actions and see capture status.
+        </p>
       </section>
     );
   }
@@ -41,27 +48,42 @@ export function CompletenessReport({ completeness, partialWarning }: Completenes
           <dd className="report-preview">{truncatePreview(completeness.lastMessagePreview)}</dd>
         </div>
       </dl>
-      <details className="inline-details">
-        <summary>Advanced scan details</summary>
-        <dl className="report-grid">
-          <div>
-            <dt>Duplicates skipped</dt>
-            <dd>{completeness.duplicateCount}</dd>
-          </div>
-          <div>
-            <dt>Scroll steps</dt>
-            <dd>{completeness.scrollSteps}</dd>
-          </div>
-          <div>
-            <dt>Reached top</dt>
-            <dd>{completeness.reachedTop ? "Yes" : "No"}</dd>
-          </div>
-          <div>
-            <dt>Reached bottom</dt>
-            <dd>{completeness.reachedBottom ? "Yes" : "No"}</dd>
-          </div>
-        </dl>
-      </details>
+      {showAdvancedDetails ? (
+        <details className="inline-details">
+          <summary>Advanced scan details</summary>
+          <dl className="report-grid">
+            <div>
+              <dt>Duplicates skipped</dt>
+              <dd>{completeness.duplicateCount}</dd>
+            </div>
+            <div>
+              <dt>Scroll steps</dt>
+              <dd>{completeness.scrollSteps}</dd>
+            </div>
+            <div>
+              <dt>Reached top</dt>
+              <dd>{completeness.reachedTop ? "Yes" : "No"}</dd>
+            </div>
+            <div>
+              <dt>Reached bottom</dt>
+              <dd>{completeness.reachedBottom ? "Yes" : "No"}</dd>
+            </div>
+          </dl>
+          <details className="inline-details">
+            <summary>Full first and last previews</summary>
+            <dl className="report-grid">
+              <div>
+                <dt>First full</dt>
+                <dd>{completeness.firstMessagePreview ?? "Not available"}</dd>
+              </div>
+              <div>
+                <dt>Last full</dt>
+                <dd>{completeness.lastMessagePreview ?? "Not available"}</dd>
+              </div>
+            </dl>
+          </details>
+        </details>
+      ) : null}
       {partialWarning ? <p className="warning-text">{partialWarning}</p> : null}
       {warnings.length > 0 ? (
         <ul className="warning-list" aria-label="Completeness warnings">

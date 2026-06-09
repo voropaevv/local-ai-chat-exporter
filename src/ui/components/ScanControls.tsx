@@ -25,7 +25,7 @@ export function ScanControls({
       </div>
       <div className="button-row">
         <button className="primary-action" type="button" disabled={scanning} onClick={onScan}>
-          Scan conversation
+          Scan
         </button>
         <button
           className="secondary-action"
