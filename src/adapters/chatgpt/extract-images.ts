@@ -103,7 +103,7 @@ function isInsideUiControl(element: Element): boolean {
         "[role='checkbox']",
         "[role='menuitem']",
         "[contenteditable='true']",
-        "[data-local-ai-chat-exporter]",
+        "[data-logthread]",
         "[data-testid*='copy' i]",
         "[data-testid*='feedback' i]",
         "[data-testid*='regenerate' i]",

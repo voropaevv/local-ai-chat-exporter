@@ -160,7 +160,7 @@ describe("batch export core helpers", () => {
       })
     ).toEqual({
       exportedAt: "2026-05-31T10:20:30.000Z",
-      generatedBy: "local-ai-chat-exporter",
+      generatedBy: "logthread",
       resultCount: 2,
       rootDirectory: "local-ai-chat-export-2026-05-31",
       results: [

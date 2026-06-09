@@ -19,7 +19,7 @@ test("extension popup scans a ChatGPT fixture and downloads markdown", async () 
   const server = await startFixtureServer({
     "/chatgpt": readFixture("chatgpt", "simple-conversation.html")
   });
-  const userDataDir = await mkdtemp(resolve(tmpdir(), "local-ai-chat-exporter-"));
+  const userDataDir = await mkdtemp(resolve(tmpdir(), "logthread-"));
   let context: BrowserContext | undefined;
 
   try {

@@ -50,7 +50,7 @@ async function main() {
   await stat(resolve(distDir, "manifest.json"));
 
   const version = await readPackageVersion();
-  const zipName = `local-ai-chat-exporter-v${version}.zip`;
+  const zipName = `logthread-v${version}.zip`;
   const files = await collectFiles(distDir);
   const zipEntries = {};
 
@@ -82,7 +82,7 @@ async function cleanReleaseArtifacts() {
   await mkdir(releaseDir, { recursive: true });
 
   for (const entry of await readdir(releaseDir)) {
-    if (/^local-ai-chat-exporter-v.+\.zip(?:\.sha256)?$/.test(entry)) {
+    if (/^.+-v.+\.zip(?:\.sha256)?$/.test(entry)) {
       await rm(resolve(releaseDir, entry), { force: true });
     }
   }

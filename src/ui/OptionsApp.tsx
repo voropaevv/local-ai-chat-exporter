@@ -86,7 +86,7 @@ export function OptionsApp() {
       <header className="app-header">
         <BrandIcon />
         <div>
-          <h1>Local AI Chat Exporter</h1>
+          <h1>LogThread</h1>
           <p className="muted">Privacy controls and permission details.</p>
         </div>
       </header>

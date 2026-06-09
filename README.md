@@ -1,4 +1,4 @@
-# Local AI Chat Exporter
+# LogThread
 
 Open-source, local-first browser extension for exporting the AI chat conversation currently open in your browser to local files.
 
@@ -98,4 +98,4 @@ pnpm build
 pnpm package
 ```
 
-The package script writes `release/local-ai-chat-exporter-v<version>.zip` and a matching `.sha256` checksum.
+The package script writes `release/logthread-v<version>.zip` and a matching `.sha256` checksum.

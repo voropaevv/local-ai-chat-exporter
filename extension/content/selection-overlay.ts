@@ -59,7 +59,7 @@ export function createSelectionOverlay(
 
         checkbox.type = "checkbox";
         checkbox.setAttribute("aria-label", `Select message ${index + 1}`);
-        label.className = "local-ai-chat-exporter-selection-control";
+        label.className = "logthread-selection-control";
         label.setAttribute(CONTROL_ATTRIBUTE, "true");
         label.textContent = "Export";
         label.prepend(checkbox);

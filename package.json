@@ -1,5 +1,5 @@
 {
-  "name": "local-ai-chat-exporter",
+  "name": "logthread",
   "version": "0.1.0",
   "description": "Open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
   "type": "module",

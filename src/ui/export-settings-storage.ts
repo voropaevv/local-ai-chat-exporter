@@ -1,6 +1,6 @@
 import { DEFAULT_FILENAME_TEMPLATE } from "./filename-template";
 
-export const EXPORT_SETTINGS_STORAGE_KEY = "local-ai-chat-exporter/export-settings";
+export const EXPORT_SETTINGS_STORAGE_KEY = "logthread/export-settings";
 
 export interface ExportSettings {
   readonly filenameTemplate: string;

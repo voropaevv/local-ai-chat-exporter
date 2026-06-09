@@ -15,7 +15,7 @@ export interface LegacyRedactionOptions {
 
 export type RedactionOptions = Partial<RedactionSettings> | LegacyRedactionOptions | undefined;
 
-export const REDACTION_STORAGE_KEY = "local-ai-chat-exporter:redaction";
+export const REDACTION_STORAGE_KEY = "logthread:redaction";
 
 export const DEFAULT_REDACTION_SETTINGS: RedactionSettings = {
   customPatterns: [],

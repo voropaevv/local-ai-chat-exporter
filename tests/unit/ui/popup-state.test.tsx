@@ -109,7 +109,7 @@ describe("popup state", () => {
         scope: "assistant_only"
       },
       returnFiles: false,
-      type: "local-ai-chat-exporter/export-current-tab"
+      type: "logthread/export-current-tab"
     });
     expect(buildCopyMarkdownRequest(state)).toMatchObject({
       copyToClipboard: true,
@@ -123,10 +123,10 @@ describe("popup state", () => {
       returnFiles: true
     });
     expect(buildGetScanCacheSummaryRequest()).toEqual({
-      type: "local-ai-chat-exporter/get-scan-cache-summary"
+      type: "logthread/get-scan-cache-summary"
     });
     expect(buildOpenPreviewRequest()).toEqual({
-      type: "local-ai-chat-exporter/open-preview"
+      type: "logthread/open-preview"
     });
   });
 

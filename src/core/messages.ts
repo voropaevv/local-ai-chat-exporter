@@ -3,27 +3,27 @@ import type { BatchCandidateTab, BatchManifestResult } from "./batch";
 import type { CompletenessReport, ChatRole, ConversationExport } from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
-export const POPUP_SCAN_MESSAGE = "local-ai-chat-exporter/scan-current-tab";
-export const POPUP_CANCEL_SCAN_MESSAGE = "local-ai-chat-exporter/cancel-scan";
-export const POPUP_EXPORT_MESSAGE = "local-ai-chat-exporter/export-current-tab";
-export const POPUP_BATCH_LIST_MESSAGE = "local-ai-chat-exporter/list-open-chat-tabs";
-export const POPUP_BATCH_EXPORT_MESSAGE = "local-ai-chat-exporter/export-open-chat-tabs";
-export const POPUP_START_SELECTION_MESSAGE = "local-ai-chat-exporter/start-selection";
-export const POPUP_CLEAR_SELECTION_MESSAGE = "local-ai-chat-exporter/clear-selection";
+export const POPUP_SCAN_MESSAGE = "logthread/scan-current-tab";
+export const POPUP_CANCEL_SCAN_MESSAGE = "logthread/cancel-scan";
+export const POPUP_EXPORT_MESSAGE = "logthread/export-current-tab";
+export const POPUP_BATCH_LIST_MESSAGE = "logthread/list-open-chat-tabs";
+export const POPUP_BATCH_EXPORT_MESSAGE = "logthread/export-open-chat-tabs";
+export const POPUP_START_SELECTION_MESSAGE = "logthread/start-selection";
+export const POPUP_CLEAR_SELECTION_MESSAGE = "logthread/clear-selection";
 export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE =
-  "local-ai-chat-exporter/get-scan-cache-summary";
-export const POPUP_OPEN_PREVIEW_MESSAGE = "local-ai-chat-exporter/open-preview";
+  "logthread/get-scan-cache-summary";
+export const POPUP_OPEN_PREVIEW_MESSAGE = "logthread/open-preview";
 export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE =
-  "local-ai-chat-exporter/preview-get-cached-conversation";
-export const CONTENT_SCAN_MESSAGE = "local-ai-chat-exporter/content-scan";
-export const CONTENT_CANCEL_SCAN_MESSAGE = "local-ai-chat-exporter/content-cancel-scan";
-export const CONTENT_EXPORT_MESSAGE = "local-ai-chat-exporter/content-export";
-export const CONTENT_START_SELECTION_MESSAGE = "local-ai-chat-exporter/content-start-selection";
-export const CONTENT_CLEAR_SELECTION_MESSAGE = "local-ai-chat-exporter/content-clear-selection";
+  "logthread/preview-get-cached-conversation";
+export const CONTENT_SCAN_MESSAGE = "logthread/content-scan";
+export const CONTENT_CANCEL_SCAN_MESSAGE = "logthread/content-cancel-scan";
+export const CONTENT_EXPORT_MESSAGE = "logthread/content-export";
+export const CONTENT_START_SELECTION_MESSAGE = "logthread/content-start-selection";
+export const CONTENT_CLEAR_SELECTION_MESSAGE = "logthread/content-clear-selection";
 export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE =
-  "local-ai-chat-exporter/content-get-scan-cache-summary";
+  "logthread/content-get-scan-cache-summary";
 export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE =
-  "local-ai-chat-exporter/content-get-cached-conversation";
+  "logthread/content-get-cached-conversation";
 
 export interface PreviewMessage {
   readonly index: number;

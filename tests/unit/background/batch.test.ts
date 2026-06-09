@@ -82,7 +82,7 @@ describe("batch export background flow", () => {
     const response = await handlePopupBatchExportRequest({
       options: { formats: ["html", "txt"] },
       tabIds: [10],
-      type: "local-ai-chat-exporter/export-open-chat-tabs"
+      type: "logthread/export-open-chat-tabs"
     });
 
     const exportRequest = sendMessage.mock.calls.find(
@@ -128,7 +128,7 @@ describe("batch export background flow", () => {
       handlePopupBatchExportRequest({
         options: { formats: ["md"] },
         tabIds: [10],
-        type: "local-ai-chat-exporter/export-open-chat-tabs"
+        type: "logthread/export-open-chat-tabs"
       })
     ).rejects.toMatchObject({
       code: "unsupported_platform",
@@ -162,7 +162,7 @@ describe("batch export background flow", () => {
     const response = await handlePopupBatchExportRequest({
       options: { formats: ["md", "json"] },
       tabIds: [10],
-      type: "local-ai-chat-exporter/export-open-chat-tabs"
+      type: "logthread/export-open-chat-tabs"
     });
 
     expect(response.zipFile).toBeUndefined();

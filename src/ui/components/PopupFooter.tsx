@@ -1,4 +1,4 @@
-const GITHUB_URL = ["https:", "", "github.com", "voropaevv", "local-ai-chat-exporter"].join("/");
+const GITHUB_URL = ["https:", "", "github.com", "voropaevv", "logthread"].join("/");
 const PRIVACY_PAGE_PATH = "options/index.html#privacy";
 
 export function PopupFooter() {

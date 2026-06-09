@@ -34,7 +34,7 @@ interface ZipManifestFile {
 }
 
 interface ZipManifest {
-  readonly generatedBy: "local-ai-chat-exporter";
+  readonly generatedBy: "logthread";
   readonly exportedAt: string;
   readonly sourceUrl: string;
   readonly title?: string;
@@ -172,7 +172,7 @@ function renderManifest(
   files: readonly RenderedFile<string | Uint8Array>[]
 ): ZipManifest {
   return {
-    generatedBy: "local-ai-chat-exporter",
+    generatedBy: "logthread",
     exportedAt: conversation.exportedAt,
     sourceUrl: conversation.sourceUrl,
     ...(conversation.title !== undefined ? { title: conversation.title } : {}),

@@ -68,7 +68,7 @@ describe("renderZip", () => {
     expect(strFromU8(zip["2026-05-31T10-20-30Z_chatgpt_ZIP-Export.json"])).toContain(
       '"title": "ZIP Export"'
     );
-    expect(manifest.generatedBy).toBe("local-ai-chat-exporter");
+    expect(manifest.generatedBy).toBe("logthread");
     expect(manifest.files).toEqual([
       {
         filename: "2026-05-31T10-20-30Z_chatgpt_ZIP-Export.md",

@@ -48,7 +48,7 @@ export interface BatchManifestInput {
 
 export interface BatchManifest {
   readonly exportedAt: string;
-  readonly generatedBy: "local-ai-chat-exporter";
+  readonly generatedBy: "logthread";
   readonly resultCount: number;
   readonly rootDirectory: string;
   readonly results: readonly BatchManifestResult[];
@@ -185,7 +185,7 @@ export function getBatchRequiredOriginsForTabs(
 export function createBatchManifest(input: BatchManifestInput): BatchManifest {
   return {
     exportedAt: input.exportedAt,
-    generatedBy: "local-ai-chat-exporter",
+    generatedBy: "logthread",
     resultCount: input.results.length,
     rootDirectory: input.rootDirectory,
     results: input.results.map((result) => {
