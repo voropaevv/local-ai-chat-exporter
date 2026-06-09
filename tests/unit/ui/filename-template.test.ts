@@ -51,8 +51,8 @@ describe("filename template builder helpers", () => {
       datetime: "2026-06-03T10-20-30",
       format: "md",
       platform: "chatgpt",
-      title: "DNA Analysis"
-    })).toBe("2026-06-03T10-20-30_chatgpt_DNA Analysis.md");
+      title: "Research Notes"
+    })).toBe("2026-06-03T10-20-30_chatgpt_Research Notes.md");
   });
 
   test("keeps raw template editing out of the default filename builder UI", () => {

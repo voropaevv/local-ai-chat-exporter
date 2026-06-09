@@ -109,7 +109,7 @@ describe("batch export core helpers", () => {
       id: 9,
       platform: "chatgpt" as const,
       platformLabel: "ChatGPT" as const,
-      title: "DNA Analysis",
+      title: "Research Notes",
       url: "https://chatgpt.com/c/abc123?model=test"
     };
 

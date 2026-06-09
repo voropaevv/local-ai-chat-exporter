@@ -32,7 +32,7 @@ export function FilenameTemplateBuilder({
     datetime: "2026-06-03T10-20-30Z",
     format,
     platform: "chatgpt",
-    title: "DNA Analysis"
+    title: "Research Notes"
   });
 
   function updateSegments(nextSegments: readonly FilenameTemplateSegment[]) {

@@ -4,6 +4,8 @@ Open-source, local-first browser extension for exporting the AI chat conversatio
 
 The extension is designed around no telemetry, no analytics, no remote rendering, no external export servers, no remote hosted code, and minimal Manifest V3 permissions.
 
+No account is required to use LogThread. The extension operates on the supported AI chat page already open in your browser.
+
 ## Supported Platforms
 
 - ChatGPT at `https://chatgpt.com/*` and `https://chat.openai.com/*`.
@@ -71,6 +73,8 @@ pnpm test:e2e
 
 - Processing happens locally in the browser after explicit user action.
 - No telemetry, analytics, ads, trackers, session replay, remote logging, remote rendering, or export server is used.
+- No LogThread account is required.
+- Conversation content is not uploaded to LogThread or any export server.
 - Conversation content is not stored by default.
 - Browser storage is used for local preferences such as redaction settings.
 - Optional permissions are requested only for user-facing workflows such as downloads and batch export.
@@ -99,3 +103,24 @@ pnpm package
 ```
 
 The package script writes `release/logthread-v<version>.zip` and a matching `.sha256` checksum.
+
+## Repository Hygiene
+
+Before publishing changes, verify that generated artifacts and local files are not tracked:
+
+```bash
+git ls-files
+```
+
+Run a current tree secret scan:
+
+```bash
+gitleaks detect --source . --redact --verbose
+```
+
+For a full git history review, inspect all reachable commits and then run the same scanner against the repository history:
+
+```bash
+git log --all --oneline
+gitleaks detect --source . --redact --verbose
+```

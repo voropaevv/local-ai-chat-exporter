@@ -1,6 +1,6 @@
 # Security Audit
 
-Status: Task 00 rebrand baseline.
+Status: Task 01 public repo hygiene baseline.
 
 ## Current Findings
 
@@ -11,6 +11,8 @@ Status: Task 00 rebrand baseline.
 - The icon source is local SVG and covered by palette/safety checks.
 - Release packaging generates a production extension ZIP and checksum.
 - Static checks cover remote code patterns, manifest permissions, classic content script constraints, and preview build shape.
+- Current tracked files exclude release ZIPs, QA artifacts, test output, screenshots, HAR files, trace ZIPs, `.env` files, and Codex task artifacts.
+- Secret scan guidance is documented for both the current tree and git history.
 
 ## Required Ongoing Checks
 
@@ -21,6 +23,16 @@ node scripts/check-no-remote-code.mjs
 node scripts/check-manifest-permissions.mjs
 node scripts/check-content-script-classic.mjs
 node scripts/check-preview-build.mjs --release
+```
+
+## Repository Hygiene Review
+
+Use these commands before public handoff and release work:
+
+```bash
+git ls-files
+git log --all --oneline
+gitleaks detect --source . --redact --verbose
 ```
 
 ## Open Manual QA

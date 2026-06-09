@@ -12,7 +12,8 @@ const bearerToken = [
   "InR5cCI6IkpXVCJ9",
   "longlonglonglonglonglonglonglong"
 ].join(".");
-const richSecretInput = `Email admin@example.com, call +1 (415) 555-2671, key ${fakeProjectKey}, bearer Bearer ${bearerToken}, id 0123456789abcdef0123456789abcdef.`;
+const fakeLongSecret = Array.from({ length: 2 }, () => "0123456789abcdef").join("");
+const richSecretInput = `Email admin@example.com, call +1 (415) 555-2671, key ${fakeProjectKey}, bearer Bearer ${bearerToken}, id ${fakeLongSecret}.`;
 
 describe("redactText", () => {
   test("keeps text unchanged when the preset is off", () => {
@@ -21,7 +22,7 @@ describe("redactText", () => {
 
   test("basic preset redacts emails and phone numbers only", () => {
     expect(redactText(richSecretInput, { preset: "basic" })).toBe(
-      `Email [REDACTED_EMAIL], call [REDACTED_PHONE], key ${fakeProjectKey}, bearer Bearer ${bearerToken}, id 0123456789abcdef0123456789abcdef.`
+      `Email [REDACTED_EMAIL], call [REDACTED_PHONE], key ${fakeProjectKey}, bearer Bearer ${bearerToken}, id ${fakeLongSecret}.`
     );
   });
 
