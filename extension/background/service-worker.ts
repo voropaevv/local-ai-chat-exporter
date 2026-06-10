@@ -13,6 +13,7 @@ import {
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   CONTENT_START_SELECTION_MESSAGE,
+  POPUP_GET_ACTIVE_TAB_INFO_MESSAGE,
   POPUP_GET_CACHED_CONVERSATION_MESSAGE,
   POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   POPUP_OPEN_PREVIEW_MESSAGE,
@@ -22,6 +23,7 @@ import {
   POPUP_SCAN_MESSAGE,
   POPUP_START_SELECTION_MESSAGE,
   PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
+  type ActiveTabInfoResult,
   type CachedConversationResult,
   type ContentClearSelectionRequest,
   type ContentExportRequest,
@@ -39,6 +41,7 @@ import {
   type PopupExportRequest,
   type PopupGetCachedConversationRequest,
   type PopupExportSuccess,
+  type PopupGetActiveTabInfoRequest,
   type PopupGetScanCacheSummaryRequest,
   type PopupOpenPreviewRequest,
   type PopupScanRequest,
@@ -79,12 +82,14 @@ async function handlePopupRequest(
     | PopupBatchExportRequest
     | PopupStartSelectionRequest
     | PopupClearSelectionRequest
+    | PopupGetActiveTabInfoRequest
     | PopupGetScanCacheSummaryRequest
     | PopupGetCachedConversationRequest
     | PopupOpenPreviewRequest
     | PreviewGetCachedConversationRequest
 ): Promise<
   | ScanSummary
+  | ActiveTabInfoResult
   | ScanCacheSummaryResult
   | PopupExportSuccess
   | BatchListSuccess
@@ -107,6 +112,10 @@ async function handlePopupRequest(
 
   if (request.type === POPUP_CLEAR_SELECTION_MESSAGE) {
     return handlePopupSelectionMessage({ type: CONTENT_CLEAR_SELECTION_MESSAGE });
+  }
+
+  if (request.type === POPUP_GET_ACTIVE_TAB_INFO_MESSAGE) {
+    return handlePopupGetActiveTabInfoRequest();
   }
 
   if (request.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE) {
@@ -134,6 +143,15 @@ async function handlePopupRequest(
   }
 
   return handlePopupExportRequest(request);
+}
+
+async function handlePopupGetActiveTabInfoRequest(): Promise<ActiveTabInfoResult> {
+  const tab = await getActiveTab();
+
+  return {
+    ...(typeof tab.url === "string" && tab.url.length > 0 ? { sourceUrl: tab.url } : {}),
+    ...(typeof tab.title === "string" && tab.title.length > 0 ? { title: tab.title } : {})
+  };
 }
 
 async function handlePopupScanRequest(): Promise<ScanSummary> {
@@ -375,6 +393,7 @@ function isPopupRequest(
   | PopupBatchExportRequest
   | PopupStartSelectionRequest
   | PopupClearSelectionRequest
+  | PopupGetActiveTabInfoRequest
   | PopupGetScanCacheSummaryRequest
   | PopupGetCachedConversationRequest
   | PopupOpenPreviewRequest
@@ -384,6 +403,7 @@ function isPopupRequest(
     (message.type === POPUP_SCAN_MESSAGE ||
       message.type === POPUP_CANCEL_SCAN_MESSAGE ||
       message.type === POPUP_EXPORT_MESSAGE ||
+      message.type === POPUP_GET_ACTIVE_TAB_INFO_MESSAGE ||
       message.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE ||
       message.type === POPUP_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === POPUP_OPEN_PREVIEW_MESSAGE ||

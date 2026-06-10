@@ -21,6 +21,13 @@ import type { LucideIcon } from "lucide-preact";
 import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
+import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
+import type {
+  BatchExportSuccess,
+  BatchListSuccess,
+  RuntimeResponse,
+  SerializedRenderedFile
+} from "../core/messages";
 import {
   DEFAULT_REDACTION_SETTINGS,
   normalizeRedactionSettings,
@@ -28,7 +35,12 @@ import {
   type RedactionSettings
 } from "../core/redaction";
 import type { ExportFormat } from "../core/schema";
+import type { RenderedBytes, RenderedFile } from "../renderers";
+import { downloadRenderedFiles } from "../utils/download";
+import { requestBatchHostPermissions, requestBatchTabsPermission } from "./batch-permissions";
+import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
 import { BrandIcon } from "./components/BrandIcon";
+import { InfoTip } from "./components/InfoTip";
 import {
   DEFAULT_EXPORT_SETTINGS,
   normalizeExportSettings,
@@ -39,8 +51,15 @@ import {
   type StoredPopupFileFormat
 } from "./export-settings-storage";
 import { DEFAULT_FILENAME_TEMPLATE, createFilenamePreview } from "./filename-template";
+import { formatCount } from "./pluralize";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
-import { LOGTHREAD_GITHUB_URL, SUPPORT_LINKS } from "./support-links";
+import {
+  buildBatchExportRequest,
+  buildBatchListRequest,
+  createInitialPopupState,
+  type PopupState
+} from "./state/popup-state";
+import { LOGTHREAD_GITHUB_URL, LOGTHREAD_PRIVACY_URL, SUPPORT_LINKS } from "./support-links";
 
 type ThemePreference = "system" | "light" | "dark";
 
@@ -82,6 +101,11 @@ const FILENAME_PATTERN_PRESETS = [
 
 export function OptionsApp() {
   const [exportSettings, setExportSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
+  const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
+  const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
+  const [batchStatus, setBatchStatus] = useState("Batch export is idle.");
   const [filenameSaveStatus, setFilenameSaveStatus] = useState("Saved locally.");
   const [redaction, setRedaction] = useState<RedactionSettings>(DEFAULT_REDACTION_SETTINGS);
   const [redactionSaveStatus, setRedactionSaveStatus] = useState("Saved locally.");
@@ -155,6 +179,142 @@ export function OptionsApp() {
     window.close();
   }
 
+  async function handleLoadBatchCandidates() {
+    const permission = await requestBatchTabsPermission();
+
+    setBatchResults([]);
+
+    if (!permission.granted) {
+      setBatchStatus(permission.message ?? "Tabs permission was not granted.");
+      return;
+    }
+
+    setBatchBusy(true);
+    setBatchStatus("Looking for open AI chat tabs...");
+
+    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+
+    if (response.ok) {
+      const tabs = response.value.tabs;
+      setBatchCandidates(tabs);
+      setBatchSelectedTabIds(tabs.map((tab) => tab.id));
+      setBatchStatus(`Found ${formatCount(tabs.length, "open AI chat tab")}. All selected.`);
+    } else {
+      setBatchStatus(response.error.message);
+    }
+
+    setBatchBusy(false);
+  }
+
+  function handleToggleBatchTab(tabId: number) {
+    setBatchSelectedTabIds((selected) =>
+      selected.includes(tabId)
+        ? selected.filter((candidate) => candidate !== tabId)
+        : [...selected, tabId]
+    );
+  }
+
+  function handleSelectAllBatchTabs() {
+    setBatchSelectedTabIds(batchCandidates.map((tab) => tab.id));
+  }
+
+  function handleClearBatchSelection() {
+    setBatchSelectedTabIds([]);
+  }
+
+  async function handleBatchExport() {
+    if (batchSelectedTabIds.length === 0) {
+      setBatchStatus("Select at least one open tab.");
+      return;
+    }
+
+    const selectedTabs = batchCandidates.filter((tab) => batchSelectedTabIds.includes(tab.id));
+
+    if (selectedTabs.length !== batchSelectedTabIds.length) {
+      setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatus(
+        "Some selected tabs are no longer available. Review the updated selection and export again."
+      );
+      return;
+    }
+
+    const permission = await requestBatchHostPermissions(selectedTabs);
+
+    if (!permission.granted) {
+      setBatchStatus(permission.message ?? "Site access was not granted.");
+      return;
+    }
+
+    setBatchBusy(true);
+    setBatchStatus("Checking selected open tabs...");
+
+    const preflightedTabs = await preflightBatchTabs(batchSelectedTabIds);
+
+    if (preflightedTabs === undefined) {
+      setBatchBusy(false);
+      return;
+    }
+
+    setBatchStatus("Exporting selected tabs locally into one ZIP...");
+
+    const response = await sendRuntimeMessage<BatchExportSuccess>(
+      buildBatchExportRequest(
+        buildSettingsPopupState(exportSettings, redaction),
+        batchSelectedTabIds
+      )
+    );
+
+    if (response.ok) {
+      const successCount = response.value.results.filter(
+        (result) => result.status === "success"
+      ).length;
+      const failedCount = response.value.results.length - successCount;
+      const resultSummary = formatBatchExportSummary(successCount, failedCount);
+
+      try {
+        setBatchResults(response.value.results);
+        if (response.value.zipFile === undefined || response.value.zipFilename === undefined) {
+          setBatchStatus(`No ZIP downloaded. ${resultSummary}.`);
+        } else {
+          await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
+          setBatchStatus(`Saved one ZIP: ${response.value.zipFilename}. ${resultSummary}.`);
+        }
+      } catch (error) {
+        setBatchResults(response.value.results);
+        setBatchStatus(error instanceof Error ? error.message : "Download failed.");
+      }
+    } else {
+      setBatchStatus(response.error.message);
+    }
+
+    setBatchBusy(false);
+  }
+
+  async function preflightBatchTabs(
+    selectedTabIds: readonly number[]
+  ): Promise<readonly BatchCandidateTab[] | undefined> {
+    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+
+    if (!response.ok) {
+      setBatchStatus(response.error.message);
+      return undefined;
+    }
+
+    const tabs = response.value.tabs;
+    const selectedTabs = tabs.filter((tab) => selectedTabIds.includes(tab.id));
+    setBatchCandidates(tabs);
+
+    if (selectedTabs.length !== selectedTabIds.length) {
+      setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatus(
+        "Some selected tabs are no longer available. Review the updated selection and export again."
+      );
+      return undefined;
+    }
+
+    return selectedTabs;
+  }
+
   return (
     <main className="app-shell app-shell--options">
       <header className="settings-header">
@@ -204,6 +364,19 @@ export function OptionsApp() {
           </label>
         </div>
       </SettingsCard>
+
+      <BatchExport
+        busy={batchBusy}
+        candidates={batchCandidates}
+        onClearSelection={handleClearBatchSelection}
+        onExportSelected={handleBatchExport}
+        onLoadCandidates={handleLoadBatchCandidates}
+        onSelectAll={handleSelectAllBatchTabs}
+        onToggleTab={handleToggleBatchTab}
+        results={batchResults}
+        selectedTabIds={batchSelectedTabIds}
+        status={batchStatus}
+      />
 
       <SettingsCard icon={Tag} title="Filename pattern">
         <FilenamePatternControl
@@ -272,7 +445,7 @@ export function OptionsApp() {
             <Heart size={18} strokeWidth={2.2} />
             GitHub Sponsors
           </a>
-          <a href={`${LOGTHREAD_GITHUB_URL}/blob/main/PRIVACY.md`} target="_blank" rel="noreferrer">
+          <a href={LOGTHREAD_PRIVACY_URL} target="_blank" rel="noreferrer">
             <HelpCircle size={18} strokeWidth={2.2} />
             Privacy Policy
           </a>
@@ -305,9 +478,7 @@ function SettingsCard({ children, icon: Icon, title }: SettingsCardProps) {
           <Icon size={21} strokeWidth={2.2} />
         </span>
         <h2 id={`${slugify(title)}-title`}>{title}</h2>
-        <span className="info-dot" aria-hidden="true">
-          i
-        </span>
+        <InfoTip label={getSettingsTooltip(title)} />
       </div>
       <div className="settings-card__control">{children}</div>
     </section>
@@ -493,9 +664,76 @@ function applyThemePreference(preference: ThemePreference) {
   document.documentElement.dataset.theme = preference;
 }
 
+async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<T>> {
+  try {
+    return (await chrome.runtime.sendMessage(message)) as RuntimeResponse<T>;
+  } catch (error) {
+    return {
+      error: {
+        code: "unsupported_platform",
+        message:
+          error instanceof Error ? error.message : "The extension could not contact this tab."
+      },
+      ok: false
+    };
+  }
+}
+
+function buildSettingsPopupState(
+  exportSettings: ExportSettings,
+  redaction: RedactionSettings
+): PopupState {
+  const initialState = createInitialPopupState();
+
+  return {
+    ...initialState,
+    options: {
+      ...initialState.options,
+      bundleFormats: exportSettings.bundleFormats,
+      filenameTemplate: exportSettings.filenameTemplate,
+      formats: exportSettings.formats,
+      outputMode: exportSettings.outputMode,
+      redact: redaction.preset !== "off",
+      redactionCustomPatterns: [...redaction.customPatterns],
+      redactionPreset: redaction.preset
+    }
+  };
+}
+
+function deserializeRenderedFile(file: SerializedRenderedFile): RenderedFile<RenderedBytes> {
+  return {
+    bytes: typeof file.bytes === "string" ? file.bytes : Uint8Array.from(file.bytes),
+    encoding: file.encoding,
+    filename: file.filename,
+    format: file.format,
+    mimeType: file.mimeType
+  };
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function getSettingsTooltip(title: string): string {
+  switch (title) {
+    case "Theme":
+      return "Use system colors or force light or dark mode.";
+    case "Default export formats":
+      return "Choose which formats are selected by default.";
+    case "Filename pattern":
+      return "Choose how downloaded files are named.";
+    case "Privacy / redaction preset":
+      return "Control local redaction before export.";
+    case "Local library":
+      return "Save exports on this device only.";
+    case "Permissions":
+      return "Shows the local browser permissions used by the extension.";
+    case "Support":
+      return "Project links and support options.";
+    default:
+      return title;
+  }
 }

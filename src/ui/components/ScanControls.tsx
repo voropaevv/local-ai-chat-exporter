@@ -1,6 +1,7 @@
 import { ScanLine } from "lucide-preact";
 
 import type { PopupScanStatus } from "../state/popup-state";
+import { InfoTip } from "./InfoTip";
 
 interface ScanControlsProps {
   readonly canCancelScan: boolean;
@@ -23,9 +24,7 @@ export function ScanControls({
     <section className="concept-panel scan-panel" aria-labelledby="scan-title">
       <div className="concept-heading">
         <h2 id="scan-title">Scan conversation</h2>
-        <span className="info-dot" aria-hidden="true">
-          i
-        </span>
+        <InfoTip label="Reads the currently open supported chat locally before export." />
       </div>
       <div className="scan-action-row">
         <button

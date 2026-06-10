@@ -11,7 +11,7 @@ export function BrandIcon({ decorative = true }: BrandIconProps) {
       aria-hidden={decorative}
       className="brand-mark"
       height="40"
-      src={getExtensionAssetUrl("icons/icon-48.png")}
+      src={getExtensionAssetUrl("brand/icon.svg")}
       width="40"
     />
   );

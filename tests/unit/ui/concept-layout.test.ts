@@ -17,6 +17,9 @@ describe("concept-inspired popup and settings layout", () => {
     expect(popupSource).toContain("PageStatusCard");
     expect(popupSource).toContain("PopupExportPanel");
     expect(popupSource).toContain("PrivacyTrustStrip");
+    expect(popupSource).toContain("buildGetActiveTabInfoRequest");
+    expect(popupSource).not.toContain("Advanced options");
+    expect(popupSource).not.toContain("advanced-drawer");
     expect(popupSource).not.toContain("PopupModeToggle");
 
     const exportPanelSource = readFileSync(exportPanelPath, "utf8");
@@ -28,6 +31,7 @@ describe("concept-inspired popup and settings layout", () => {
     expect(exportPanelSource).toContain("ZIP");
     expect(exportPanelSource).toContain("format.toUpperCase()");
     expect(exportPanelSource).toContain("FileArchive");
+    expect(exportPanelSource).toContain("InfoTip");
   });
 
   test("settings source presents the concept rows without verbose privacy copy first", () => {

@@ -12,6 +12,7 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
     readonly permissions?: readonly string[];
   };
   const batchSource = await readFile(resolve(projectRoot, "extension/background/batch.ts"), "utf8");
+  const optionsSource = await readFile(resolve(projectRoot, "src/ui/OptionsApp.tsx"), "utf8");
   const popupSource = await readFile(resolve(projectRoot, "src/ui/PopupApp.tsx"), "utf8");
   const permissionSource = await readFile(
     resolve(projectRoot, "src/ui/batch-permissions.ts"),
@@ -33,8 +34,10 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchSource).not.toContain("Downloads permission is required");
   expect(batchSource).not.toContain("setInterval");
   expect(batchSource).not.toContain("chrome.history");
-  expect(popupSource).toContain("requestBatchTabsPermission");
-  expect(popupSource).toContain("requestBatchHostPermissions");
+  expect(popupSource).not.toContain("requestBatchTabsPermission");
+  expect(popupSource).not.toContain("requestBatchHostPermissions");
+  expect(optionsSource).toContain("requestBatchTabsPermission");
+  expect(optionsSource).toContain("requestBatchHostPermissions");
   expect(batchUiSource).toContain("Find open tabs");
   expect(batchUiSource).toContain("Select all");
   expect(batchUiSource).toContain("Clear selection");
@@ -46,9 +49,9 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchUiSource).toContain("Full URL");
   expect(batchUiSource).toContain("Tab ID");
   expect(batchUiSource).toContain("<details");
-  expect(popupSource).toContain("Checking selected open tabs");
-  expect(popupSource).toContain("formatBatchExportSummary");
-  expect(popupSource.indexOf("requestBatchHostPermissions(selectedTabs)")).toBeLessThan(
-    popupSource.indexOf("await preflightBatchTabs(batchSelectedTabIds)")
+  expect(optionsSource).toContain("Checking selected open tabs");
+  expect(optionsSource).toContain("formatBatchExportSummary");
+  expect(optionsSource.indexOf("requestBatchHostPermissions(selectedTabs)")).toBeLessThan(
+    optionsSource.indexOf("await preflightBatchTabs(batchSelectedTabIds)")
   );
 });

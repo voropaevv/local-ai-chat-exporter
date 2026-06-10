@@ -69,7 +69,6 @@ describe("public repo cleanliness", () => {
 
   test("does not retain the old public project name or runtime globals", () => {
     const oldProjectNeedles: readonly string[] = [
-      ["local", "ai", "chat", "exporter"].join("-"),
       ["Local", "AI", "Chat", "Exporter"].join(" "),
       ["Local", "Ai", "Chat", "Exporter"].join(""),
       ["local", "Ai", "Chat", "Exporter"].join("")

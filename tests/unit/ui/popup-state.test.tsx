@@ -8,6 +8,7 @@ import {
   buildBatchExportRequest,
   buildDownloadMarkdownRequest,
   buildDownloadRequest,
+  buildGetActiveTabInfoRequest,
   buildGetCachedConversationRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPdfRequest,
@@ -137,6 +138,9 @@ describe("popup state", () => {
     expect(buildGetScanCacheSummaryRequest()).toEqual({
       type: "logthread/get-scan-cache-summary"
     });
+    expect(buildGetActiveTabInfoRequest()).toEqual({
+      type: "logthread/get-active-tab-info"
+    });
     expect(buildGetCachedConversationRequest()).toEqual({
       type: "logthread/get-cached-conversation"
     });
@@ -166,6 +170,17 @@ describe("popup state", () => {
       pageSize: "letter",
       template: "dark"
     });
+  });
+
+  test("stores active tab host before scan results are available", () => {
+    const state = popupReducer(createInitialPopupState(), {
+      sourceUrl: "https://chatgpt.com/c/example",
+      title: "Example chat",
+      type: "set_active_tab_info"
+    });
+
+    expect(state.sourceUrl).toBe("https://chatgpt.com/c/example");
+    expect(state.title).toBe("Example chat");
   });
 
   test("builds export requests with stored custom redaction settings", () => {

@@ -10,6 +10,7 @@ export const POPUP_BATCH_LIST_MESSAGE = "logthread/list-open-chat-tabs";
 export const POPUP_BATCH_EXPORT_MESSAGE = "logthread/export-open-chat-tabs";
 export const POPUP_START_SELECTION_MESSAGE = "logthread/start-selection";
 export const POPUP_CLEAR_SELECTION_MESSAGE = "logthread/clear-selection";
+export const POPUP_GET_ACTIVE_TAB_INFO_MESSAGE = "logthread/get-active-tab-info";
 export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE =
   "logthread/get-scan-cache-summary";
 export const POPUP_GET_CACHED_CONVERSATION_MESSAGE =
@@ -84,6 +85,10 @@ export interface PopupGetScanCacheSummaryRequest {
   readonly type: typeof POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE;
 }
 
+export interface PopupGetActiveTabInfoRequest {
+  readonly type: typeof POPUP_GET_ACTIVE_TAB_INFO_MESSAGE;
+}
+
 export interface PopupGetCachedConversationRequest {
   readonly type: typeof POPUP_GET_CACHED_CONVERSATION_MESSAGE;
 }
@@ -154,6 +159,11 @@ export type ScanCacheSummaryResult =
       readonly hasCache: false;
       readonly reason?: ScanCacheMissReason;
     };
+
+export interface ActiveTabInfoResult {
+  readonly sourceUrl?: string;
+  readonly title?: string;
+}
 
 export type CachedConversationResult =
   | {

@@ -1,14 +1,24 @@
-import { Copy, Download, Eye, FileArchive, FileJson, FileText } from "lucide-preact";
+import {
+  Braces,
+  Copy,
+  Download,
+  Eye,
+  FileArchive,
+  FileCode,
+  FileText,
+  FileType
+} from "lucide-preact";
 
 import type { ExportFormat } from "../../core/schema";
 import type { PopupFileFormat, PopupOptionsState, PopupOutputMode } from "../state/popup-state";
+import { InfoTip } from "./InfoTip";
 
 const QUICK_FORMATS = ["md", "pdf", "json", "txt"] as const satisfies readonly PopupFileFormat[];
 const FORMAT_ICONS = {
-  json: FileJson,
-  md: FileText,
+  json: Braces,
+  md: FileCode,
   pdf: FileText,
-  txt: FileText
+  txt: FileType
 } as const;
 
 interface PopupExportPanelProps {
@@ -37,9 +47,7 @@ export function PopupExportPanel({
       <section className="concept-panel export-panel" aria-labelledby="export-title">
         <div className="concept-heading">
           <h2 id="export-title">Export</h2>
-          <span className="info-dot" aria-hidden="true">
-            i
-          </span>
+          <InfoTip label="Choose the local file formats to create from the scanned chat." />
         </div>
         <div className="format-rail" role="group" aria-label="Export formats">
           {QUICK_FORMATS.map((format) => (
@@ -56,7 +64,7 @@ export function PopupExportPanel({
           ))}
           <label className="zip-toggle">
             <span className="format-button__icon" aria-hidden="true">
-              <FileArchive size={18} strokeWidth={2.2} />
+              <FileArchive size={16} strokeWidth={2.2} />
             </span>
             <span>ZIP</span>
             <input
@@ -74,9 +82,7 @@ export function PopupExportPanel({
       <section className="concept-panel output-panel" aria-labelledby="output-title">
         <div className="concept-heading">
           <h2 id="output-title">Output</h2>
-          <span className="info-dot" aria-hidden="true">
-            i
-          </span>
+          <InfoTip label="Download, copy Markdown, or open a local preview after scanning." />
         </div>
         <div className="output-action-grid">
           <button
@@ -85,7 +91,7 @@ export function PopupExportPanel({
             onClick={onDownload}
             type="button"
           >
-            <Download size={18} strokeWidth={2.2} />
+            <Download size={16} strokeWidth={2.2} />
             <span>Download</span>
           </button>
           <button
@@ -94,7 +100,7 @@ export function PopupExportPanel({
             onClick={onCopyMarkdown}
             type="button"
           >
-            <Copy size={18} strokeWidth={2.2} />
+            <Copy size={16} strokeWidth={2.2} />
             <span>Copy MD</span>
           </button>
           <button
@@ -103,7 +109,7 @@ export function PopupExportPanel({
             onClick={onOpenFullPreview}
             type="button"
           >
-            <Eye size={18} strokeWidth={2.2} />
+            <Eye size={16} strokeWidth={2.2} />
             <span>Preview</span>
           </button>
         </div>
@@ -129,7 +135,7 @@ function FormatButton({ active, format, onClick }: FormatButtonProps) {
       type="button"
     >
       <span className="format-button__icon" aria-hidden="true">
-        <Icon size={18} strokeWidth={2.2} />
+        <Icon size={16} strokeWidth={2.2} />
       </span>
       <span>{format.toUpperCase()}</span>
     </button>

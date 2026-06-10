@@ -1,73 +1,37 @@
 import { useEffect, useReducer, useState } from "preact/hooks";
 
-import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
 import type {
-  CachedConversationResult,
+  ActiveTabInfoResult,
+  PopupExportSuccess,
   RuntimeResponse,
   ScanCacheSummaryResult,
-  ScanSummary,
-  SerializedRenderedFile
+  ScanSummary
 } from "../core/messages";
-import type { BatchExportSuccess, BatchListSuccess } from "../core/messages";
-import type { RenderedBytes, RenderedFile } from "../renderers";
-import { createFileBlob } from "../utils/blob";
-import { downloadRenderedFiles } from "../utils/download";
-import { requestBatchHostPermissions, requestBatchTabsPermission } from "./batch-permissions";
 import { readStoredExportSettings } from "./export-settings-storage";
 import { getCachedScanSummary } from "./popup-cache";
-import { ActionBar } from "./components/ActionBar";
-import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
-import { CompletenessReport } from "./components/CompletenessReport";
-import { ExportOptionsForm } from "./components/ExportOptionsForm";
-import { LocalLibraryPanel } from "./components/LocalLibraryPanel";
 import { PageStatusCard } from "./components/PageStatusCard";
 import { PopupFooter } from "./components/PopupFooter";
 import { PopupHeader } from "./components/PopupHeader";
 import { PopupExportPanel } from "./components/PopupExportPanel";
-import { PreviewPanel } from "./components/PreviewPanel";
 import { PrivacyTrustStrip } from "./components/PrivacyTrustStrip";
 import { ScanControls } from "./components/ScanControls";
 import { SupportPrompt } from "./components/SupportPrompt";
 import {
   buildCancelScanRequest,
-  buildBatchExportRequest,
-  buildBatchListRequest,
   buildCopyMarkdownRequest,
-  buildClearSelectionRequest,
   buildDownloadRequest,
   buildExportStatusMessage,
-  buildGetCachedConversationRequest,
+  buildGetActiveTabInfoRequest,
   buildGetScanCacheSummaryRequest,
-  buildOpenPdfRequest,
   buildOpenPreviewRequest,
   buildScanRequest,
-  buildStartSelectionRequest,
   createInitialPopupState,
-  getScopedPreviewMessages,
-  getSelectionStatusText,
   popupReducer
 } from "./state/popup-state";
 import { readStoredRedactionSettings } from "./redaction-storage";
-import { formatCount } from "./pluralize";
-
-interface PopupExportSuccess {
-  readonly clipboardError?: {
-    readonly message: string;
-  };
-  readonly downloaded: readonly string[];
-  readonly exportedMessageCount: number;
-  readonly files?: readonly RenderedFile<RenderedBytes>[];
-  readonly messageCount: number;
-  readonly warnings: readonly string[];
-}
 
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
-  const [batchBusy, setBatchBusy] = useState(false);
-  const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
-  const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
-  const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
-  const [batchStatus, setBatchStatus] = useState("Batch export is idle.");
   const [showSupportPrompt, setShowSupportPrompt] = useState(false);
   const [supportPromptDismissed, setSupportPromptDismissed] = useState(false);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
@@ -91,6 +55,28 @@ export function PopupApp() {
       })
       .catch(() => {
         // Export still works with default local settings if extension storage is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest())
+      .then((response) => {
+        if (!cancelled && response.ok) {
+          dispatch({
+            sourceUrl: response.value.sourceUrl,
+            title: response.value.title,
+            type: "set_active_tab_info"
+          });
+        }
+      })
+      .catch(() => {
+        // If the active tab URL is unavailable, the scan result will fill it later.
       });
 
     return () => {
@@ -136,40 +122,12 @@ export function PopupApp() {
     await sendRuntimeMessage(buildCancelScanRequest());
   }
 
-  async function handleStartSelection() {
-    dispatch({ scope: "selected", type: "set_scope" });
-    dispatch({ selectedMessageCount: 0, type: "selection_count_changed" });
-    await sendRuntimeMessage(buildStartSelectionRequest());
-  }
-
-  async function handleClearSelection() {
-    await sendRuntimeMessage(buildClearSelectionRequest());
-    dispatch({ selectedMessageCount: 0, type: "selection_count_changed" });
-    dispatch({ scope: "all", type: "set_scope" });
-  }
-
   async function handleDownload() {
     await runExportAction(buildDownloadRequest(state));
   }
 
   async function handleCopyMarkdown() {
     await runExportAction(buildCopyMarkdownRequest(state));
-  }
-
-  async function handleOpenPdf() {
-    const response = await runExportAction(buildOpenPdfRequest(state));
-    const pdfFile = response?.files?.find((file) => file.format === "pdf");
-
-    if (pdfFile !== undefined) {
-      openRenderedFile(pdfFile);
-      dispatch({
-        message:
-          pdfFile.mimeType === "application/pdf"
-            ? "Opened PDF from scanned snapshot."
-            : "PDF generation fell back to PDF-ready HTML. No conversation content was uploaded.",
-        type: "export_finished"
-      });
-    }
   }
 
   async function handleOpenFullPreview() {
@@ -186,148 +144,6 @@ export function PopupApp() {
       message: "Full preview opened from scanned snapshot.",
       type: "export_finished"
     });
-  }
-
-  async function loadCurrentConversationForLibrary() {
-    const response = await sendRuntimeMessage<CachedConversationResult>(
-      buildGetCachedConversationRequest()
-    );
-
-    return response.ok && response.value.hasConversation ? response.value.conversation : undefined;
-  }
-
-  async function handleLoadBatchCandidates() {
-    const permission = await requestBatchTabsPermission();
-
-    setBatchResults([]);
-
-    if (!permission.granted) {
-      setBatchStatus(permission.message ?? "Tabs permission was not granted.");
-      return;
-    }
-
-    setBatchBusy(true);
-    setBatchStatus("Looking for open AI chat tabs...");
-
-    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
-
-    if (response.ok) {
-      const tabs = response.value.tabs;
-      setBatchCandidates(tabs);
-      setBatchSelectedTabIds(tabs.map((tab) => tab.id));
-      setBatchStatus(`Found ${formatCount(tabs.length, "open AI chat tab")}. All selected.`);
-    } else {
-      setBatchStatus(response.error.message);
-    }
-
-    setBatchBusy(false);
-  }
-
-  function handleToggleBatchTab(tabId: number) {
-    setBatchSelectedTabIds((selected) =>
-      selected.includes(tabId)
-        ? selected.filter((candidate) => candidate !== tabId)
-        : [...selected, tabId]
-    );
-  }
-
-  function handleSelectAllBatchTabs() {
-    setBatchSelectedTabIds(batchCandidates.map((tab) => tab.id));
-  }
-
-  function handleClearBatchSelection() {
-    setBatchSelectedTabIds([]);
-  }
-
-  async function handleBatchExport() {
-    if (batchSelectedTabIds.length === 0) {
-      setBatchStatus("Select at least one open tab.");
-      return;
-    }
-
-    const selectedTabs = batchCandidates.filter((tab) => batchSelectedTabIds.includes(tab.id));
-
-    if (selectedTabs.length !== batchSelectedTabIds.length) {
-      setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
-      setBatchStatus(
-        "Some selected tabs are no longer available. Review the updated selection and export again."
-      );
-      return;
-    }
-
-    const permission = await requestBatchHostPermissions(selectedTabs);
-
-    if (!permission.granted) {
-      setBatchStatus(permission.message ?? "Site access was not granted.");
-      return;
-    }
-
-    setBatchBusy(true);
-    setBatchStatus("Checking selected open tabs...");
-
-    const preflightedTabs = await preflightBatchTabs(batchSelectedTabIds);
-
-    if (preflightedTabs === undefined) {
-      setBatchBusy(false);
-      return;
-    }
-
-    setBatchStatus("Exporting selected tabs locally into one ZIP...");
-
-    const response = await sendRuntimeMessage<BatchExportSuccess>(
-      buildBatchExportRequest(state, batchSelectedTabIds)
-    );
-
-    if (response.ok) {
-      const successCount = response.value.results.filter(
-        (result) => result.status === "success"
-      ).length;
-      const failedCount = response.value.results.length - successCount;
-      const resultSummary = formatBatchExportSummary(successCount, failedCount);
-
-      try {
-        setBatchResults(response.value.results);
-        if (response.value.zipFile === undefined || response.value.zipFilename === undefined) {
-          setBatchStatus(`No ZIP downloaded. ${resultSummary}.`);
-        } else {
-          await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
-          setBatchStatus(`Saved one ZIP: ${response.value.zipFilename}. ${resultSummary}.`);
-          maybeShowSupportPrompt();
-        }
-      } catch (error) {
-        setBatchResults(response.value.results);
-        setBatchStatus(error instanceof Error ? error.message : "Download failed.");
-      }
-    } else {
-      setBatchStatus(response.error.message);
-    }
-
-    setBatchBusy(false);
-  }
-
-  async function preflightBatchTabs(
-    selectedTabIds: readonly number[]
-  ): Promise<readonly BatchCandidateTab[] | undefined> {
-    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
-
-    if (!response.ok) {
-      setBatchStatus(response.error.message);
-      return undefined;
-    }
-
-    const tabs = response.value.tabs;
-    const selectedTabs = tabs.filter((tab) => selectedTabIds.includes(tab.id));
-    setBatchCandidates(tabs);
-
-    if (selectedTabs.length !== selectedTabIds.length) {
-      setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
-      setBatchStatus(
-        "Some selected tabs are no longer available. Review the updated selection and export again."
-      );
-      return undefined;
-    }
-
-    return selectedTabs;
   }
 
   async function runExportAction(request: ReturnType<typeof buildDownloadRequest>) {
@@ -383,76 +199,6 @@ export function PopupApp() {
         options={state.options}
       />
       <PrivacyTrustStrip />
-      <details className="advanced-drawer">
-        <summary>Advanced options</summary>
-        <div className="advanced-drawer__content">
-          <CompletenessReport
-            completeness={state.completeness}
-            partialWarning={state.partialWarning}
-            showAdvancedDetails
-          />
-          <ExportOptionsForm
-            onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
-            onClearSelection={handleClearSelection}
-            onFormatToggle={(format) => dispatch({ format, type: "set_format" })}
-            onIncludeAdvancedContentChange={(includeAdvancedContent) =>
-              dispatch({ includeAdvancedContent, type: "set_include_advanced_content" })
-            }
-            onIncludeMetadataChange={(includeMetadata) =>
-              dispatch({ includeMetadata, type: "set_include_metadata" })
-            }
-            onIncludeReasoningChange={(includeReasoning) =>
-              dispatch({ includeReasoning, type: "set_include_reasoning" })
-            }
-            onMarkdownProfileChange={(markdownProfile) =>
-              dispatch({ markdownProfile, type: "set_markdown_profile" })
-            }
-            onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
-            onPdfSettingsChange={(pdfSettings) =>
-              dispatch({ pdfSettings, type: "set_pdf_settings" })
-            }
-            onRangeEndChange={(rangeEndIndex) => dispatch({ rangeEndIndex, type: "set_range_end" })}
-            onRangeStartChange={(rangeStartIndex) =>
-              dispatch({ rangeStartIndex, type: "set_range_start" })
-            }
-            onRedactionPresetChange={(redactionPreset) =>
-              dispatch({ redactionPreset, type: "set_redaction_preset" })
-            }
-            onScopeChange={(scope) => dispatch({ scope, type: "set_scope" })}
-            onStartSelection={handleStartSelection}
-            messageCount={state.completeness?.messageCount}
-            options={state.options}
-            selectionStatusText={getSelectionStatusText(state)}
-          />
-          <BatchExport
-            busy={batchBusy || busy}
-            candidates={batchCandidates}
-            onExportSelected={handleBatchExport}
-            onClearSelection={handleClearBatchSelection}
-            onLoadCandidates={handleLoadBatchCandidates}
-            onSelectAll={handleSelectAllBatchTabs}
-            onToggleTab={handleToggleBatchTab}
-            results={batchResults}
-            selectedTabIds={batchSelectedTabIds}
-            status={batchStatus}
-          />
-          <LocalLibraryPanel
-            canSave={canUseActions}
-            loadCurrentConversation={loadCurrentConversationForLibrary}
-          />
-          <PreviewPanel
-            disabled={!canUseActions}
-            messages={getScopedPreviewMessages(state)}
-            onOpenFullPreview={handleOpenFullPreview}
-          />
-          <ActionBar
-            disabled={!canUseActions}
-            onCopyMarkdown={handleCopyMarkdown}
-            onDownload={handleDownload}
-            onOpenPdf={handleOpenPdf}
-          />
-        </div>
-      </details>
       {showSupportPrompt && !supportPromptDismissed ? (
         <SupportPrompt onDismiss={handleDismissSupportPrompt} />
       ) : null}
@@ -474,20 +220,4 @@ async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<
       ok: false
     };
   }
-}
-
-function openRenderedFile(file: RenderedFile<RenderedBytes>): void {
-  const url = URL.createObjectURL(createFileBlob(file));
-  window.open(url, "_blank", "noopener,noreferrer");
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
-function deserializeRenderedFile(file: SerializedRenderedFile): RenderedFile<RenderedBytes> {
-  return {
-    bytes: typeof file.bytes === "string" ? file.bytes : Uint8Array.from(file.bytes),
-    encoding: file.encoding,
-    filename: file.filename,
-    format: file.format,
-    mimeType: file.mimeType
-  };
 }

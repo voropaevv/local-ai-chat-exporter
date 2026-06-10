@@ -12,7 +12,7 @@ export function PopupHeader() {
         <h1>AI Chat Export</h1>
       </div>
       <a className="settings-button" href={getSettingsPageUrl()} target="_blank" rel="noreferrer">
-        <Settings size={22} strokeWidth={2.2} aria-hidden="true" />
+        <Settings size={18} strokeWidth={2.2} aria-hidden="true" />
         <span className="sr-only">Settings</span>
       </a>
     </header>

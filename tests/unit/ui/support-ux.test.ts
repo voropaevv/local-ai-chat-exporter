@@ -18,6 +18,8 @@ describe("support UX source", () => {
 
     expect(supportSource).toContain("GitHub Sponsors");
     expect(supportSource).toContain("OpenCollective");
+    expect(supportSource).toContain("https://github.com/voropaevv/local-ai-chat-exporter");
+    expect(supportSource).toContain("blob/main/PRIVACY.md");
     expect(supportSource).toContain("Core exports stay free");
     expect(supportSource).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|analytics|telemetry/u);
 

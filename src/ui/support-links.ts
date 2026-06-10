@@ -1,6 +1,5 @@
-export const LOGTHREAD_GITHUB_URL = ["https:", "", "github.com", "voropaevv", "logthread"].join(
-  "/"
-);
+export const LOGTHREAD_GITHUB_URL = "https://github.com/voropaevv/local-ai-chat-exporter";
+export const LOGTHREAD_PRIVACY_URL = `${LOGTHREAD_GITHUB_URL}/blob/main/PRIVACY.md`;
 export const LOGTHREAD_SPONSORS_URL = [
   "https:",
   "",

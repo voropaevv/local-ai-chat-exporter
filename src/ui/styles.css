@@ -92,8 +92,8 @@ a:hover {
 .popup-header,
 .app-header {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
 }
 
@@ -102,8 +102,8 @@ a:hover {
 }
 
 .brand-mark {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   display: block;
   border-radius: 8px;
   object-fit: contain;
@@ -122,7 +122,9 @@ a:hover {
 }
 
 .popup-title-group h1 {
-  font-size: 24px;
+  overflow: hidden;
+  font-size: 19px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -328,13 +330,13 @@ h3 {
 
 .settings-button {
   display: inline-flex;
-  width: 46px;
-  height: 46px;
+  width: 38px;
+  height: 38px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 0 8px;
+  padding: 0;
   background: var(--color-surface);
   color: var(--color-accent);
 }
@@ -837,7 +839,6 @@ h3 {
 .concept-panel,
 .page-status-card,
 .trust-strip,
-.advanced-drawer,
 .settings-card {
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -859,21 +860,56 @@ h3 {
 
 .concept-heading h2 {
   color: var(--color-accent);
-  font-size: 15px;
+  font-size: 12px;
 }
 
 .info-dot {
+  position: relative;
   display: inline-flex;
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-text-muted);
   border-radius: 999px;
   color: var(--color-text-muted);
-  font-size: 12px;
+  cursor: help;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
+}
+
+.info-dot::after {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--color-shadow) 18%, transparent);
+  color: var(--color-text);
+  content: attr(data-tooltip);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  text-transform: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.info-dot:hover::after,
+.info-dot:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .concept-icon {
@@ -889,16 +925,16 @@ h3 {
 }
 
 .concept-icon--large {
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
 }
 
 .page-status-card {
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr) auto;
-  gap: 14px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
-  padding: 14px;
+  padding: 12px;
 }
 
 .page-status-card__copy {
@@ -909,28 +945,29 @@ h3 {
 
 .page-status-card__copy span {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .page-status-card__copy strong {
   min-width: 0;
   overflow: hidden;
   color: var(--color-text);
-  font-size: 17px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ready-pill {
   display: inline-flex;
-  min-height: 32px;
+  min-height: 26px;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   border: 1px solid var(--color-success-soft);
   border-radius: 999px;
-  padding: 0 13px;
+  padding: 0 10px;
   background: var(--color-success-soft);
   color: var(--color-success);
+  font-size: 11px;
   font-weight: 760;
 }
 
@@ -974,23 +1011,32 @@ h3 {
 .settings-format-row {
   display: grid;
   gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.settings-format-row {
   grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(94px, 1.1fr);
+}
+
+.zip-toggle {
+  justify-self: start;
+  min-width: 112px;
 }
 
 .format-button,
 .zip-toggle,
 .settings-format-button,
 .settings-zip-toggle {
-  min-height: 44px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 760;
 }
 
@@ -1020,8 +1066,8 @@ h3 {
 
 .switch-track {
   position: relative;
-  width: 38px;
-  height: 22px;
+  width: 34px;
+  height: 20px;
   border-radius: 999px;
   background: var(--color-surface-accent);
   box-shadow: inset 0 0 0 1px var(--color-border);
@@ -1031,8 +1077,8 @@ h3 {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   background: var(--color-text-muted);
   content: "";
@@ -1047,7 +1093,7 @@ h3 {
 
 .zip-toggle input:checked + .switch-track::after,
 .settings-zip-toggle input:checked + .switch-track::after {
-  transform: translateX(16px);
+  transform: translateX(14px);
   background: var(--color-text-on-accent);
 }
 
@@ -1058,17 +1104,17 @@ h3 {
 }
 
 .concept-action {
-  min-height: 48px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
+  gap: 7px;
 }
 
 .trust-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 12px;
+  padding: 10px;
 }
 
 .trust-strip__item {
@@ -1076,11 +1122,12 @@ h3 {
   min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 5px;
   border-right: 1px solid var(--color-border);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 680;
+  white-space: nowrap;
 }
 
 .trust-strip__item:last-child {
@@ -1095,25 +1142,6 @@ h3 {
 .trust-strip__item--private svg,
 .trust-strip__item--private span {
   color: var(--color-warning);
-}
-
-.advanced-drawer {
-  overflow: hidden;
-}
-
-.advanced-drawer > summary {
-  cursor: pointer;
-  padding: 12px 14px;
-  color: var(--color-accent);
-  font-size: 13px;
-  font-weight: 760;
-}
-
-.advanced-drawer__content {
-  display: grid;
-  gap: 12px;
-  border-top: 1px solid var(--color-border);
-  padding: 12px;
 }
 
 .settings-header {
@@ -1307,10 +1335,7 @@ h3 {
 }
 
 @media (max-width: 380px) {
-  .format-rail,
   .settings-format-row,
-  .output-action-grid,
-  .trust-strip,
   .permission-chip-row,
   .settings-support-grid {
     grid-template-columns: 1fr 1fr;

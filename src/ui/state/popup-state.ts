@@ -5,6 +5,7 @@ import {
   POPUP_BATCH_EXPORT_MESSAGE,
   POPUP_BATCH_LIST_MESSAGE,
   POPUP_CLEAR_SELECTION_MESSAGE,
+  POPUP_GET_ACTIVE_TAB_INFO_MESSAGE,
   POPUP_GET_CACHED_CONVERSATION_MESSAGE,
   POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   POPUP_OPEN_PREVIEW_MESSAGE,
@@ -15,6 +16,7 @@ import {
   type PopupBatchListRequest,
   type PopupCancelScanRequest,
   type PopupClearSelectionRequest,
+  type PopupGetActiveTabInfoRequest,
   type PopupExportRequest,
   type PopupGetCachedConversationRequest,
   type PopupGetScanCacheSummaryRequest,
@@ -85,6 +87,7 @@ export type PopupAction =
   | { readonly type: "export_started" }
   | { readonly type: "export_finished"; readonly message: string }
   | { readonly selectedMessageCount: number; readonly type: "selection_count_changed" }
+  | { readonly sourceUrl?: string; readonly title?: string; readonly type: "set_active_tab_info" }
   | { readonly type: "set_format"; readonly format: ExportFormat }
   | { readonly type: "set_bundle_format"; readonly format: PopupFileFormat }
   | {
@@ -219,6 +222,12 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
             ? state.previewMessages.map((message) => ({ ...message, selected: false }))
             : state.previewMessages,
         selectedMessageCount: action.selectedMessageCount
+      };
+    case "set_active_tab_info":
+      return {
+        ...state,
+        sourceUrl: action.sourceUrl,
+        title: action.title
       };
     case "set_format":
       return toggleFormat(state, action.format);
@@ -393,6 +402,10 @@ export function buildStartSelectionRequest(): PopupStartSelectionRequest {
 
 export function buildClearSelectionRequest(): PopupClearSelectionRequest {
   return { type: POPUP_CLEAR_SELECTION_MESSAGE };
+}
+
+export function buildGetActiveTabInfoRequest(): PopupGetActiveTabInfoRequest {
+  return { type: POPUP_GET_ACTIVE_TAB_INFO_MESSAGE };
 }
 
 export function buildGetScanCacheSummaryRequest(): PopupGetScanCacheSummaryRequest {

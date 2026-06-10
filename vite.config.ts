@@ -19,6 +19,11 @@ function copyExtensionStaticFiles(): Plugin {
       const distIcons = resolve(distDir, "icons");
       await rm(distIcons, { force: true, recursive: true });
       await cp(resolve(extensionRoot, "icons"), distIcons, { recursive: true });
+
+      const distBrand = resolve(distDir, "brand");
+      await rm(distBrand, { force: true, recursive: true });
+      await mkdir(distBrand, { recursive: true });
+      await copyFile(resolve(projectRoot, "assets/icon/icon.svg"), resolve(distBrand, "icon.svg"));
     }
   };
 }

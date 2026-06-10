@@ -22,7 +22,7 @@ export function PrivacyTrustStrip() {
             }
             key={item.label}
           >
-            <Icon size={18} strokeWidth={2.3} />
+            <Icon size={15} strokeWidth={2.3} />
             <span>{item.label}</span>
           </div>
         );

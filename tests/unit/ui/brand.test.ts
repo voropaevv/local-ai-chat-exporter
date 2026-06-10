@@ -39,7 +39,7 @@ describe("AI Chat Export branding", () => {
     const previewHtml = readFileSync(resolve(projectRoot, "extension/preview/index.html"), "utf8");
 
     expect(brandIcon).toContain(`alt={decorative ? "" : "${productName}"}`);
-    expect(brandIcon).toContain('getExtensionAssetUrl("icons/icon-48.png")');
+    expect(brandIcon).toContain('getExtensionAssetUrl("brand/icon.svg")');
     expect(popupHeader).toContain(`<h1>${productName}</h1>`);
     expect(optionsApp).toContain("<h1>Settings</h1>");
     expect(optionsApp).toContain(`<span>${productName}</span>`);
