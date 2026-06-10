@@ -18,6 +18,7 @@ import { ScanControls } from "./components/ScanControls";
 import { SupportPrompt } from "./components/SupportPrompt";
 import {
   buildCancelScanRequest,
+  buildCopyMarkdownStatusMessage,
   buildCopyMarkdownRequest,
   buildDownloadRequest,
   buildExportStatusMessage,
@@ -29,6 +30,7 @@ import {
   popupReducer
 } from "./state/popup-state";
 import { readStoredRedactionSettings } from "./redaction-storage";
+import { copyRenderedFileToClipboard } from "../utils/clipboard";
 
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
@@ -127,7 +129,30 @@ export function PopupApp() {
   }
 
   async function handleCopyMarkdown() {
-    await runExportAction(buildCopyMarkdownRequest(state));
+    dispatch({ type: "export_started" });
+
+    const response = await sendRuntimeMessage<PopupExportSuccess>(buildCopyMarkdownRequest(state));
+
+    if (!response.ok) {
+      dispatch({ message: response.error.message, type: "scan_failed" });
+      return;
+    }
+
+    try {
+      await copyRenderedFileToClipboard(response.value.files ?? []);
+    } catch (error) {
+      dispatch({
+        message: error instanceof Error ? error.message : "Clipboard copy failed.",
+        type: "scan_failed"
+      });
+      return;
+    }
+
+    dispatch({
+      message: buildCopyMarkdownStatusMessage(response.value),
+      type: "export_finished"
+    });
+    maybeShowSupportPrompt();
   }
 
   async function handleOpenFullPreview() {

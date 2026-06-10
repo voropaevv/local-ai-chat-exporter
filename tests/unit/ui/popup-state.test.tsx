@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { CompletenessReport } from "../../../src/core/schema";
 import type { PopupState } from "../../../src/ui/state/popup-state";
 import {
+  buildCopyMarkdownStatusMessage,
   buildExportStatusMessage,
   buildCopyMarkdownRequest,
   buildBatchExportRequest,
@@ -120,9 +121,10 @@ describe("popup state", () => {
       type: "logthread/export-current-tab"
     });
     expect(buildCopyMarkdownRequest(state)).toMatchObject({
-      copyToClipboard: true,
+      copyToClipboard: false,
       download: false,
-      options: { formats: ["md"] }
+      options: { formats: ["md"] },
+      returnFiles: true
     });
     expect(buildDownloadMarkdownRequest(state)).toMatchObject({
       copyToClipboard: false,
@@ -345,6 +347,12 @@ describe("popup state", () => {
     ).toBe(
       "Exported 3 messages from scanned snapshot. Prepared local output. Clipboard: Clipboard unavailable."
     );
+    expect(
+      buildCopyMarkdownStatusMessage({
+        downloaded: [],
+        exportedMessageCount: 3
+      })
+    ).toBe("Copied 3 messages from scanned snapshot to clipboard.");
   });
 
   test("clamps custom range UI values to one-based positive integers", () => {

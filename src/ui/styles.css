@@ -950,14 +950,8 @@ h3 {
 }
 
 .app-shell--popup .concept-panel {
-  gap: 8px;
-  padding: 6px 0;
-}
-
-.app-shell--popup :is(.concept-panel, .page-status-card, .trust-strip) {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  gap: 10px;
+  padding: 12px;
 }
 
 .concept-heading {
@@ -1076,7 +1070,7 @@ h3 {
 .app-shell--popup .page-status-card {
   grid-template-columns: 36px minmax(0, 1fr) auto;
   gap: 8px;
-  padding: 2px 0 4px;
+  padding: 10px;
 }
 
 .page-status-card__copy {
@@ -1146,7 +1140,7 @@ h3 {
 }
 
 .app-shell--popup .scan-action {
-  min-height: 42px;
+  min-height: 46px;
   gap: 8px;
   font-size: 16px;
 }
@@ -1222,7 +1216,7 @@ h3 {
 
 .app-shell--popup .format-button,
 .app-shell--popup .zip-toggle {
-  min-height: 30px;
+  min-height: 32px;
   gap: 5px;
   font-size: 10px;
 }
@@ -1323,7 +1317,7 @@ h3 {
 }
 
 .app-shell--popup .concept-action {
-  min-height: 36px;
+  min-height: 40px;
   gap: 5px;
   font-size: 11px;
 }
@@ -1351,12 +1345,12 @@ h3 {
 
 .trust-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 10px;
 }
 
 .app-shell--popup .trust-strip {
-  padding: 2px 0;
+  padding: 7px 6px;
 }
 
 .trust-strip__item {
@@ -1398,11 +1392,6 @@ h3 {
 .app-shell--popup .trust-strip__item svg {
   width: 11px;
   height: 11px;
-}
-
-.trust-strip__item--private svg,
-.trust-strip__item--private span {
-  color: var(--color-warning);
 }
 
 .settings-header {

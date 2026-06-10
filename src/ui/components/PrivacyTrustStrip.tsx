@@ -1,10 +1,9 @@
-import { EyeOff, LockKeyhole, Shield, ShieldCheck } from "lucide-preact";
+import { EyeOff, LockKeyhole, Shield } from "lucide-preact";
 
 const ITEMS = [
-  { icon: Shield, label: "Local only", tone: "default" },
-  { icon: LockKeyhole, label: "No telemetry", tone: "default" },
-  { icon: EyeOff, label: "Private", tone: "private" },
-  { icon: ShieldCheck, label: "Secure", tone: "default" }
+  { icon: Shield, label: "Local only" },
+  { icon: LockKeyhole, label: "No telemetry" },
+  { icon: EyeOff, label: "Private" }
 ] as const;
 
 export function PrivacyTrustStrip() {
@@ -14,14 +13,7 @@ export function PrivacyTrustStrip() {
         const Icon = item.icon;
 
         return (
-          <div
-            className={
-              item.tone === "private"
-                ? "trust-strip__item trust-strip__item--private"
-                : "trust-strip__item"
-            }
-            key={item.label}
-          >
+          <div className="trust-strip__item" key={item.label}>
             <Icon size={15} strokeWidth={2.3} />
             <span>{item.label}</span>
           </div>

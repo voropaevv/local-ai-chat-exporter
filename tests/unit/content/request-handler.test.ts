@@ -59,10 +59,11 @@ function makeConversation(sourceUrl = "https://chatgpt.com/c/cached"): Conversat
 }
 
 function createHandler(overrides: Partial<Parameters<typeof createContentRequestHandler>[0]> = {}) {
+  const copyRenderedFileToClipboard = vi.fn().mockResolvedValue(undefined);
   const scanCurrentConversationExport = vi.fn().mockResolvedValue(makeConversation());
   const renderedConversations: ConversationExport[] = [];
   const handler = createContentRequestHandler({
-    copyRenderedFileToClipboard: vi.fn().mockResolvedValue(undefined),
+    copyRenderedFileToClipboard,
     createSelectionOverlay: vi.fn(() => ({
       cleanup: vi.fn(),
       getSelection: () => ({ fingerprints: [], ids: ["msg-2"] }),
@@ -87,6 +88,7 @@ function createHandler(overrides: Partial<Parameters<typeof createContentRequest
   });
 
   return {
+    copyRenderedFileToClipboard,
     handler,
     renderedConversations,
     scanCurrentConversationExport
@@ -157,7 +159,12 @@ describe("content request handler scan cache", () => {
   });
 
   test("export after scan renders from the cached snapshot without rescanning", async () => {
-    const { handler, renderedConversations, scanCurrentConversationExport } = createHandler();
+    const {
+      copyRenderedFileToClipboard,
+      handler,
+      renderedConversations,
+      scanCurrentConversationExport
+    } = createHandler();
 
     await handler({ type: CONTENT_SCAN_MESSAGE });
     await handler({
@@ -169,6 +176,7 @@ describe("content request handler scan cache", () => {
     });
 
     expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
+    expect(copyRenderedFileToClipboard).not.toHaveBeenCalled();
     expect(renderedConversations).toHaveLength(1);
     expect(renderedConversations[0].sourceUrl).toBe("https://chatgpt.com/c/cached");
   });

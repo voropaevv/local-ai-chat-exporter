@@ -32,6 +32,14 @@ describe("concept-inspired popup and settings layout", () => {
     expect(exportPanelSource).toContain("format.toUpperCase()");
     expect(exportPanelSource).toContain("FileArchive");
     expect(exportPanelSource).toContain("InfoTip");
+
+    const trustStripSource = readFileSync(trustStripPath, "utf8");
+
+    expect(trustStripSource).toContain("Local only");
+    expect(trustStripSource).toContain("No telemetry");
+    expect(trustStripSource).toContain("Private");
+    expect(trustStripSource).not.toContain("Secure");
+    expect(trustStripSource).not.toContain("trust-strip__item--private");
   });
 
   test("settings source presents the concept rows without verbose privacy copy first", () => {

@@ -57,16 +57,15 @@ describe("popup simple and advanced UX source", () => {
     expect(styles).toContain("width: 32px;");
     expect(styles).toContain("height: 32px;");
     expect(styles).toContain("grid-column: span 2;");
-    expect(styles).toContain(".app-shell--popup :is(.concept-panel, .page-status-card, .trust-strip)");
-    expect(styles).toContain("border: 0;");
-    expect(styles).toContain("background: transparent;");
-    expect(styles).toContain("box-shadow: none;");
+    expect(styles).not.toContain(
+      ".app-shell--popup :is(.concept-panel, .page-status-card, .trust-strip)"
+    );
     expect(styles).toContain(".app-shell--popup .scan-action");
-    expect(styles).toContain("min-height: 42px;");
+    expect(styles).toContain("min-height: 46px;");
     expect(styles).toContain(".app-shell--popup .format-button");
-    expect(styles).toContain("min-height: 30px;");
+    expect(styles).toContain("min-height: 32px;");
     expect(styles).toContain(".app-shell--popup .concept-action");
-    expect(styles).toContain("min-height: 36px;");
+    expect(styles).toContain("min-height: 40px;");
     expect(styles).toContain(".app-shell--popup .info-dot");
     expect(styles).toContain("width: 12px;");
     expect(styles).toContain("font-size: 7px;");
@@ -74,6 +73,8 @@ describe("popup simple and advanced UX source", () => {
     expect(styles).toContain("flex: 0 0 auto;");
     expect(styles).toContain(".trust-strip__item span");
     expect(styles).toContain("text-overflow: ellipsis;");
+    expect(styles).toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
+    expect(styles).not.toContain(".trust-strip__item--private");
     expect(styles).not.toContain(".advanced-drawer");
     expect(styles).toContain(".format-rail");
     expect(styles).toContain(".output-action-grid");

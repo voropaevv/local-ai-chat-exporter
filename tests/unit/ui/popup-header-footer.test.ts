@@ -47,5 +47,6 @@ describe("popup header and footer source", () => {
     expect(footerSource).not.toContain("options/index.html#filename-settings");
     expect(footerSource).toContain("LOGTHREAD_PRIVACY_URL");
     expect(footerSource).not.toContain("Settings");
+    expect(footerSource).not.toContain("Not affiliated with AI chat providers.");
   });
 });

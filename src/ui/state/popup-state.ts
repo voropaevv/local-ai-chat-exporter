@@ -457,10 +457,10 @@ export function buildDownloadMarkdownRequest(state: PopupState): PopupExportRequ
 
 export function buildCopyMarkdownRequest(state: PopupState): PopupExportRequest {
   return {
-    copyToClipboard: true,
+    copyToClipboard: false,
     download: false,
     options: buildExportOptions(state, ["md"]),
-    returnFiles: false,
+    returnFiles: true,
     type: POPUP_EXPORT_MESSAGE
   };
 }
@@ -563,6 +563,10 @@ export function buildExportStatusMessage(result: ExportStatusMessageInput): stri
   }
 
   return `Exported ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot. Prepared local output.${copied}`;
+}
+
+export function buildCopyMarkdownStatusMessage(result: ExportStatusMessageInput): string {
+  return `Copied ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot to clipboard.`;
 }
 
 function normalizeOneBasedIndex(value: number, maxValue: number | undefined): number {

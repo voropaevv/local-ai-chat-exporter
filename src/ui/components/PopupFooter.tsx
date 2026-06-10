@@ -16,7 +16,6 @@ export function PopupFooter() {
       <a href={LOGTHREAD_PRIVACY_URL} target="_blank" rel="noreferrer">
         Privacy
       </a>
-      <span>Not affiliated with AI chat providers.</span>
     </footer>
   );
 }
