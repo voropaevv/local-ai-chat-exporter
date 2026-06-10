@@ -49,6 +49,7 @@ describe("popup simple and advanced UX source", () => {
     const styles = readSource("src/ui/styles.css");
 
     expect(styles).toContain("overflow-x: hidden;");
+    expect(styles).toContain("width: 460px;");
     expect(styles).not.toContain(".advanced-drawer");
     expect(styles).toContain(".format-rail");
     expect(styles).toContain(".output-action-grid");
