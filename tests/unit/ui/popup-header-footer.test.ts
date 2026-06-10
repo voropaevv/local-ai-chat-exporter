@@ -18,10 +18,13 @@ describe("popup header and footer source", () => {
 
     expect(headerSource).toContain("options/index.html#filename-settings");
     expect(headerSource).toContain('className="settings-button"');
-    expect(headerSource).toContain("popup-theme-toggle");
+    expect(headerSource).toContain("popup-theme-button");
+    expect(headerSource).toContain("handleThemeToggle");
+    expect(headerSource).toContain("Switch to");
     expect(headerSource).toContain("Sun");
     expect(headerSource).toContain("Moon");
     expect(headerSource).toContain("writeThemePreference");
+    expect(headerSource).not.toContain("popup-theme-toggle");
     expect(headerSource).toContain("Settings");
     expect(headerSource).not.toContain("platformLabel");
     expect(headerSource).not.toContain("<p>");
