@@ -45,17 +45,20 @@ describe("popup simple and advanced UX source", () => {
     expect(previewSource).toContain("PDF generation fell back to PDF-ready HTML");
   });
 
-  test("popup CSS sets an explicit wide popup with clamped text and no horizontal scroll", () => {
+  test("popup CSS sets a compact popup with clamped text and no horizontal scroll", () => {
     const styles = readSource("src/ui/styles.css");
 
     expect(styles).toContain("overflow-x: hidden;");
     expect(styles).toContain("body:has(.app-shell--popup)");
-    expect(styles).toContain("width: 560px;");
-    expect(styles).toContain("min-width: 560px;");
+    expect(styles).toContain("width: 360px;");
+    expect(styles).toContain("min-width: 360px;");
     expect(styles).toContain("max-width: none;");
+    expect(styles).toContain("grid-column: span 2;");
     expect(styles).not.toContain(".advanced-drawer");
     expect(styles).toContain(".format-rail");
     expect(styles).toContain(".output-action-grid");
+    expect(styles).toContain(".concept-action span");
+    expect(styles).toContain("white-space: nowrap;");
     expect(styles).toContain("-webkit-line-clamp: 2;");
     expect(styles).toContain("min-width: 0;");
     expect(styles).not.toContain(".popup-mode-toggle");
