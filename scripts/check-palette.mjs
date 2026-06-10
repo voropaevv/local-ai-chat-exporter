@@ -5,7 +5,7 @@ import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(process.argv[2] ?? fileURLToPath(new URL("../", import.meta.url)));
-const sourceIconPath = resolve(projectRoot, "src/assets/brand/icon-source.svg");
+const sourceIconPath = resolve(projectRoot, "assets/icon/icon.svg");
 const palettePath = resolve(projectRoot, "src/ui/styles/palette.css");
 const manifestPath = resolve(projectRoot, "extension/manifest.json");
 const extensionIconSizes = [16, 32, 48, 128, 512];
@@ -14,31 +14,59 @@ const storeIconSizes = new Map([
   ["site/store-assets/icons/icon-512.png", 512],
   ["site/store-assets/icons/store-icon-128.png", 128]
 ]);
-const n6Tokens = new Map([
-  ["--color-border", "#E5E7EB"],
-  ["--color-danger", "#EF4444"],
-  ["--color-info", "#0EA5E9"],
-  ["--color-product-blue", "#06B6D4"],
-  ["--color-product-blue-soft", "#D7DEEA"],
-  ["--color-product-indigo", "#0E7490"],
-  ["--color-product-lavender", "#B8C4D6"],
-  ["--color-product-purple", "#1A1040"],
-  ["--color-product-purple-soft", "#D7DEEA"],
-  ["--color-product-sky-soft", "#F8FAFC"],
-  ["--color-product-violet", "#0EA5E9"],
-  ["--color-product-violet-soft", "#F8FAFC"],
-  ["--color-shadow", "#1A1040"],
-  ["--color-success", "#0E7490"],
+const requiredTokens = new Map([
+  ["--color-accent", "#0284C7"],
+  ["--color-accent-hover", "#0369A1"],
+  ["--color-accent-soft", "#E0F2FE"],
+  ["--color-background", "#FFFFFF"],
+  ["--color-border", "#CBD5E1"],
+  ["--color-danger", "#DC2626"],
+  ["--color-danger-soft", "#FEE2E2"],
+  ["--color-info", "#0284C7"],
+  ["--color-info-soft", "#E0F2FE"],
+  ["--color-shadow", "#0F172A"],
+  ["--color-success", "#16A34A"],
+  ["--color-success-soft", "#DCFCE7"],
   ["--color-surface", "#FFFFFF"],
-  ["--color-surface-accent", "#F8FAFC"],
+  ["--color-surface-accent", "#F1F5F9"],
   ["--color-surface-muted", "#F8FAFC"],
-  ["--color-text", "#111827"],
+  ["--color-text", "#0F172A"],
   ["--color-text-muted", "#64748B"],
-  ["--color-text-on-dark", "#F8FAFC"],
-  ["--color-text-on-dark-muted", "#D7DEEA"],
-  ["--color-warning", "#F59E0B"]
+  ["--color-text-on-accent", "#FFFFFF"],
+  ["--color-warning", "#F59E0B"],
+  ["--color-warning-soft", "#FEF3C7"]
 ]);
-const requiredIconColors = ["#1A1040", "#06B6D4", "#0E7490", "#D7DEEA", "#B8C4D6"];
+const darkThemeTokens = new Map([
+  ["--color-accent-hover", "#38BDF8"],
+  ["--color-accent-soft", "#082F49"],
+  ["--color-background", "#020617"],
+  ["--color-border", "#334155"],
+  ["--color-danger", "#F87171"],
+  ["--color-danger-soft", "#450A0A"],
+  ["--color-info", "#38BDF8"],
+  ["--color-info-soft", "#082F49"],
+  ["--color-shadow", "#000000"],
+  ["--color-success", "#22C55E"],
+  ["--color-success-soft", "#052E16"],
+  ["--color-surface", "#0F172A"],
+  ["--color-surface-accent", "#1E293B"],
+  ["--color-surface-muted", "#111827"],
+  ["--color-text", "#F8FAFC"],
+  ["--color-text-muted", "#94A3B8"],
+  ["--color-warning-soft", "#451A03"]
+]);
+const disallowedOldBrandColorIds = [
+  "1A1040",
+  "06B6D4",
+  "0E7490",
+  "0EA5E9",
+  "D7DEEA",
+  "B8C4D6",
+  "10B981",
+  "2F62F2",
+  "5746D8",
+  "7B35D8"
+];
 const manifestIcons = new Map([
   ["16", "icons/icon-16.png"],
   ["32", "icons/icon-32.png"],
@@ -52,11 +80,11 @@ const actionIcons = new Map([
 
 async function main() {
   const violations = [];
-  const svg = await readText(sourceIconPath, violations, "src/assets/brand/icon-source.svg");
+  const svg = await readText(sourceIconPath, violations, "assets/icon/icon.svg");
 
   if (svg !== undefined) {
     validateSvgSafety(svg, violations);
-    validateSourceIconColors(svg, violations);
+    validateSourceIcon(svg, violations);
   }
 
   const palette = await readText(palettePath, violations, "src/ui/styles/palette.css");
@@ -68,6 +96,7 @@ async function main() {
   await validateGeneratedIcons(violations);
   await validateManifest(violations);
   await validateUiPaletteDiscipline(violations);
+  await validateOldBrandColorRemoval(violations);
 
   if (violations.length > 0) {
     for (const violation of violations) {
@@ -98,6 +127,7 @@ function validateSvgSafety(svg, violations) {
     [/<animate\b|<set\b|<animateTransform\b|<animateMotion\b/i, "must not contain animation"],
     [/<image\b/i, "must not embed raster images"],
     [/\b(?:href|xlink:href)\s*=\s*["'](?:https?:|data:)/i, "must not contain external href"],
+    [/https?:\/\//i, "must not contain raw http:// or https://"],
     [/@font-face|font-family/i, "must not contain external fonts"],
     [/<text\b/i, "must not contain visible text elements"],
     [/\b(?:openai|chatgpt|anthropic|google|claude|gemini)\b/i, "must not contain platform logos"]
@@ -105,18 +135,20 @@ function validateSvgSafety(svg, violations) {
 
   for (const [pattern, message] of patterns) {
     if (pattern.test(svg)) {
-      violations.push(`src/assets/brand/icon-source.svg: ${message}`);
+      violations.push(`assets/icon/icon.svg: ${message}`);
     }
   }
 }
 
-function validateSourceIconColors(svg, violations) {
+function validateSourceIcon(svg, violations) {
   const iconColors = extractHexColors(svg);
 
-  for (const color of requiredIconColors) {
-    if (!iconColors.has(color)) {
-      violations.push(`src/assets/brand/icon-source.svg: missing ${color}`);
-    }
+  if (!iconColors.has("#0284C7")) {
+    violations.push("assets/icon/icon.svg: missing #0284C7 accent");
+  }
+
+  if (/<text\b/i.test(svg)) {
+    violations.push("assets/icon/icon.svg: editable text layers must be converted to paths");
   }
 }
 
@@ -131,7 +163,11 @@ function normalizeHex(value) {
 }
 
 function validatePalette(palette, violations) {
-  for (const [token, value] of n6Tokens) {
+  if (!palette.includes("@media (prefers-color-scheme: dark)")) {
+    violations.push("src/ui/styles/palette.css: missing prefers-color-scheme dark theme");
+  }
+
+  for (const [token, value] of [...requiredTokens, ...darkThemeTokens]) {
     const pattern = new RegExp(`${escapeRegExp(token)}\\s*:\\s*${escapeRegExp(value)}\\s*;`);
 
     if (!pattern.test(palette)) {
@@ -260,6 +296,36 @@ async function validateUiPaletteDiscipline(violations) {
     for (const color of rawHexColors) {
       violations.push(`${relativePath}: hard-coded ${color} should use palette tokens`);
     }
+
+    if (/--color-product-/u.test(source)) {
+      violations.push(`${relativePath}: old product color token name remains`);
+    }
+  }
+}
+
+async function validateOldBrandColorRemoval(violations) {
+  const checkedRoots = ["src/ui", "extension", "scripts", "site"];
+  const files = [];
+
+  for (const root of checkedRoots) {
+    files.push(...(await collectTextFiles(resolve(projectRoot, root))));
+  }
+
+  for (const file of files) {
+    const relativePath = relative(projectRoot, file).split("\\").join("/");
+
+    if (relativePath === "site/assets/icon.svg") {
+      continue;
+    }
+
+    const source = await readFile(file, "utf8");
+    const colors = extractHexColors(source);
+
+    for (const color of colors) {
+      if (disallowedOldBrandColorIds.includes(color.slice(1))) {
+        violations.push(`${relativePath}: old brand color ${color} remains`);
+      }
+    }
   }
 }
 
@@ -281,7 +347,7 @@ async function collectTextFiles(directory) {
     const entryStat = await stat(path);
 
     if (entryStat.isDirectory()) {
-      if (entry === "icons") {
+      if (entry === "icons" || entry === "dist" || entry === "store-screens") {
         continue;
       }
 
@@ -289,7 +355,7 @@ async function collectTextFiles(directory) {
       continue;
     }
 
-    if (entryStat.isFile() && isUiTextFile(path)) {
+    if (entryStat.isFile() && isTextFile(path)) {
       files.push(path);
     }
   }
@@ -297,8 +363,10 @@ async function collectTextFiles(directory) {
   return files.sort((left, right) => left.localeCompare(right));
 }
 
-function isUiTextFile(path) {
-  return [".css", ".html", ".ts", ".tsx"].includes(extname(path).toLocaleLowerCase());
+function isTextFile(path) {
+  return [".css", ".html", ".ts", ".tsx", ".mjs", ".js", ".json", ".md", ".svg"].includes(
+    extname(path).toLocaleLowerCase()
+  );
 }
 
 function escapeRegExp(value) {

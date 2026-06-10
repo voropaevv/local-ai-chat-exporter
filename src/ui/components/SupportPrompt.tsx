@@ -6,9 +6,9 @@ interface SupportPromptProps {
 
 export function SupportPrompt({ onDismiss }: SupportPromptProps) {
   return (
-    <aside className="support-prompt" aria-label="Support LogThread">
+    <aside className="support-prompt" aria-label="Support AI Chat Export">
       <div>
-        <strong>Support LogThread</strong>
+        <strong>Support AI Chat Export</strong>
         <p>{SUPPORT_TAGLINE} No feature locks.</p>
       </div>
       <div className="support-prompt-actions">

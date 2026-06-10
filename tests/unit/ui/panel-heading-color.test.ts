@@ -5,10 +5,10 @@ import { describe, expect, test } from "vitest";
 const projectRoot = resolve(import.meta.dirname, "../../..");
 
 describe("panel heading color", () => {
-  test("uses the accessible N6 text accent for block headings", () => {
+  test("uses the accessible product accent token for block headings", () => {
     const stylesSource = readFileSync(resolve(projectRoot, "src/ui/styles.css"), "utf8");
     const headingRule = stylesSource.match(/h2,\nlegend \{(?<body>[^}]+)\}/u);
 
-    expect(headingRule?.groups?.body).toContain("color: var(--color-product-indigo);");
+    expect(headingRule?.groups?.body).toContain("color: var(--color-accent);");
   });
 });

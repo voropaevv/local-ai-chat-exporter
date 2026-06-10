@@ -1,12 +1,12 @@
-# LogThread Security Policy
+# AI Chat Export Security Policy
 
 ## Security Model
 
-LogThread is designed to be local-first:
+AI Chat Export is designed to be local-first:
 
 - No telemetry, analytics, ads, trackers, remote logging, external export servers, or remote code.
 - No server-side PDF/export path in the core product.
-- No LogThread account is required.
+- No AI Chat Export account is required.
 - No broad permissions such as `all_urls`, `cookies`, `history`, `webRequest`, or `debugger`.
 - All export actions are user-initiated.
 - Conversation content is not persisted by default. The optional Local Library stores full
@@ -23,7 +23,7 @@ content, or exported files with sensitive content in public reports.
 
 Donation, sponsorship, paid support, and custom build work must not weaken this security model or
 add ads, telemetry, pricing gates, default export branding, remote rendering, or a server export
-path to core LogThread exports.
+path to core AI Chat Export exports.
 
 ## Verification
 

@@ -1,9 +1,9 @@
 # Screenshot Checklist
 
-Use current LogThread branding and the generated PNG icon in every screenshot.
+Use current AI Chat Export branding and the generated PNG icon in every screenshot.
 
-- Extension list entry shows `LogThread`.
-- Toolbar popup shows the real LogThread icon.
+- Extension list entry shows `AI Chat Export`.
+- Toolbar popup shows the real AI Chat Export icon.
 - Popup scan panel is readable at extension-popup width.
 - Export options show simple local file choices without debug noise.
 - Preview screen shows clean exported content.

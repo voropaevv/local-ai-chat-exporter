@@ -50,7 +50,7 @@ export interface BatchManifestInput {
 
 export interface BatchManifest {
   readonly exportedAt: string;
-  readonly generatedBy: "logthread";
+  readonly generatedBy: "ai-chat-export";
   readonly resultCount: number;
   readonly rootDirectory: string;
   readonly results: readonly BatchManifestResult[];
@@ -154,7 +154,7 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
 }
 
 export function createBatchRootDirectory(exportedAt: string): string {
-  return `logthread-export-${exportedAt.slice(0, 10)}`;
+  return `ai-chat-export-${exportedAt.slice(0, 10)}`;
 }
 
 export function createBatchEntryBase(tab: BatchCandidateTab, index: number): string {
@@ -187,7 +187,7 @@ export function getBatchRequiredOriginsForTabs(
 export function createBatchManifest(input: BatchManifestInput): BatchManifest {
   return {
     exportedAt: input.exportedAt,
-    generatedBy: "logthread",
+    generatedBy: "ai-chat-export",
     resultCount: input.results.length,
     rootDirectory: input.rootDirectory,
     results: input.results.map((result) => {

@@ -1,6 +1,6 @@
 # Reviewer Instructions
 
-LogThread is a local-first Manifest V3 extension.
+AI Chat Export is a local-first Manifest V3 extension.
 
 ## Review Focus
 
@@ -15,7 +15,7 @@ LogThread is a local-first Manifest V3 extension.
 1. Build with `pnpm build`.
 2. Load `dist/` as an unpacked extension.
 3. Open a non-sensitive supported AI chat.
-4. Click LogThread in the toolbar.
+4. Click AI Chat Export in the toolbar.
 5. Scan and export a local file.
 6. Verify the downloaded file is created locally.
 7. Inspect extension errors and network behavior.

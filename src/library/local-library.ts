@@ -137,7 +137,7 @@ export function createLocalLibraryBackupFile(
   return {
     bytes: JSON.stringify(backup, null, 2),
     encoding: "utf-8",
-    filename: `logthread-local-library-backup-${exportedAt.slice(0, 10)}.json`,
+    filename: `ai-chat-export-local-library-backup-${exportedAt.slice(0, 10)}.json`,
     format: "json",
     mimeType: "application/json;charset=utf-8"
   };

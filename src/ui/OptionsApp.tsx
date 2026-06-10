@@ -87,7 +87,7 @@ export function OptionsApp() {
       <header className="app-header">
         <BrandIcon />
         <div>
-          <h1>LogThread</h1>
+          <h1>AI Chat Export</h1>
           <p className="muted">Privacy controls and permission details.</p>
         </div>
       </header>
@@ -160,7 +160,7 @@ export function OptionsApp() {
       <PermissionExplainer />
 
       <section className="panel" aria-labelledby="support-title" id="support">
-        <h2 id="support-title">Support LogThread</h2>
+        <h2 id="support-title">Support AI Chat Export</h2>
         <p className="muted">{SUPPORT_TAGLINE}</p>
         <div className="support-links" aria-label="Donation and support links">
           {SUPPORT_LINKS.map((link) => (

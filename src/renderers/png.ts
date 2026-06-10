@@ -194,7 +194,7 @@ function buildPngLines(
     {
       color: PNG_MUTED,
       scale: PNG_TEXT_SCALE,
-      text: `Generated locally by LogThread - ${conversation.platformLabel}`
+      text: `Generated locally by AI Chat Export - ${conversation.platformLabel}`
     }
   ];
 

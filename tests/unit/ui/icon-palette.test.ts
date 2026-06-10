@@ -5,54 +5,66 @@ import { describe, expect, test } from "vitest";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
 const requiredIconSizes = [16, 32, 48, 128, 512] as const;
-const n6Tokens = {
-  "--color-border": "#E5E7EB",
-  "--color-danger": "#EF4444",
-  "--color-info": "#0EA5E9",
-  "--color-product-blue": "#06B6D4",
-  "--color-product-blue-soft": "#D7DEEA",
-  "--color-product-indigo": "#0E7490",
-  "--color-product-lavender": "#B8C4D6",
-  "--color-product-purple": "#1A1040",
-  "--color-product-purple-soft": "#D7DEEA",
-  "--color-product-sky-soft": "#F8FAFC",
-  "--color-product-violet": "#0EA5E9",
-  "--color-product-violet-soft": "#F8FAFC",
-  "--color-shadow": "#1A1040",
-  "--color-success": "#0E7490",
+const expectedLightTokens = {
+  "--color-accent": "#0284C7",
+  "--color-accent-hover": "#0369A1",
+  "--color-accent-soft": "#E0F2FE",
+  "--color-background": "#FFFFFF",
+  "--color-border": "#CBD5E1",
+  "--color-danger": "#DC2626",
+  "--color-danger-soft": "#FEE2E2",
+  "--color-info": "#0284C7",
+  "--color-info-soft": "#E0F2FE",
+  "--color-shadow": "#0F172A",
+  "--color-success": "#16A34A",
+  "--color-success-soft": "#DCFCE7",
   "--color-surface": "#FFFFFF",
-  "--color-surface-accent": "#F8FAFC",
+  "--color-surface-accent": "#F1F5F9",
   "--color-surface-muted": "#F8FAFC",
-  "--color-text": "#111827",
+  "--color-text": "#0F172A",
   "--color-text-muted": "#64748B",
-  "--color-text-on-dark": "#F8FAFC",
-  "--color-text-on-dark-muted": "#D7DEEA",
-  "--color-warning": "#F59E0B"
+  "--color-text-on-accent": "#FFFFFF",
+  "--color-warning": "#F59E0B",
+  "--color-warning-soft": "#FEF3C7"
 } as const;
-const oldBrandHexes = [
-  "#10B981",
-  "#161B27",
-  "#E0E0E0",
+const expectedDarkTokens = {
+  "--color-accent-hover": "#38BDF8",
+  "--color-accent-soft": "#082F49",
+  "--color-background": "#020617",
+  "--color-border": "#334155",
+  "--color-danger": "#F87171",
+  "--color-danger-soft": "#450A0A",
+  "--color-info": "#38BDF8",
+  "--color-info-soft": "#082F49",
+  "--color-shadow": "#000000",
+  "--color-success": "#22C55E",
+  "--color-success-soft": "#052E16",
+  "--color-surface": "#0F172A",
+  "--color-surface-accent": "#1E293B",
+  "--color-surface-muted": "#111827",
+  "--color-text": "#F8FAFC",
+  "--color-text-muted": "#94A3B8",
+  "--color-warning-soft": "#451A03"
+} as const;
+const oldPurpleHexes = [
+  "#1A1040",
+  "#06B6D4",
+  "#0E7490",
+  "#0EA5E9",
+  "#D7DEEA",
+  "#B8C4D6",
   "#2F62F2",
   "#5746D8",
-  "#7B35D8",
-  "#102033",
-  "#58667A",
-  "#D4DEEA",
-  "#F4F7FB",
-  "#117D75"
+  "#7B35D8"
 ] as const;
 
 describe("icon and product palette assets", () => {
   test("icon SVG is a safe local source of truth", () => {
-    const svg = readFileSync(resolve(projectRoot, "src/assets/brand/icon-source.svg"), "utf8");
+    const svg = readFileSync(resolve(projectRoot, "assets/icon/icon.svg"), "utf8");
 
-    expect(svg).toContain("#1A1040");
-    expect(svg).toContain("#06B6D4");
-    expect(svg).toContain("#0E7490");
-    expect(svg).toContain("#D7DEEA");
-    expect(svg).toContain("#B8C4D6");
-    expect(svg).not.toMatch(/data:image|base64|<script\b/i);
+    expect(svg).toContain("#0284C7");
+    expect(svg).toContain("#FFFFFF");
+    expect(svg).not.toMatch(/data:image|base64|<script\b|https?:\/\//i);
     expect(svg).not.toMatch(/\b(?:href|xlink:href)\s*=\s*["'](?:https?:|data:)/i);
     expect(svg).not.toMatch(/<text\b/i);
   });
@@ -88,45 +100,42 @@ describe("icon and product palette assets", () => {
     expect(iconPaths.every((path) => !path.endsWith(".svg"))).toBe(true);
   });
 
-  test("store icon uses a separate 128px asset", () => {
-    const png = readFileSync(resolve(projectRoot, "site/store-assets/icons/store-icon-128.png"));
-
-    expect(readPngSize(png)).toEqual({ height: 128, width: 128 });
-  });
-
-  test("palette CSS exposes the N6 semantic tokens", () => {
+  test("palette CSS exposes semantic AI Chat Export light and dark tokens", () => {
     const palette = readFileSync(resolve(projectRoot, "src/ui/styles/palette.css"), "utf8");
 
-    for (const [token, value] of Object.entries(n6Tokens)) {
+    expect(palette).toContain("@media (prefers-color-scheme: dark)");
+
+    for (const [token, value] of Object.entries(expectedLightTokens)) {
+      expect(palette).toContain(`${token}: ${value};`);
+    }
+
+    for (const [token, value] of Object.entries(expectedDarkTokens)) {
       expect(palette).toContain(`${token}: ${value};`);
     }
   });
 
-  test("small text surfaces use the accessible dark N6 text accent instead of the bright accent", () => {
+  test("UI source uses semantic accent tokens without hard-coded old purple colors", () => {
     const styles = readFileSync(resolve(projectRoot, "src/ui/styles.css"), "utf8");
 
-    expect(styles).toContain("a {\n  color: var(--color-product-indigo);");
-    expect(styles).toContain("h2,\nlegend {\n  color: var(--color-product-indigo);");
-    expect(styles).not.toContain("color: var(--color-product-blue);");
-  });
+    expect(styles).toContain("a {\n  color: var(--color-accent);");
+    expect(styles).toContain("h2,\nlegend {\n  color: var(--color-accent);");
+    expect(styles).toContain("background: var(--color-accent);");
+    expect(styles).not.toMatch(/--color-product-/u);
 
-  test("old brand colors are removed from app, site, and icon generation surfaces", () => {
-    const files = [
+    const checkedFiles = [
       "scripts/build-icons.mjs",
       "scripts/build-site.mjs",
       "scripts/build-store-assets.mjs",
       "scripts/check-palette.mjs",
       "site/index.html",
       "site/styles.css",
-      "src/assets/brand/icon-source.svg",
       "src/ui/styles.css",
       "src/ui/styles/palette.css"
     ];
-
-    const matches = files.flatMap((file) => {
+    const matches = checkedFiles.flatMap((file) => {
       const source = readFileSync(resolve(projectRoot, file), "utf8").toUpperCase();
 
-      return oldBrandHexes
+      return oldPurpleHexes
         .filter((color) => source.includes(color))
         .map((color) => `${file}: ${color}`);
     });

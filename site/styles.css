@@ -1,17 +1,17 @@
 :root {
   color-scheme: light;
-  --ink: #111827;
+  --ink: #0F172A;
   --muted: #64748B;
   --panel: #FFFFFF;
-  --paper: #1A1040;
+  --paper: #FFFFFF;
   --soft: #F8FAFC;
-  --line: #E5E7EB;
-  --blue: #06B6D4;
-  --indigo: #0E7490;
-  --violet: #0EA5E9;
-  --teal: #0E7490;
-  --fold: #D7DEEA;
-  --rear: #B8C4D6;
+  --line: #CBD5E1;
+  --blue: #0284C7;
+  --indigo: #0369A1;
+  --violet: #38BDF8;
+  --teal: #0284C7;
+  --fold: #F1F5F9;
+  --rear: #E0F2FE;
   font-family:
     Inter,
     ui-sans-serif,
@@ -21,7 +21,7 @@
     "Segoe UI",
     sans-serif;
   background: var(--paper);
-  color: var(--soft);
+  color: var(--ink);
 }
 
 * {
@@ -47,7 +47,7 @@ a {
   justify-content: space-between;
   gap: 24px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--paper) 92%, black);
+  background: color-mix(in srgb, var(--paper) 94%, white);
   padding: 16px clamp(20px, 5vw, 72px);
 }
 
@@ -72,7 +72,7 @@ a {
 
 .site-header nav {
   flex-wrap: wrap;
-  color: var(--fold);
+  color: var(--muted);
   font-size: 14px;
   font-weight: 700;
 }
@@ -130,7 +130,7 @@ h2 {
 
 .hero-copy > p:not(.eyebrow),
 .section-grid > p {
-  color: var(--fold);
+  color: var(--muted);
   font-size: 18px;
   line-height: 1.55;
 }
@@ -167,7 +167,7 @@ h2 {
   border-radius: 18px;
   background: var(--panel);
   color: var(--ink);
-  box-shadow: 0 22px 50px rgb(26 16 64 / 0.2);
+  box-shadow: 0 22px 50px rgb(15 23 42 / 0.12);
   padding: 18px;
 }
 
@@ -277,7 +277,7 @@ h2 {
   gap: 10px;
   margin: 0;
   padding-left: 18px;
-  color: var(--fold);
+  color: var(--muted);
   font-size: 18px;
   line-height: 1.55;
 }
@@ -306,14 +306,33 @@ h2 {
 
 .site-footer strong {
   display: block;
-  color: var(--soft);
+  color: var(--ink);
   font-size: 18px;
 }
 
 .site-footer p {
-  color: var(--fold);
+  color: var(--muted);
   font-size: 14px;
   line-height: 1.4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --ink: #F8FAFC;
+    --muted: #94A3B8;
+    --panel: #0F172A;
+    --paper: #020617;
+    --soft: #111827;
+    --line: #334155;
+    --indigo: #38BDF8;
+    --fold: #1E293B;
+    --rear: #082F49;
+  }
+
+  .site-header {
+    background: color-mix(in srgb, var(--paper) 92%, black);
+  }
 }
 
 .site-footer nav {

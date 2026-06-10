@@ -113,6 +113,7 @@ export function PreviewApp() {
         <div className="preview-title-row">
           <BrandIcon />
           <div>
+            <p className="brand-kicker">AI Chat Export</p>
             <h1>{renderPreviewTitle(renderState)}</h1>
             <p className="muted">
               {loadState.status === "loading"

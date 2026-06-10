@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const sourceIconPath = resolve(projectRoot, "src/assets/brand/icon-source.svg");
+const sourceIconPath = resolve(projectRoot, "assets/icon/icon.svg");
 const outputDir = resolve(projectRoot, "extension/icons");
 const iconSizes = [16, 32, 48, 128, 512];
 
@@ -35,11 +35,13 @@ async function main() {
 }
 
 function prepareSvgForRenderer(svg) {
-  if (/\sxmlns=/.test(svg)) {
-    return svg;
+  const normalizedSvg = svg.replaceAll("http&#58;//", "http://");
+
+  if (/\sxmlns=/.test(normalizedSvg)) {
+    return normalizedSvg;
   }
 
-  return svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return normalizedSvg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
 }
 
 main().catch((error) => {

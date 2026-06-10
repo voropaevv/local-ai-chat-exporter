@@ -1,6 +1,6 @@
 # Local PDF v1
 
-LogThread PDF export is generated locally in the extension from the normalized conversation model, not from remote rendering, screenshots, or raw chat DOM.
+AI Chat Export PDF export is generated locally in the extension from the normalized conversation model, not from remote rendering, screenshots, or raw chat DOM.
 
 ## Runtime Approach
 

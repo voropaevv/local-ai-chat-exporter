@@ -1,4 +1,4 @@
-# LogThread Roadmap
+# AI Chat Export Roadmap
 
 ## Business Model
 

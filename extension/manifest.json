@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "LogThread",
-  "short_name": "LogThread",
+  "name": "AI Chat Export",
+  "short_name": "AI Chat Export",
   "version": "0.1.0",
   "description": "Export the currently viewed AI chat conversation to local files without telemetry.",
   "minimum_chrome_version": "114",
@@ -17,7 +17,7 @@
     "https://notebooklm.google.com/*"
   ],
   "action": {
-    "default_title": "LogThread",
+    "default_title": "AI Chat Export",
     "default_popup": "popup/index.html",
     "default_icon": {
       "16": "icons/icon-16.png",

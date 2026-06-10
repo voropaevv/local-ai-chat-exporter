@@ -1,11 +1,14 @@
 # Security And Privacy Requirements
 
-LogThread must preserve these invariants:
+AI Chat Export must preserve these invariants:
 
+- Product branding must use the exact visible name `AI Chat Export`.
+- The canonical icon source is `assets/icon/icon.svg`; the primary accent color is `#0284C7`.
+- Light theme must use a white background; dark theme must use a dark navy or near-black background.
 - No telemetry, analytics, remote logging, ads, trackers, external export servers, or remote hosted code.
 - No server-side PDF, DOCX, image, ZIP, or HTML export path in the core product.
-- No LogThread account requirement.
-- No conversation content upload to LogThread or any export server.
+- No AI Chat Export account requirement.
+- No conversation content upload to AI Chat Export or any export server.
 - No conversation transcript persistence by default.
 - No broad permissions such as `all_urls`, `cookies`, `history`, `webRequest`, or `debugger`.
 - Optional permissions must be requested only for explicit user-facing workflows.

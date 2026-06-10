@@ -6,12 +6,12 @@ Describe the problem and the visible error message.
 
 ## Expected behavior
 
-Describe what you expected LogThread to do.
+Describe what you expected AI Chat Export to do.
 
 ## Context
 
 - Browser:
-- LogThread version:
+- AI Chat Export version:
 - Platform: ChatGPT, Claude, Gemini, Perplexity, NotebookLM, or other:
 - Export format:
 

@@ -50,7 +50,7 @@ async function main() {
   await stat(resolve(distDir, "manifest.json"));
 
   const version = await readPackageVersion();
-  const zipName = `logthread-v${version}.zip`;
+  const zipName = `ai-chat-export-v${version}.zip`;
   const files = await collectFiles(distDir);
   const zipEntries = {};
 

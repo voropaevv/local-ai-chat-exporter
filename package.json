@@ -1,7 +1,7 @@
 {
-  "name": "logthread",
+  "name": "ai-chat-export",
   "version": "0.1.0",
-  "description": "LogThread is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
+  "description": "AI Chat Export is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
   "type": "module",
   "private": true,
   "license": "GPL-3.0-or-later",
@@ -18,11 +18,12 @@
     "icons:build": "node scripts/build-icons.mjs",
     "icons:check": "node scripts/check-palette.mjs",
     "palette:check": "node scripts/check-palette.mjs",
+    "brand:check": "node scripts/check-brand.mjs",
     "site:build": "node scripts/build-site.mjs",
     "store-assets:build": "node scripts/build-store-assets.mjs",
     "check:content-script": "node scripts/check-content-script-classic.mjs",
     "check:preview": "node scripts/check-preview-build.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm icons:check && pnpm build && pnpm check:content-script && pnpm check:preview && pnpm site:build"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm icons:check && pnpm brand:check && pnpm build && pnpm brand:check --include-dist && pnpm check:content-script && pnpm check:preview && pnpm site:build"
   },
   "dependencies": {
     "fflate": "^0.8.3",

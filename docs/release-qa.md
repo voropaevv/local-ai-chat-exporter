@@ -1,4 +1,4 @@
-# Release QA - LogThread 0.1.0
+# Release QA - AI Chat Export 0.1.0
 
 Date: 2026-06-09
 Last verified: 2026-06-09 19:16:37 +04
@@ -45,7 +45,7 @@ Observed:
 
 - Extension service worker loaded from the temporary profile.
 - Direct popup page loaded at `chrome-extension://.../popup/index.html`.
-- Popup rendered LogThread header, Settings, Simple/Advanced mode toggle, Scan, export actions,
+- Popup rendered AI Chat Export header, Settings, Simple/Advanced mode toggle, Scan, export actions,
   privacy note, GitHub, Sponsors, and Privacy links.
 - Diagnostic run reported no popup `pageerror` entries.
 
@@ -121,7 +121,7 @@ service worker may remain an ES module because the manifest declares it as modul
 
 ## Chrome Web Store submission checklist
 
-- Store name: `LogThread`.
+- Store name: `AI Chat Export`.
 - Version: `0.1.0`.
 - License: GPL-3.0-or-later.
 - Short description and long description ready in `site/store-assets/store-listing.md`.

@@ -7,7 +7,7 @@ export function PopupHeader() {
     <header className="popup-header">
       <BrandIcon />
       <div className="popup-title-group">
-        <h1>LogThread</h1>
+        <h1>AI Chat Export</h1>
       </div>
       <a className="settings-button" href={getSettingsPageUrl()} target="_blank" rel="noreferrer">
         Settings

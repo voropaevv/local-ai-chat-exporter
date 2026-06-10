@@ -94,7 +94,7 @@ describe("batch export core helpers", () => {
   test("creates deterministic batch root and unique entry names", () => {
     const root = createBatchRootDirectory("2026-05-31T10:20:30.000Z");
 
-    expect(root).toBe("logthread-export-2026-05-31");
+    expect(root).toBe("ai-chat-export-2026-05-31");
     expect(
       createBatchEntryBase(
         {
@@ -198,13 +198,13 @@ describe("batch export core helpers", () => {
       createBatchManifest({
         exportedAt: "2026-05-31T10:20:30.000Z",
         results,
-        rootDirectory: "logthread-export-2026-05-31"
+        rootDirectory: "ai-chat-export-2026-05-31"
       })
     ).toEqual({
       exportedAt: "2026-05-31T10:20:30.000Z",
-      generatedBy: "logthread",
+      generatedBy: "ai-chat-export",
       resultCount: 2,
-      rootDirectory: "logthread-export-2026-05-31",
+      rootDirectory: "ai-chat-export-2026-05-31",
       results: [
         {
           files: [

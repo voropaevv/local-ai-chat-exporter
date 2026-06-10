@@ -21,7 +21,7 @@ describe("support UX source", () => {
     expect(supportSource).toContain("Core exports stay free");
     expect(supportSource).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|analytics|telemetry/u);
 
-    expect(promptSource).toContain("Support LogThread");
+    expect(promptSource).toContain("Support AI Chat Export");
     expect(promptSource).toContain("No feature locks");
     expect(promptSource).toContain("Dismiss support prompt");
     expect(promptSource).not.toMatch(/localStorage|chrome\.storage|setInterval|setTimeout/u);
@@ -32,7 +32,7 @@ describe("support UX source", () => {
     expect(popupSource).toContain("setShowSupportPrompt(true)");
     expect(popupSource).not.toMatch(/paywall|lockout|nag|advertisement/u);
 
-    expect(optionsSource).toContain("Support LogThread");
+    expect(optionsSource).toContain("Support AI Chat Export");
     expect(optionsSource).toContain("Business model");
     expect(optionsSource).toContain("Core exports stay free and open-source.");
     expect(footerSource).toContain("Sponsors");

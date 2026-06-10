@@ -134,7 +134,7 @@ function createToolbar(
 
   toolbar.setAttribute(TOOLBAR_ATTRIBUTE, "true");
   toolbar.setAttribute("role", "group");
-  toolbar.setAttribute("aria-label", "LogThread selection tools");
+  toolbar.setAttribute("aria-label", "AI Chat Export selection tools");
   toolbar.className = "logthread-selection-toolbar";
   toolbar.style.cssText =
     "display:flex;gap:8px;align-items:center;position:sticky;top:8px;z-index:2147483647;margin:8px 0;padding:8px;border:1px solid var(--color-border,currentColor);border-radius:8px;background:var(--color-surface,Canvas);color:var(--color-text,CanvasText);font:12px system-ui,sans-serif;";

@@ -78,7 +78,7 @@ describe("renderZip", () => {
     expect(names).toEqual(["conversation.json", "conversation.md", "manifest.json"]);
     expect(strFromU8(zip["conversation.md"])).toContain("# ZIP Export");
     expect(strFromU8(zip["conversation.json"])).toContain('"title": "ZIP Export"');
-    expect(manifest.generatedBy).toBe("logthread");
+    expect(manifest.generatedBy).toBe("ai-chat-export");
     expect(manifest.messageCount).toBe(1);
     expect(manifest.settings).toEqual({
       formats: ["md", "json"],
@@ -231,7 +231,7 @@ describe("renderBatchZip", () => {
     });
     const zip = unzipSync(rendered.bytes);
     const names = Object.keys(zip).sort();
-    const manifest = JSON.parse(strFromU8(zip["logthread-export-2026-05-31/manifest.json"])) as {
+    const manifest = JSON.parse(strFromU8(zip["ai-chat-export-2026-05-31/manifest.json"])) as {
       readonly results: readonly (
         | {
             readonly files: readonly {
@@ -244,13 +244,15 @@ describe("renderBatchZip", () => {
       )[];
     };
 
-    expect(rendered.filename).toBe("logthread-export-2026-05-31.zip");
+    expect(rendered.filename).toBe("ai-chat-export-2026-05-31.zip");
     expect(names).toEqual([
-      "logthread-export-2026-05-31/chatgpt-first-chat-1.json",
-      "logthread-export-2026-05-31/chatgpt-first-chat-1.md",
-      "logthread-export-2026-05-31/manifest.json"
+      "ai-chat-export-2026-05-31/chatgpt-first-chat-1.json",
+      "ai-chat-export-2026-05-31/chatgpt-first-chat-1.md",
+      "ai-chat-export-2026-05-31/manifest.json"
     ]);
-    expect(strFromU8(zip["logthread-export-2026-05-31/chatgpt-first-chat-1.md"])).toBe("# First\n");
+    expect(strFromU8(zip["ai-chat-export-2026-05-31/chatgpt-first-chat-1.md"])).toBe(
+      "# First\n"
+    );
     expect(manifest.results).toMatchObject([
       {
         files: [

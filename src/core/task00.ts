@@ -13,7 +13,7 @@ export interface Task00OptionsPlaceholder {
 
 export function getTask00PopupState(): Task00PopupState {
   return {
-    extensionName: "LogThread",
+    extensionName: "AI Chat Export",
     platformStatus: "Ready to export the current supported chat tab.",
     scanButtonLabel: "Export Markdown",
     canScanConversation: true,

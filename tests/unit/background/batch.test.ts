@@ -92,7 +92,7 @@ describe("batch export background flow", () => {
     expect(requestPermission).not.toHaveBeenCalled();
     expect(exportRequest?.options.formats).toEqual(["html", "txt"]);
     expect(response.zipFile?.format).toBe("zip");
-    expect(response.zipFilename).toMatch(/logthread-export-\d{4}-\d{2}-\d{2}\.zip/u);
+    expect(response.zipFilename).toMatch(/ai-chat-export-\d{4}-\d{2}-\d{2}\.zip/u);
   });
 
   test("fails before scanning when selected tab host access was not pre-approved", async () => {

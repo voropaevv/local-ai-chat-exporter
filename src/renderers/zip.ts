@@ -52,7 +52,7 @@ interface ZipManifestAsset {
 interface ZipManifest {
   readonly assets: readonly ZipManifestAsset[];
   readonly completeness: ConversationExport["completeness"];
-  readonly generatedBy: "logthread";
+  readonly generatedBy: "ai-chat-export";
   readonly exportedAt: string;
   readonly messageCount: number;
   readonly settings: ZipManifestSettings;
@@ -251,7 +251,7 @@ function renderManifest(
       ...(asset.width !== undefined ? { width: asset.width } : {})
     })),
     completeness: conversation.completeness,
-    generatedBy: "logthread",
+    generatedBy: "ai-chat-export",
     exportedAt: conversation.exportedAt,
     messageCount: conversation.messageCount,
     settings: {

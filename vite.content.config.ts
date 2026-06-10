@@ -15,7 +15,7 @@ export default defineConfig({
       entry: resolve(extensionRoot, "content/main.ts"),
       fileName: () => "content/main.js",
       formats: ["iife"],
-      name: "LogThreadContent"
+      name: "AI_Chat_Export_Content"
     },
     outDir: distDir,
     rollupOptions: {

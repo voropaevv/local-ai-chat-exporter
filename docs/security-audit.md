@@ -8,7 +8,7 @@ Status: Task 01 public repo hygiene baseline.
 - Optional permissions are limited to `downloads` and `tabs`.
 - Optional host permissions are scoped to supported AI chat sites.
 - Manifest icons reference generated PNG files only.
-- The icon source is local SVG and covered by palette/safety checks.
+- The icon source is `assets/icon/icon.svg`, uses `#0284C7` as the primary accent, and is covered by palette/safety checks.
 - Release packaging generates a production extension ZIP and checksum.
 - Static checks cover remote code patterns, manifest permissions, classic content script constraints, and preview build shape.
 - Current tracked files exclude release ZIPs, QA artifacts, test output, screenshots, HAR files, trace ZIPs, `.env` files, and Codex task artifacts.

@@ -7,7 +7,7 @@ interface BrandIconProps {
 export function BrandIcon({ decorative = true }: BrandIconProps) {
   return (
     <img
-      alt={decorative ? "" : "LogThread"}
+      alt={decorative ? "" : "AI Chat Export"}
       aria-hidden={decorative}
       className="brand-mark"
       height="40"

@@ -109,7 +109,7 @@ describe("local library records", () => {
     const backup = createLocalLibraryBackupFile([record], "2026-06-09T12:30:00.000Z");
     const markdown = renderLocalLibraryRecord(record, "md");
 
-    expect(backup.filename).toBe("logthread-local-library-backup-2026-06-09.json");
+    expect(backup.filename).toBe("ai-chat-export-local-library-backup-2026-06-09.json");
     expect(backup.bytes).toContain('"schemaVersion": "1.0"');
     expect(backup.bytes).toContain('"records"');
     expect(markdown.filename).toBe("DNA-Archive.md");
