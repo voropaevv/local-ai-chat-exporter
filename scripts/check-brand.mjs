@@ -48,7 +48,19 @@ async function main() {
       continue;
     }
 
-    const source = await readFile(file.path, "utf8");
+    let source;
+
+    try {
+      const fileStat = await stat(file.path);
+
+      if (!fileStat.isFile()) {
+        continue;
+      }
+
+      source = await readFile(file.path, "utf8");
+    } catch {
+      continue;
+    }
 
     for (const pattern of forbiddenBrandPatterns) {
       const match = source.match(pattern);

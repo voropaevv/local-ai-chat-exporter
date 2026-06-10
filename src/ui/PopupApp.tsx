@@ -20,11 +20,13 @@ import { BatchExport, formatBatchExportSummary } from "./components/BatchExport"
 import { CompletenessReport } from "./components/CompletenessReport";
 import { ExportOptionsForm } from "./components/ExportOptionsForm";
 import { LocalLibraryPanel } from "./components/LocalLibraryPanel";
+import { PageStatusCard } from "./components/PageStatusCard";
 import { PopupFooter } from "./components/PopupFooter";
 import { PopupHeader } from "./components/PopupHeader";
+import { PopupExportPanel } from "./components/PopupExportPanel";
 import { PreviewPanel } from "./components/PreviewPanel";
+import { PrivacyTrustStrip } from "./components/PrivacyTrustStrip";
 import { ScanControls } from "./components/ScanControls";
-import { SimpleActionBar } from "./components/SimpleActionBar";
 import { SupportPrompt } from "./components/SupportPrompt";
 import {
   buildCancelScanRequest,
@@ -32,7 +34,6 @@ import {
   buildBatchListRequest,
   buildCopyMarkdownRequest,
   buildClearSelectionRequest,
-  buildDownloadMarkdownRequest,
   buildDownloadRequest,
   buildExportStatusMessage,
   buildGetCachedConversationRequest,
@@ -60,11 +61,8 @@ interface PopupExportSuccess {
   readonly warnings: readonly string[];
 }
 
-type PopupMode = "simple" | "advanced";
-
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
-  const [mode, setMode] = useState<PopupMode>("simple");
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
@@ -74,7 +72,6 @@ export function PopupApp() {
   const [supportPromptDismissed, setSupportPromptDismissed] = useState(false);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions = state.completeness !== undefined && !busy;
-  const advancedMode = mode === "advanced";
 
   useEffect(() => {
     let cancelled = false;
@@ -84,8 +81,11 @@ export function PopupApp() {
         if (!cancelled) {
           dispatch({ redaction, type: "set_redaction_settings" });
           dispatch({
+            bundleFormats: exportSettings.bundleFormats,
             filenameTemplate: exportSettings.filenameTemplate,
-            type: "set_filename_template"
+            formats: exportSettings.formats,
+            outputMode: exportSettings.outputMode,
+            type: "set_export_settings"
           });
         }
       })
@@ -152,10 +152,6 @@ export function PopupApp() {
     await runExportAction(buildDownloadRequest(state));
   }
 
-  async function handleDownloadMarkdown() {
-    await runExportAction(buildDownloadMarkdownRequest(state));
-  }
-
   async function handleCopyMarkdown() {
     await runExportAction(buildCopyMarkdownRequest(state));
   }
@@ -197,9 +193,7 @@ export function PopupApp() {
       buildGetCachedConversationRequest()
     );
 
-    return response.ok && response.value.hasConversation
-      ? response.value.conversation
-      : undefined;
+    return response.ok && response.value.hasConversation ? response.value.conversation : undefined;
   }
 
   async function handleLoadBatchCandidates() {
@@ -369,7 +363,7 @@ export function PopupApp() {
   return (
     <main className="app-shell app-shell--popup">
       <PopupHeader />
-      <PopupModeToggle mode={mode} onChange={setMode} />
+      <PageStatusCard scanStatus={state.scanStatus} sourceUrl={state.sourceUrl} />
       <ScanControls
         canCancelScan={state.canCancelScan}
         onCancelScan={handleCancelScan}
@@ -377,14 +371,26 @@ export function PopupApp() {
         progressLabel={state.progressLabel}
         scanStatus={state.scanStatus}
       />
-      <CompletenessReport
-        completeness={state.completeness}
-        partialWarning={state.partialWarning}
-        showAdvancedDetails={advancedMode}
-      />
       {state.errorMessage ? <p className="error-text">{state.errorMessage}</p> : null}
-      {advancedMode ? (
-        <>
+      <PopupExportPanel
+        disabled={!canUseActions}
+        onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
+        onCopyMarkdown={handleCopyMarkdown}
+        onDownload={handleDownload}
+        onFormatToggle={(format) => dispatch({ format, type: "set_format" })}
+        onOpenFullPreview={handleOpenFullPreview}
+        onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
+        options={state.options}
+      />
+      <PrivacyTrustStrip />
+      <details className="advanced-drawer">
+        <summary>Advanced options</summary>
+        <div className="advanced-drawer__content">
+          <CompletenessReport
+            completeness={state.completeness}
+            partialWarning={state.partialWarning}
+            showAdvancedDetails
+          />
           <ExportOptionsForm
             onBundleFormatToggle={(format) => dispatch({ format, type: "set_bundle_format" })}
             onClearSelection={handleClearSelection}
@@ -445,58 +451,13 @@ export function PopupApp() {
             onDownload={handleDownload}
             onOpenPdf={handleOpenPdf}
           />
-        </>
-      ) : (
-        <SimpleActionBar
-          disabled={!canUseActions}
-          onCopyMarkdown={handleCopyMarkdown}
-          onDownloadMarkdown={handleDownloadMarkdown}
-          onOpenFullPreview={handleOpenFullPreview}
-        />
-      )}
-      <p className="privacy-note" id="privacy">
-        100% local processing. No telemetry, trackers, remote logging, remote rendering, or server
-        uploads.
-      </p>
+        </div>
+      </details>
       {showSupportPrompt && !supportPromptDismissed ? (
         <SupportPrompt onDismiss={handleDismissSupportPrompt} />
       ) : null}
       <PopupFooter />
     </main>
-  );
-}
-
-interface PopupModeToggleProps {
-  readonly mode: PopupMode;
-  readonly onChange: (mode: PopupMode) => void;
-}
-
-function PopupModeToggle({ mode, onChange }: PopupModeToggleProps) {
-  return (
-    <div className="popup-mode-toggle" role="group" aria-label="Popup mode">
-      <button
-        aria-pressed={mode === "simple"}
-        className={
-          mode === "simple" ? "mode-toggle-button mode-toggle-button--active" : "mode-toggle-button"
-        }
-        onClick={() => onChange("simple")}
-        type="button"
-      >
-        Simple
-      </button>
-      <button
-        aria-pressed={mode === "advanced"}
-        className={
-          mode === "advanced"
-            ? "mode-toggle-button mode-toggle-button--active"
-            : "mode-toggle-button"
-        }
-        onClick={() => onChange("advanced")}
-        type="button"
-      >
-        Advanced
-      </button>
-    </div>
   );
 }
 

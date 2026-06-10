@@ -37,7 +37,28 @@ describe("export settings storage", () => {
     });
 
     await expect(readStoredExportSettings(storage)).resolves.toEqual({
-      filenameTemplate: "{title}.{format}"
+      bundleFormats: ["md", "json", "html"],
+      filenameTemplate: "{title}.{format}",
+      formats: ["md"],
+      outputMode: "separate"
+    });
+  });
+
+  test("normalizes stored default export formats and output mode", async () => {
+    const storage = makeStorage({
+      [EXPORT_SETTINGS_STORAGE_KEY]: {
+        bundleFormats: ["md", "pdf", "bad"],
+        filenameTemplate: "{title}.{format}",
+        formats: ["json", "txt", "bad"],
+        outputMode: "zip"
+      }
+    });
+
+    await expect(readStoredExportSettings(storage)).resolves.toEqual({
+      bundleFormats: ["md", "pdf"],
+      filenameTemplate: "{title}.{format}",
+      formats: ["json", "txt"],
+      outputMode: "zip"
     });
   });
 
@@ -49,7 +70,10 @@ describe("export settings storage", () => {
     expect(storage.set).toHaveBeenCalledWith(
       {
         [EXPORT_SETTINGS_STORAGE_KEY]: {
-          filenameTemplate: DEFAULT_FILENAME_TEMPLATE
+          bundleFormats: ["md", "json", "html"],
+          filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
+          formats: ["md"],
+          outputMode: "separate"
         }
       },
       expect.any(Function)

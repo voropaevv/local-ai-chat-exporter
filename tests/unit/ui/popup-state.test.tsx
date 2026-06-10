@@ -62,7 +62,7 @@ describe("popup state", () => {
     expect(scanned.platformLabel).toBe("ChatGPT");
     expect(scanned.completeness?.warnings).toEqual(["Top was not reached"]);
     expect(scanned.previewMessages).toHaveLength(3);
-    expect(scanned.progressLabel).toBe("Scanned 3 messages. Ready for Markdown export.");
+    expect(scanned.progressLabel).toBe("Scanned 3 messages. Ready to export.");
     expect(scanned.partialWarning).toBe("This export may be partial.");
 
     const exporting = popupReducer(scanned, { type: "export_started" });
@@ -290,10 +290,10 @@ describe("popup state", () => {
   });
 
   test("never reports selected messages when the content script count is zero", () => {
-    const selectedState = popupReducer(
-      createInitialPopupState(),
-      { scope: "selected", type: "set_scope" }
-    );
+    const selectedState = popupReducer(createInitialPopupState(), {
+      scope: "selected",
+      type: "set_scope"
+    });
 
     expect(getSelectionStatusText(selectedState)).toBe(
       "No selected messages. Select messages again."
@@ -390,7 +390,10 @@ describe("popup state", () => {
 
     expect(state.options.rangeStartIndex).toBe(3);
     expect(state.options.rangeEndIndex).toBe(3);
-    expect(buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options?.range).toEqual({
+    expect(
+      buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options
+        ?.range
+    ).toEqual({
       endIndex: 2,
       startIndex: 2
     });

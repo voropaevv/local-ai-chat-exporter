@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "vitest";
@@ -25,6 +25,7 @@ function trackedFiles(): readonly string[] {
 function readTrackedTextFiles(): readonly { readonly file: string; readonly text: string }[] {
   return trackedFiles()
     .filter((file) => textFilePattern.test(file))
+    .filter((file) => existsSync(resolve(projectRoot, file)))
     .map((file) => ({
       file,
       text: readFileSync(resolve(projectRoot, file), "utf8")

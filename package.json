@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "fflate": "^0.8.3",
+    "lucide-preact": "^1.17.0",
     "preact": "^10.27.2"
   },
   "devDependencies": {

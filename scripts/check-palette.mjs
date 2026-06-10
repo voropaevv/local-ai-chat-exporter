@@ -168,7 +168,7 @@ function validatePalette(palette, violations) {
   }
 
   for (const [token, value] of [...requiredTokens, ...darkThemeTokens]) {
-    const pattern = new RegExp(`${escapeRegExp(token)}\\s*:\\s*${escapeRegExp(value)}\\s*;`);
+    const pattern = new RegExp(`${escapeRegExp(token)}\\s*:\\s*${escapeRegExp(value)}\\s*;`, "i");
 
     if (!pattern.test(palette)) {
       violations.push(`src/ui/styles/palette.css: expected ${token}: ${value};`);

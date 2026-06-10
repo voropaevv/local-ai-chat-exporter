@@ -12,15 +12,14 @@ describe("options app source", () => {
       "utf8"
     );
 
-    expect(optionsSource).toContain("Filename settings");
-    expect(optionsSource).toContain('id="filename-settings"');
-    expect(optionsSource).toContain("FilenameTemplateBuilder");
+    expect(optionsSource).toContain("Filename pattern");
+    expect(optionsSource).toContain("FilenamePatternControl");
+    expect(optionsSource).toContain("FILENAME_PATTERN_PRESETS");
     expect(optionsSource).toContain("writeStoredExportSettings");
-    expect(optionsSource).toContain("Examples");
-    expect(optionsSource).toContain("Off: keeps");
-    expect(optionsSource).toContain("Basic: redacts");
-    expect(optionsSource).toContain("Strict: redacts");
-    expect(optionsSource).toContain("Custom: applies");
+    expect(optionsSource).toContain("Default export formats");
+    expect(optionsSource).toContain("toggleDefaultFormat");
+    expect(optionsSource).toContain("Theme");
+    expect(optionsSource).toContain("Privacy / redaction preset");
     expect(popupSource).not.toContain("FilenameTemplateBuilder");
   });
 });

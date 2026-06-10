@@ -1,9 +1,16 @@
+import type { ExportFormat } from "../core/schema";
 import { DEFAULT_FILENAME_TEMPLATE } from "./filename-template";
 
 export const EXPORT_SETTINGS_STORAGE_KEY = "logthread/export-settings";
 
+export type ExportOutputMode = "separate" | "zip";
+export type StoredPopupFileFormat = Exclude<ExportFormat, "zip">;
+
 export interface ExportSettings {
+  readonly bundleFormats: readonly StoredPopupFileFormat[];
   readonly filenameTemplate: string;
+  readonly formats: readonly ExportFormat[];
+  readonly outputMode: ExportOutputMode;
 }
 
 export interface ExportSettingsStorageArea {
@@ -12,7 +19,10 @@ export interface ExportSettingsStorageArea {
 }
 
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
-  filenameTemplate: DEFAULT_FILENAME_TEMPLATE
+  bundleFormats: ["md", "json", "html"],
+  filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
+  formats: ["md"],
+  outputMode: "separate"
 };
 
 export async function readStoredExportSettings(
@@ -45,8 +55,71 @@ export function normalizeExportSettings(settings: Partial<ExportSettings> = {}):
     typeof settings.filenameTemplate === "string" && settings.filenameTemplate.trim().length > 0
       ? settings.filenameTemplate.trim()
       : DEFAULT_FILENAME_TEMPLATE;
+  const formats = normalizeFormats(settings.formats, ["md"]);
+  const bundleFormats = normalizePopupFormats(settings.bundleFormats, ["md", "json", "html"]);
+  const outputMode = settings.outputMode === "zip" ? "zip" : "separate";
 
-  return { filenameTemplate };
+  return { bundleFormats, filenameTemplate, formats, outputMode };
+}
+
+const EXPORT_FORMATS = new Set<ExportFormat>([
+  "csv",
+  "docx",
+  "html",
+  "json",
+  "md",
+  "pdf",
+  "png",
+  "txt",
+  "zip"
+]);
+const POPUP_FORMATS = new Set<StoredPopupFileFormat>([
+  "csv",
+  "docx",
+  "html",
+  "json",
+  "md",
+  "pdf",
+  "png",
+  "txt"
+]);
+
+function normalizeFormats(
+  value: readonly unknown[] | undefined,
+  fallback: readonly ExportFormat[]
+): readonly ExportFormat[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const formats = [
+    ...new Set(value.filter((format): format is ExportFormat => isExportFormat(format)))
+  ];
+
+  return formats.length > 0 ? formats : [...fallback];
+}
+
+function normalizePopupFormats(
+  value: readonly unknown[] | undefined,
+  fallback: readonly StoredPopupFileFormat[]
+): readonly StoredPopupFileFormat[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const formats = [
+    ...new Set(value.filter((format): format is StoredPopupFileFormat => isPopupFormat(format)))
+  ];
+
+  return formats.length > 0 ? formats : [...fallback];
+}
+
+function isExportFormat(value: unknown): value is ExportFormat {
+  return typeof value === "string" && EXPORT_FORMATS.has(value as ExportFormat);
+}
+
+function isPopupFormat(value: unknown): value is StoredPopupFileFormat {
+  return typeof value === "string" && POPUP_FORMATS.has(value as StoredPopupFileFormat);
 }
 
 function getLocalStorage(): ExportSettingsStorageArea | undefined {

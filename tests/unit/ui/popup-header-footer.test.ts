@@ -22,7 +22,7 @@ describe("popup header and footer source", () => {
     expect(headerSource).not.toContain("platformLabel");
     expect(headerSource).not.toContain("<p>");
     const titleRule = stylesSource.match(/\.popup-title-group h1 \{(?<body>[^}]+)\}/u);
-    expect(titleRule?.groups?.body).toContain("font-size: 15px;");
+    expect(titleRule?.groups?.body).toContain("font-size: 24px;");
     expect(titleRule?.groups?.body).toContain("white-space: nowrap;");
     expect(titleRule?.groups?.body).not.toContain("overflow: hidden;");
     expect(titleRule?.groups?.body).not.toContain("text-overflow: ellipsis;");

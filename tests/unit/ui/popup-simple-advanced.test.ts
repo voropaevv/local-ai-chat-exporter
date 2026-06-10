@@ -9,32 +9,35 @@ function readSource(path: string): string {
 }
 
 describe("popup simple and advanced UX source", () => {
-  test("defaults to simple mode and gates heavy controls behind advanced mode", () => {
+  test("keeps the primary popup simple and gates heavy controls in advanced options", () => {
     const source = readSource("src/ui/PopupApp.tsx");
 
-    expect(source).toContain('useState<PopupMode>("simple")');
-    expect(source).toContain('aria-label="Popup mode"');
-    expect(source).toContain("Simple");
-    expect(source).toContain("Advanced");
-    expect(source).toContain('mode === "advanced"');
-    expect(source).toContain("showAdvancedDetails={advancedMode}");
-    expect(source).toContain("{advancedMode ? (");
+    expect(source).toContain("<PageStatusCard");
+    expect(source).toContain("<PopupExportPanel");
+    expect(source).toContain("<PrivacyTrustStrip");
+    expect(source).toContain('<details className="advanced-drawer">');
+    expect(source).toContain("<summary>Advanced options</summary>");
+    expect(source).toContain("showAdvancedDetails");
     expect(source).toContain("<ExportOptionsForm");
     expect(source).toContain("<BatchExport");
     expect(source).toContain("<LocalLibraryPanel");
     expect(source).toContain("<PreviewPanel");
+    expect(source).not.toContain("PopupMode");
+    expect(source).not.toContain('aria-label="Popup mode"');
   });
 
-  test("simple mode exposes quick Markdown actions without PDF or batch controls", () => {
-    const simpleActionSource = readSource("src/ui/components/SimpleActionBar.tsx");
+  test("primary popup exposes quick export actions without PDF or batch controls", () => {
+    const quickActionSource = readSource("src/ui/components/PopupExportPanel.tsx");
     const actionSource = readSource("src/ui/components/ActionBar.tsx");
     const popupSource = readSource("src/ui/PopupApp.tsx");
     const previewSource = readSource("src/ui/PreviewApp.tsx");
 
-    expect(simpleActionSource).toContain("Download Markdown");
-    expect(simpleActionSource).toContain("Copy Markdown");
-    expect(simpleActionSource).toContain("Full preview");
-    expect(simpleActionSource).not.toContain("Open PDF");
+    expect(quickActionSource).toContain("Download");
+    expect(quickActionSource).toContain("Copy MD");
+    expect(quickActionSource).toContain("Preview");
+    expect(quickActionSource).toContain("ZIP");
+    expect(quickActionSource).not.toContain("Open PDF");
+    expect(quickActionSource).not.toContain("<BatchExport");
     expect(actionSource).toContain("Open PDF");
     expect(popupSource).toContain("PDF generation fell back to PDF-ready HTML");
     expect(popupSource).toContain("buildGetCachedConversationRequest");
@@ -45,9 +48,12 @@ describe("popup simple and advanced UX source", () => {
     const styles = readSource("src/ui/styles.css");
 
     expect(styles).toContain("overflow-x: hidden;");
-    expect(styles).toContain(".popup-mode-toggle");
-    expect(styles).toContain(".simple-action-grid");
+    expect(styles).toContain(".advanced-drawer");
+    expect(styles).toContain(".format-rail");
+    expect(styles).toContain(".output-action-grid");
     expect(styles).toContain("-webkit-line-clamp: 2;");
     expect(styles).toContain("min-width: 0;");
+    expect(styles).not.toContain(".popup-mode-toggle");
+    expect(styles).not.toContain(".simple-action-grid");
   });
 });

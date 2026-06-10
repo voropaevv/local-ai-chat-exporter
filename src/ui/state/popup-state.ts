@@ -87,6 +87,13 @@ export type PopupAction =
   | { readonly selectedMessageCount: number; readonly type: "selection_count_changed" }
   | { readonly type: "set_format"; readonly format: ExportFormat }
   | { readonly type: "set_bundle_format"; readonly format: PopupFileFormat }
+  | {
+      readonly bundleFormats: readonly PopupFileFormat[];
+      readonly filenameTemplate: string;
+      readonly formats: readonly ExportFormat[];
+      readonly outputMode: PopupOutputMode;
+      readonly type: "set_export_settings";
+    }
   | { readonly type: "set_output_mode"; readonly outputMode: PopupOutputMode }
   | { readonly type: "set_scope"; readonly scope: ExportOptions["scope"] }
   | { readonly type: "set_markdown_profile"; readonly markdownProfile: MarkdownProfile }
@@ -165,7 +172,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
             : "This export may be partial.",
         platformLabel: action.scan.platformLabel,
         previewMessages: action.scan.previewMessages,
-        progressLabel: `Scanned ${formatCount(action.scan.messageCount, "message")}. Ready for Markdown export.`,
+        progressLabel: `Scanned ${formatCount(action.scan.messageCount, "message")}. Ready to export.`,
         scanStatus: "scanned",
         selectedMessageCount: action.scan.selectedMessageCount,
         sourceUrl: action.scan.sourceUrl,
@@ -217,6 +224,17 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return toggleFormat(state, action.format);
     case "set_bundle_format":
       return toggleBundleFormat(state, action.format);
+    case "set_export_settings":
+      return {
+        ...state,
+        options: {
+          ...state.options,
+          bundleFormats: action.bundleFormats.length > 0 ? action.bundleFormats : ["md"],
+          filenameTemplate: action.filenameTemplate,
+          formats: action.formats.length > 0 ? action.formats : ["md"],
+          outputMode: action.outputMode
+        }
+      };
     case "set_output_mode":
       return {
         ...state,

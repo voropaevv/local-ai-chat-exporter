@@ -32,9 +32,10 @@ describe("support UX source", () => {
     expect(popupSource).toContain("setShowSupportPrompt(true)");
     expect(popupSource).not.toMatch(/paywall|lockout|nag|advertisement/u);
 
-    expect(optionsSource).toContain("Support AI Chat Export");
-    expect(optionsSource).toContain("Business model");
-    expect(optionsSource).toContain("Core exports stay free and open-source.");
+    expect(optionsSource).toContain("Support");
+    expect(optionsSource).toContain("GitHub Sponsors");
+    expect(optionsSource).toContain("Privacy Policy");
+    expect(optionsSource).toContain("Send Feedback");
     expect(footerSource).toContain("Sponsors");
   });
 });

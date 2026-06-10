@@ -1,3 +1,5 @@
+import { Settings } from "lucide-preact";
+
 import { BrandIcon } from "./BrandIcon";
 
 const SETTINGS_PAGE_PATH = "options/index.html#filename-settings";
@@ -10,7 +12,8 @@ export function PopupHeader() {
         <h1>AI Chat Export</h1>
       </div>
       <a className="settings-button" href={getSettingsPageUrl()} target="_blank" rel="noreferrer">
-        Settings
+        <Settings size={22} strokeWidth={2.2} aria-hidden="true" />
+        <span className="sr-only">Settings</span>
       </a>
     </header>
   );

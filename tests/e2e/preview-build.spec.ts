@@ -29,7 +29,7 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   expect(sourceCss).toContain(".app-shell--preview");
   expect(sourceCss).toContain(".app-shell--popup");
   expect(sourceCss).toContain("overflow: auto");
-  expect(sourceCss).toContain("max-height: 620px");
+  expect(sourceCss).toContain("max-height: 760px");
   expect(sourceCss).toContain("margin-inline: auto");
   expect(sourceCss).toContain("position: sticky");
   expect(popupHeader).toContain("options/index.html#filename-settings");

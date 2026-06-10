@@ -102,15 +102,16 @@ describe("icon and product palette assets", () => {
 
   test("palette CSS exposes semantic AI Chat Export light and dark tokens", () => {
     const palette = readFileSync(resolve(projectRoot, "src/ui/styles/palette.css"), "utf8");
+    const normalizedPalette = palette.toLowerCase();
 
     expect(palette).toContain("@media (prefers-color-scheme: dark)");
 
     for (const [token, value] of Object.entries(expectedLightTokens)) {
-      expect(palette).toContain(`${token}: ${value};`);
+      expect(normalizedPalette).toContain(`${token}: ${value.toLowerCase()};`);
     }
 
     for (const [token, value] of Object.entries(expectedDarkTokens)) {
-      expect(palette).toContain(`${token}: ${value};`);
+      expect(normalizedPalette).toContain(`${token}: ${value.toLowerCase()};`);
     }
   });
 
@@ -144,10 +145,14 @@ describe("icon and product palette assets", () => {
   });
 
   test("palette guard passes the project", () => {
-    const result = spawnSync(process.execPath, [resolve(projectRoot, "scripts/check-palette.mjs")], {
-      cwd: projectRoot,
-      encoding: "utf8"
-    });
+    const result = spawnSync(
+      process.execPath,
+      [resolve(projectRoot, "scripts/check-palette.mjs")],
+      {
+        cwd: projectRoot,
+        encoding: "utf8"
+      }
+    );
 
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
