@@ -34,6 +34,10 @@ describe("popup header and footer source", () => {
     expect(titleRule?.groups?.body).toContain("overflow: hidden;");
     expect(titleRule?.groups?.body).toContain("text-overflow: ellipsis;");
     expect(stylesSource).toContain("width: 38px;");
+    expect(stylesSource).not.toContain("radial-gradient(circle at 33%");
+    expect(stylesSource).not.toContain("radial-gradient(circle at 66%");
+    expect(stylesSource).toContain("color: var(--color-warning);");
+    expect(stylesSource).toContain("color: var(--color-text-on-accent);");
     expect(headerSource).not.toContain("Local only");
     expect(headerSource).not.toContain("privacy-badge");
     expect(footerSource).not.toContain("options/index.html#filename-settings");

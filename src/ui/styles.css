@@ -128,14 +128,12 @@ a:hover {
 .popup-theme-button::before {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(circle at 33% 30%, var(--color-warning) 0 13%, transparent 14%),
-    linear-gradient(
-      145deg,
-      var(--color-accent-soft) 0%,
-      color-mix(in srgb, var(--color-accent-soft) 58%, var(--color-accent) 42%) 55%,
-      var(--color-accent) 100%
-    );
+  background: linear-gradient(
+    145deg,
+    var(--color-accent-soft) 0%,
+    color-mix(in srgb, var(--color-accent-soft) 58%, var(--color-accent) 42%) 55%,
+    var(--color-accent) 100%
+  );
   content: "";
   opacity: 0;
   transform: translateY(22%) scale(0.86);
@@ -151,14 +149,12 @@ a:hover {
 }
 
 .popup-theme-button--dark::before {
-  background:
-    radial-gradient(circle at 66% 28%, var(--color-text-on-accent) 0 11%, transparent 12%),
-    linear-gradient(
-      145deg,
-      var(--color-background) 0%,
-      var(--color-surface) 58%,
-      var(--color-accent-soft) 100%
-    );
+  background: linear-gradient(
+    145deg,
+    var(--color-background) 0%,
+    var(--color-surface) 58%,
+    var(--color-accent-soft) 100%
+  );
   opacity: 1;
   transform: translateY(0) scale(1);
 }
@@ -179,6 +175,7 @@ a:hover {
 }
 
 .popup-theme-button--light .popup-theme-button__icon--sun {
+  color: var(--color-warning);
   opacity: 1;
   transform: rotate(0deg) scale(1);
 }
@@ -194,6 +191,7 @@ a:hover {
 }
 
 .popup-theme-button--dark .popup-theme-button__icon--moon {
+  color: var(--color-text-on-accent);
   opacity: 1;
   transform: rotate(0deg) scale(1);
 }
