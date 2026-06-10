@@ -81,13 +81,13 @@ a:hover {
 }
 
 .app-shell--popup .popup-header {
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   gap: 8px;
 }
 
 .app-shell--popup .brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
 }
 
 .app-shell--popup :is(.popup-title-group) h1 {
@@ -102,6 +102,43 @@ a:hover {
 .app-shell--popup .settings-button svg {
   width: 18px;
   height: 18px;
+}
+
+.popup-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popup-theme-toggle {
+  display: inline-grid;
+  overflow: hidden;
+  grid-template-columns: repeat(2, 28px);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+}
+
+.popup-theme-toggle__button {
+  width: 28px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.popup-theme-toggle__button:last-child {
+  border-right: 0;
+}
+
+.popup-theme-toggle__button--active {
+  color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .app-shell--options {
@@ -914,8 +951,10 @@ h3 {
 .info-dot {
   position: relative;
   display: inline-flex;
+  flex: 0 0 auto;
   width: 14px;
   height: 14px;
+  aspect-ratio: 1;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-text-muted);
@@ -968,8 +1007,10 @@ h3 {
 
 .concept-icon {
   display: inline-flex;
+  flex: 0 0 auto;
   width: 42px;
   height: 42px;
+  aspect-ratio: 1;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border);

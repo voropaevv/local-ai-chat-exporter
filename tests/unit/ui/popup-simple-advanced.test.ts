@@ -53,6 +53,9 @@ describe("popup simple and advanced UX source", () => {
     expect(styles).toContain("width: 378px;");
     expect(styles).toContain("min-width: 378px;");
     expect(styles).toContain("max-width: none;");
+    expect(styles).toContain("grid-template-columns: 32px minmax(0, 1fr) auto;");
+    expect(styles).toContain("width: 32px;");
+    expect(styles).toContain("height: 32px;");
     expect(styles).toContain("grid-column: span 2;");
     expect(styles).toContain(".app-shell--popup .scan-action");
     expect(styles).toContain("min-height: 46px;");
@@ -62,6 +65,8 @@ describe("popup simple and advanced UX source", () => {
     expect(styles).toContain("min-height: 40px;");
     expect(styles).toContain(".app-shell--popup .info-dot");
     expect(styles).toContain("width: 12px;");
+    expect(styles).toContain("aspect-ratio: 1;");
+    expect(styles).toContain("flex: 0 0 auto;");
     expect(styles).toContain(".trust-strip__item span");
     expect(styles).toContain("text-overflow: ellipsis;");
     expect(styles).not.toContain(".advanced-drawer");

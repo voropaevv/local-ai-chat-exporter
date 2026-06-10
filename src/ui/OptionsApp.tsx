@@ -60,10 +60,13 @@ import {
   type PopupState
 } from "./state/popup-state";
 import { LOGTHREAD_GITHUB_URL, LOGTHREAD_PRIVACY_URL, SUPPORT_LINKS } from "./support-links";
+import {
+  applyThemePreference,
+  readThemePreference,
+  writeThemePreference,
+  type ThemePreference
+} from "./theme-preference";
 
-type ThemePreference = "system" | "light" | "dark";
-
-const THEME_STORAGE_KEY = "ai-chat-export/theme";
 const QUICK_FORMATS = [
   "md",
   "pdf",
@@ -113,7 +116,7 @@ export function OptionsApp() {
 
   useEffect(() => {
     applyThemePreference(themePreference);
-    globalThis.localStorage?.setItem(THEME_STORAGE_KEY, themePreference);
+    writeThemePreference(themePreference);
   }, [themePreference]);
 
   useEffect(() => {
@@ -639,29 +642,6 @@ function toggleListValue<T extends ExportFormat | StoredPopupFileFormat>(
     : [...values, value];
 
   return next.length > 0 ? next : values;
-}
-
-function readThemePreference(): ThemePreference {
-  try {
-    const value = globalThis.localStorage?.getItem(THEME_STORAGE_KEY);
-
-    return value === "light" || value === "dark" || value === "system" ? value : "system";
-  } catch {
-    return "system";
-  }
-}
-
-function applyThemePreference(preference: ThemePreference) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  if (preference === "system") {
-    document.documentElement.removeAttribute("data-theme");
-    return;
-  }
-
-  document.documentElement.dataset.theme = preference;
 }
 
 async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<T>> {
