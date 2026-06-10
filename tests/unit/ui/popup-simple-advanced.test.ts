@@ -55,11 +55,15 @@ describe("popup simple and advanced UX source", () => {
     expect(styles).toContain("max-width: none;");
     expect(styles).toContain("grid-column: span 2;");
     expect(styles).toContain(".app-shell--popup .scan-action");
-    expect(styles).toContain("min-height: 54px;");
+    expect(styles).toContain("min-height: 46px;");
     expect(styles).toContain(".app-shell--popup .format-button");
     expect(styles).toContain("min-height: 32px;");
     expect(styles).toContain(".app-shell--popup .concept-action");
     expect(styles).toContain("min-height: 40px;");
+    expect(styles).toContain(".app-shell--popup .info-dot");
+    expect(styles).toContain("width: 12px;");
+    expect(styles).toContain(".trust-strip__item span");
+    expect(styles).toContain("text-overflow: ellipsis;");
     expect(styles).not.toContain(".advanced-drawer");
     expect(styles).toContain(".format-rail");
     expect(styles).toContain(".output-action-grid");
