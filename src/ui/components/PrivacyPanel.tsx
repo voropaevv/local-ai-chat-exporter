@@ -1,5 +1,5 @@
 export const PRIVACY_SUMMARY =
-  "AI Chat Export processes the current conversation locally after an explicit user action. It has no telemetry, analytics, server uploads, remote rendering, or conversation storage by default.";
+  "Jelluvi processes the current conversation locally after an explicit user action. It has no telemetry, analytics, server uploads, remote rendering, or conversation storage by default.";
 
 interface PrivacyPanelProps {
   readonly copyStatus: string;

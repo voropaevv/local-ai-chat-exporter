@@ -1,7 +1,7 @@
 export type ThemePreference = "system" | "light" | "dark";
 export type ResolvedThemePreference = "light" | "dark";
 
-export const THEME_STORAGE_KEY = "ai-chat-export/theme";
+export const THEME_STORAGE_KEY = "jelluvi/theme";
 
 export function readThemePreference(): ThemePreference {
   try {

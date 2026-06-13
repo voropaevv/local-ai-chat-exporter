@@ -55,7 +55,7 @@ select:disabled {
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -136,7 +136,7 @@ a:hover {
 }
 
 .popup-theme-button:hover {
-  border-color: var(--color-info);
+  border-color: var(--color-accent);
 }
 
 .popup-theme-button__icon--sun {
@@ -207,7 +207,7 @@ a:hover {
 }
 
 .brand-kicker {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 11px;
   font-weight: 760;
   line-height: 1.2;
@@ -239,7 +239,7 @@ h1 {
 
 h2,
 legend {
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 760;
   letter-spacing: 0;
@@ -249,7 +249,7 @@ legend {
 
 h3 {
   margin: 0;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 760;
   letter-spacing: 0;
@@ -414,8 +414,8 @@ h3 {
   justify-content: center;
   border-radius: 999px;
   padding: 0 9px;
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
@@ -431,11 +431,11 @@ h3 {
   border-radius: 999px;
   padding: 0;
   background: var(--color-surface);
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .settings-button:hover {
-  border-color: var(--color-info);
+  border-color: var(--color-accent);
   text-decoration: none;
 }
 
@@ -461,12 +461,12 @@ h3 {
 
 .primary-action {
   border: 0;
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: var(--color-text-on-accent);
 }
 
 .primary-action:not(:disabled):hover {
-  background: var(--color-accent-hover);
+  background: var(--color-primary-hover);
 }
 
 .secondary-action {
@@ -498,11 +498,11 @@ h3 {
   width: 100%;
   height: 100%;
   transform: translateX(-100%);
-  background: var(--color-accent);
+  background: var(--color-primary);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-accent-hover);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -666,7 +666,7 @@ h3 {
 .filename-segment button {
   border: 0;
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 11px;
   font-weight: 800;
   padding: 0 1px;
@@ -762,8 +762,8 @@ h3 {
 .permission-list dt strong {
   border-radius: 999px;
   padding: 2px 8px;
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   font-size: 11px;
 }
 
@@ -777,7 +777,7 @@ h3 {
 
 .inline-details summary {
   cursor: pointer;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-weight: 700;
 }
 
@@ -800,7 +800,7 @@ h3 {
 .link-button {
   border: 0;
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 700;
   padding: 0;
@@ -1229,7 +1229,7 @@ h3 {
 .format-button--active,
 .settings-format-button--active {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: var(--color-primary);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
@@ -1469,7 +1469,7 @@ h3 {
 }
 
 .settings-segmented__button--active {
-  color: var(--color-accent);
+  color: var(--color-primary);
   box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 

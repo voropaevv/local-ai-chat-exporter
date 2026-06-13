@@ -2,7 +2,7 @@
 
 ## Name
 
-AI Chat Export
+Jelluvi - AI Chat Export
 
 ## Short Description
 
@@ -10,17 +10,18 @@ Export AI chat threads locally. No account, no telemetry, no server upload.
 
 ## Description
 
-AI Chat Export is a free, open-source, local-first browser extension for exporting AI chat conversations to local files.
+Jelluvi is a free, open-source, local-first browser extension for exporting AI chat conversations to local files.
 
 Supported outputs include Markdown, TXT, JSON, CSV, HTML, PDF, DOCX, local semantic PNG snapshots for moderate selected or range exports, and ZIP bundles with manifests. ChatGPT is the primary supported platform. Secondary provider support is not claimed in Store copy until tests and live QA support it.
 
-AI Chat Export does not include telemetry, analytics, ads, trackers, remote logging, remote rendering, or external export servers. Export actions are initiated by the user and run locally in the browser extension.
+Jelluvi does not include telemetry, analytics, ads, trackers, remote logging, remote rendering, or external export servers. Export actions are initiated by the user and run locally in the browser extension.
 
 ## Branding
 
-- Product name: AI Chat Export.
-- Icon source: `assets/icon/icon.svg`.
-- Primary accent: `#0284C7`.
+- Product name: Jelluvi.
+- Icon source: `assets/brand/jelluvi.svg`.
+- Primary action color: `#168BFF`.
+- Focus/accent color: `#00C6FF`.
 - Light theme uses a white background.
 - Dark theme uses a dark navy or near-black background.
 

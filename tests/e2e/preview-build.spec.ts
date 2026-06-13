@@ -34,6 +34,6 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   expect(sourceCss).toContain("position: sticky");
   expect(popupHeader).toContain("options/index.html#filename-settings");
   expect(popupHeader).toContain('className="settings-button"');
-  expect(popupFooter).toContain("LOGTHREAD_PRIVACY_URL");
+  expect(popupFooter).toContain("JELLUVI_PRIVACY_URL");
   expect(popupFooter).not.toContain("options/index.html#privacy");
 });

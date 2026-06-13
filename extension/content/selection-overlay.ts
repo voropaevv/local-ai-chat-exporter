@@ -101,7 +101,7 @@ export function createSelectionOverlay(
           lastClickedIndex = index;
           updateCount(countNode, controls);
         });
-        label.className = "logthread-selection-control";
+        label.className = "jelluvi-selection-control";
         label.setAttribute(CONTROL_ATTRIBUTE, "true");
         label.textContent = "Export";
         label.prepend(checkbox);
@@ -134,8 +134,8 @@ function createToolbar(
 
   toolbar.setAttribute(TOOLBAR_ATTRIBUTE, "true");
   toolbar.setAttribute("role", "group");
-  toolbar.setAttribute("aria-label", "AI Chat Export selection tools");
-  toolbar.className = "logthread-selection-toolbar";
+  toolbar.setAttribute("aria-label", "Jelluvi selection tools");
+  toolbar.className = "jelluvi-selection-toolbar";
   toolbar.style.cssText =
     "display:flex;gap:8px;align-items:center;position:sticky;top:8px;z-index:2147483647;margin:8px 0;padding:8px;border:1px solid var(--color-border,currentColor);border-radius:8px;background:var(--color-surface,Canvas);color:var(--color-text,CanvasText);font:12px system-ui,sans-serif;";
 

@@ -38,7 +38,7 @@ describe("Task 00 scaffold", () => {
   test("exposes a local-only popup export action after the download pipeline is wired", () => {
     const state = getTask00PopupState();
 
-    expect(state.extensionName).toBe("AI Chat Export");
+    expect(state.extensionName).toBe("Jelluvi");
     expect(state.platformStatus).toBe("Ready to export the current supported chat tab.");
     expect(state.scanButtonLabel).toBe("Export Markdown");
     expect(state.canScanConversation).toBe(true);

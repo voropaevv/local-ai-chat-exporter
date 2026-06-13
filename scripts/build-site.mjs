@@ -7,13 +7,13 @@ import { fileURLToPath } from "node:url";
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const siteRoot = resolve(projectRoot, "site");
 const distRoot = resolve(siteRoot, "dist");
-const sourceIcon = resolve(projectRoot, "assets/icon/icon.svg");
+const sourceIcon = resolve(projectRoot, "assets/brand/jelluvi.svg");
 const siteAssetsRoot = resolve(siteRoot, "assets");
 
 async function main() {
   await rm(distRoot, { force: true, recursive: true });
   await mkdir(siteAssetsRoot, { recursive: true });
-  await cp(sourceIcon, resolve(siteAssetsRoot, "icon.svg"));
+  await cp(sourceIcon, resolve(siteAssetsRoot, "jelluvi.svg"));
   await mkdir(distRoot, { recursive: true });
   await cp(resolve(siteRoot, "index.html"), resolve(distRoot, "index.html"));
   await cp(resolve(siteRoot, "styles.css"), resolve(distRoot, "styles.css"));

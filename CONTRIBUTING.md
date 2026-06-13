@@ -1,6 +1,6 @@
-# Contributing to AI Chat Export
+# Contributing to Jelluvi
 
-AI Chat Export is local-first export tooling. Changes should preserve the trust model before adding
+Jelluvi is local-first export tooling. Changes should preserve the trust model before adding
 surface area.
 
 ## Contribution priorities

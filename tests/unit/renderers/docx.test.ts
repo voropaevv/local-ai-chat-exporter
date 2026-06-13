@@ -73,6 +73,6 @@ describe("renderDocx", () => {
     expect(documentXml).toContain("<w:tbl>");
     expect(documentXml).toContain("<w:t>DOCX</w:t>");
     expect(coreXml).toContain("<dc:title>DOCX Export</dc:title>");
-    expect(coreXml).toContain("<cp:keywords>ai-chat-export</cp:keywords>");
+    expect(coreXml).toContain("<cp:keywords>jelluvi</cp:keywords>");
   });
 });

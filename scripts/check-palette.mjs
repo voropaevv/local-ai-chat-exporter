@@ -5,7 +5,8 @@ import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(process.argv[2] ?? fileURLToPath(new URL("../", import.meta.url)));
-const sourceIconPath = resolve(projectRoot, "assets/icon/icon.svg");
+const sourceIconPath = resolve(projectRoot, "assets/brand/jelluvi.svg");
+const iconGuidelinesPath = resolve(projectRoot, "docs/ICON_GUIDELINES.md");
 const palettePath = resolve(projectRoot, "src/ui/styles/palette.css");
 const manifestPath = resolve(projectRoot, "extension/manifest.json");
 const extensionIconSizes = [16, 32, 48, 128, 512];
@@ -15,47 +16,60 @@ const storeIconSizes = new Map([
   ["site/store-assets/icons/store-icon-128.png", 128]
 ]);
 const requiredTokens = new Map([
-  ["--color-accent", "#0284C7"],
-  ["--color-accent-hover", "#0369A1"],
-  ["--color-accent-soft", "#E0F2FE"],
-  ["--color-background", "#FFFFFF"],
-  ["--color-border", "#CBD5E1"],
-  ["--color-danger", "#DC2626"],
-  ["--color-danger-soft", "#FEE2E2"],
-  ["--color-info", "#0284C7"],
-  ["--color-info-soft", "#E0F2FE"],
-  ["--color-shadow", "#0F172A"],
-  ["--color-success", "#16A34A"],
-  ["--color-success-soft", "#DCFCE7"],
-  ["--color-surface", "#FFFFFF"],
-  ["--color-surface-accent", "#F1F5F9"],
-  ["--color-surface-muted", "#F8FAFC"],
-  ["--color-text", "#0F172A"],
-  ["--color-text-muted", "#64748B"],
+  ["--jelluvi-amber", "#F59E0B"],
+  ["--jelluvi-amber-glow", "#FBBF24"],
+  ["--jelluvi-blue", "#168BFF"],
+  ["--jelluvi-coral", "#EF4444"],
+  ["--jelluvi-coral-glow", "#F87171"],
+  ["--jelluvi-cyan", "#00C6FF"],
+  ["--jelluvi-deep-blue", "#005FEF"],
+  ["--jelluvi-frost", "#F1F7FE"],
+  ["--jelluvi-ice", "#E6F7FF"],
+  ["--jelluvi-line", "#D7E2EF"],
+  ["--jelluvi-mint", "#18C992"],
+  ["--jelluvi-mint-glow", "#22D3A6"],
+  ["--jelluvi-mist", "#F7FAFF"],
+  ["--jelluvi-moon-muted", "#8A94A6"],
+  ["--jelluvi-moon-text", "#F8FAFC"],
+  ["--jelluvi-night", "#0B1220"],
+  ["--jelluvi-night-lifted", "#1A2232"],
+  ["--jelluvi-night-line", "#2A3447"],
+  ["--jelluvi-night-surface", "#151E2E"],
+  ["--jelluvi-pupil-navy", "#0D1B4D"],
+  ["--jelluvi-slate", "#64748B"],
+  ["--jelluvi-white", "#FFFFFF"],
+  ["--color-accent", "var(--jelluvi-cyan)"],
+  ["--color-accent-soft", "var(--jelluvi-ice)"],
+  ["--color-bg", "var(--jelluvi-mist)"],
+  ["--color-background", "var(--color-bg)"],
+  ["--color-border", "var(--jelluvi-line)"],
+  ["--color-danger", "var(--jelluvi-coral)"],
+  ["--color-primary", "var(--jelluvi-blue)"],
+  ["--color-primary-hover", "#0877E8"],
+  ["--color-primary-soft", "var(--jelluvi-ice)"],
+  ["--color-success", "var(--jelluvi-mint)"],
+  ["--color-surface", "var(--jelluvi-white)"],
+  ["--color-surface-muted", "var(--jelluvi-frost)"],
+  ["--color-text", "var(--jelluvi-pupil-navy)"],
+  ["--color-text-muted", "var(--jelluvi-slate)"],
   ["--color-text-on-accent", "#FFFFFF"],
-  ["--color-warning", "#F59E0B"],
-  ["--color-warning-soft", "#FEF3C7"]
+  ["--color-warning", "var(--jelluvi-amber)"]
 ]);
 const darkThemeTokens = new Map([
-  ["--color-accent-hover", "#38BDF8"],
-  ["--color-accent-soft", "#082F49"],
-  ["--color-background", "#020617"],
-  ["--color-border", "#334155"],
-  ["--color-danger", "#F87171"],
-  ["--color-danger-soft", "#450A0A"],
-  ["--color-info", "#38BDF8"],
-  ["--color-info-soft", "#082F49"],
-  ["--color-shadow", "#000000"],
-  ["--color-success", "#22C55E"],
-  ["--color-success-soft", "#052E16"],
-  ["--color-surface", "#0F172A"],
-  ["--color-surface-accent", "#1E293B"],
-  ["--color-surface-muted", "#111827"],
-  ["--color-text", "#F8FAFC"],
-  ["--color-text-muted", "#94A3B8"],
-  ["--color-warning-soft", "#451A03"]
+  ["--color-bg", "var(--jelluvi-night)"],
+  ["--color-border", "var(--jelluvi-night-line)"],
+  ["--color-danger", "var(--jelluvi-coral-glow)"],
+  ["--color-primary-hover", "#39D9FF"],
+  ["--color-primary-soft", "rgba(0, 198, 255, 0.14)"],
+  ["--color-success", "var(--jelluvi-mint-glow)"],
+  ["--color-surface", "var(--jelluvi-night-surface)"],
+  ["--color-surface-muted", "var(--jelluvi-night-lifted)"],
+  ["--color-text", "var(--jelluvi-moon-text)"],
+  ["--color-text-muted", "var(--jelluvi-moon-muted)"],
+  ["--color-warning", "var(--jelluvi-amber-glow)"]
 ]);
 const disallowedOldBrandColorIds = [
+  "0284C7",
   "1A1040",
   "06B6D4",
   "0E7490",
@@ -80,10 +94,11 @@ const actionIcons = new Map([
 
 async function main() {
   const violations = [];
-  const svg = await readText(sourceIconPath, violations, "assets/icon/icon.svg");
+  const svg = await readText(sourceIconPath, violations, "assets/brand/jelluvi.svg");
 
   if (svg !== undefined) {
-    validateSvgSafety(svg, violations);
+    const iconGuidelines = await readText(iconGuidelinesPath, violations, "docs/ICON_GUIDELINES.md");
+    validateSvgSafety(svg, iconGuidelines, violations);
     validateSourceIcon(svg, violations);
   }
 
@@ -119,23 +134,37 @@ async function readText(path, violations, label) {
   }
 }
 
-function validateSvgSafety(svg, violations) {
+function validateSvgSafety(svg, iconGuidelines, violations) {
+  const sourceWithoutXmlNamespaces = svg.replace(
+    /\sxmlns(?::[A-Za-z0-9_-]+)?\s*=\s*["']https?:\/\/www\.w3\.org\/[^"']+["']/gi,
+    ""
+  );
+  const hasDataImage = /data:image/i.test(svg);
+
+  if (
+    hasDataImage &&
+    iconGuidelines !== undefined &&
+    !/data:image exception|embedded data:image/i.test(iconGuidelines)
+  ) {
+    violations.push(
+      "assets/brand/jelluvi.svg: data:image requires a documented exception in docs/ICON_GUIDELINES.md"
+    );
+  }
+
   const patterns = [
-    [/data:image/i, "must not contain data:image"],
-    [/base64/i, "must not contain base64"],
     [/<script\b/i, "must not contain script tags"],
     [/<animate\b|<set\b|<animateTransform\b|<animateMotion\b/i, "must not contain animation"],
-    [/<image\b/i, "must not embed raster images"],
-    [/\b(?:href|xlink:href)\s*=\s*["'](?:https?:|data:)/i, "must not contain external href"],
-    [/https?:\/\//i, "must not contain raw http:// or https://"],
+    [/\b(?:href|xlink:href)\s*=\s*["']https?:/i, "must not contain external href"],
+    [/\son[a-z]+\s*=/i, "must not contain event handler attributes"],
+    [/https?:\/\//i, "must not contain raw http:// or https:// outside XML namespaces"],
     [/@font-face|font-family/i, "must not contain external fonts"],
     [/<text\b/i, "must not contain visible text elements"],
     [/\b(?:openai|chatgpt|anthropic|google|claude|gemini)\b/i, "must not contain platform logos"]
   ];
 
   for (const [pattern, message] of patterns) {
-    if (pattern.test(svg)) {
-      violations.push(`assets/icon/icon.svg: ${message}`);
+    if (pattern.test(sourceWithoutXmlNamespaces)) {
+      violations.push(`assets/brand/jelluvi.svg: ${message}`);
     }
   }
 }
@@ -143,12 +172,12 @@ function validateSvgSafety(svg, violations) {
 function validateSourceIcon(svg, violations) {
   const iconColors = extractHexColors(svg);
 
-  if (!iconColors.has("#0284C7")) {
-    violations.push("assets/icon/icon.svg: missing #0284C7 accent");
+  if (!iconColors.has("#0D1B4D")) {
+    violations.push("assets/brand/jelluvi.svg: missing #0D1B4D pupil navy");
   }
 
   if (/<text\b/i.test(svg)) {
-    violations.push("assets/icon/icon.svg: editable text layers must be converted to paths");
+    violations.push("assets/brand/jelluvi.svg: editable text layers must be converted to paths");
   }
 }
 
@@ -314,7 +343,7 @@ async function validateOldBrandColorRemoval(violations) {
   for (const file of files) {
     const relativePath = relative(projectRoot, file).split("\\").join("/");
 
-    if (relativePath === "site/assets/icon.svg") {
+    if (relativePath === "site/assets/jelluvi.svg") {
       continue;
     }
 

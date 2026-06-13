@@ -15,6 +15,7 @@ import {
 } from "./preview-rendering";
 import type { RenderedFile } from "../renderers";
 import { BrandIcon } from "./components/BrandIcon";
+import { applyThemePreference, readThemePreference } from "./theme-preference";
 
 type PreviewLoadState =
   | { readonly status: "loading" }
@@ -24,6 +25,10 @@ export function PreviewApp() {
   const query = useMemo(() => parsePreviewQuery(globalThis.location.search), []);
   const [loadState, setLoadState] = useState<PreviewLoadState>({ status: "loading" });
   const [actionStatus, setActionStatus] = useState("Preview actions are idle.");
+
+  useEffect(() => {
+    applyThemePreference(readThemePreference());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,7 +118,7 @@ export function PreviewApp() {
         <div className="preview-title-row">
           <BrandIcon />
           <div>
-            <p className="brand-kicker">AI Chat Export</p>
+            <p className="brand-kicker">Jelluvi</p>
             <h1>{renderPreviewTitle(renderState)}</h1>
             <p className="muted">
               {loadState.status === "loading"

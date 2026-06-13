@@ -1,15 +1,15 @@
-# AI Chat Export Privacy Policy
+# Jelluvi Privacy Policy
 
-AI Chat Export is a local-first browser extension for exporting AI chat threads to files you choose.
+Jelluvi is a local-first browser extension for exporting AI chat threads to files you choose.
 
 ## Data Handling
 
 - Conversation extraction starts only after an explicit user action.
 - Export rendering runs locally in the browser extension.
-- Conversation content is not uploaded to AI Chat Export, external servers, analytics tools, or remote renderers.
-- No AI Chat Export account is required.
-- AI Chat Export does not include telemetry, analytics, ads, trackers, session replay, or remote logging.
-- App icons, theme styling, and export UI assets are bundled locally; AI Chat Export does not use remote fonts or remote rendering.
+- Conversation content is not uploaded to Jelluvi, external servers, analytics tools, or remote renderers.
+- No Jelluvi account is required.
+- Jelluvi does not include telemetry, analytics, ads, trackers, session replay, or remote logging.
+- App icons, theme styling, and export UI assets are bundled locally; Jelluvi does not use remote fonts or remote rendering.
 - Conversation content is not stored by default.
 - The optional Local Library stores full conversation content locally in browser IndexedDB only
   after the user clicks `Save to local library`.
@@ -17,13 +17,13 @@ AI Chat Export is a local-first browser extension for exporting AI chat threads 
 
 ## Browser Storage
 
-AI Chat Export uses extension storage for local preferences such as filename settings and redaction
+Jelluvi uses extension storage for local preferences such as filename settings and redaction
 settings. These settings do not contain conversation transcript content by design. Local Library
 records are separate, opt-in browser IndexedDB records that can be deleted or exported as a backup.
 
 ## Permissions
 
-AI Chat Export uses minimal Manifest V3 permissions:
+Jelluvi uses minimal Manifest V3 permissions:
 
 - `activeTab` and `scripting` to scan the current supported chat page after user action.
 - `storage` for local preferences.

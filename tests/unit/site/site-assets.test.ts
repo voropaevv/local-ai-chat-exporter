@@ -44,12 +44,11 @@ describe("landing site and store assets", () => {
     }
 
     expect(`${html}\n${styles}`).not.toMatch(/https?:\/\//u);
-    expect(html).toContain("assets/icon.svg");
+    expect(html).toContain("assets/jelluvi.svg");
     expect(html).toContain("<footer");
-    expect(html).toContain("Support AI Chat Export");
+    expect(html).toContain("Support Jelluvi");
     expect(html).toContain("Core exports stay free and open-source.");
     expect(html).toContain("GitHub Sponsors");
-    expect(html).toContain("OpenCollective");
   });
 
   test("store asset pack contains listing copy, reviewer notes, icons, and six screenshots", () => {

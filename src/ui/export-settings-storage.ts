@@ -1,7 +1,7 @@
 import type { ExportFormat } from "../core/schema";
 import { DEFAULT_FILENAME_TEMPLATE } from "./filename-template";
 
-export const EXPORT_SETTINGS_STORAGE_KEY = "logthread/export-settings";
+export const EXPORT_SETTINGS_STORAGE_KEY = "jelluvi/export-settings";
 
 export type ExportOutputMode = "separate" | "zip";
 export type StoredPopupFileFormat = Exclude<ExportFormat, "zip">;

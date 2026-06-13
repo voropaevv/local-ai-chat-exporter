@@ -6,45 +6,55 @@ import { describe, expect, test } from "vitest";
 const projectRoot = resolve(import.meta.dirname, "../../..");
 const requiredIconSizes = [16, 32, 48, 128, 512] as const;
 const expectedLightTokens = {
-  "--color-accent": "#0284C7",
-  "--color-accent-hover": "#0369A1",
-  "--color-accent-soft": "#E0F2FE",
-  "--color-background": "#FFFFFF",
-  "--color-border": "#CBD5E1",
-  "--color-danger": "#DC2626",
-  "--color-danger-soft": "#FEE2E2",
-  "--color-info": "#0284C7",
-  "--color-info-soft": "#E0F2FE",
-  "--color-shadow": "#0F172A",
-  "--color-success": "#16A34A",
-  "--color-success-soft": "#DCFCE7",
-  "--color-surface": "#FFFFFF",
-  "--color-surface-accent": "#F1F5F9",
-  "--color-surface-muted": "#F8FAFC",
-  "--color-text": "#0F172A",
-  "--color-text-muted": "#64748B",
-  "--color-text-on-accent": "#FFFFFF",
-  "--color-warning": "#F59E0B",
-  "--color-warning-soft": "#FEF3C7"
+  "--color-accent": "var(--jelluvi-cyan)",
+  "--color-accent-hover": "var(--jelluvi-cyan)",
+  "--color-accent-soft": "var(--jelluvi-ice)",
+  "--color-background": "var(--color-bg)",
+  "--color-bg": "var(--jelluvi-mist)",
+  "--color-border": "var(--jelluvi-line)",
+  "--color-danger": "var(--jelluvi-coral)",
+  "--color-danger-soft": "rgba(239, 68, 68, 0.14)",
+  "--color-info": "var(--color-primary)",
+  "--color-info-soft": "var(--color-primary-soft)",
+  "--color-primary": "var(--jelluvi-blue)",
+  "--color-primary-hover": "#0877e8",
+  "--color-primary-soft": "var(--jelluvi-ice)",
+  "--color-shadow": "var(--jelluvi-pupil-navy)",
+  "--color-success": "var(--jelluvi-mint)",
+  "--color-success-soft": "rgba(24, 201, 146, 0.14)",
+  "--color-surface": "var(--jelluvi-white)",
+  "--color-surface-accent": "var(--color-surface-muted)",
+  "--color-surface-muted": "var(--jelluvi-frost)",
+  "--color-text": "var(--jelluvi-pupil-navy)",
+  "--color-text-muted": "var(--jelluvi-slate)",
+  "--color-text-on-accent": "#ffffff",
+  "--color-warning": "var(--jelluvi-amber)",
+  "--color-warning-soft": "rgba(245, 158, 11, 0.16)"
 } as const;
 const expectedDarkTokens = {
-  "--color-accent-hover": "#38BDF8",
-  "--color-accent-soft": "#082F49",
-  "--color-background": "#020617",
-  "--color-border": "#334155",
-  "--color-danger": "#F87171",
-  "--color-danger-soft": "#450A0A",
-  "--color-info": "#38BDF8",
-  "--color-info-soft": "#082F49",
+  "--color-accent": "var(--jelluvi-cyan)",
+  "--color-accent-hover": "var(--jelluvi-cyan)",
+  "--color-accent-soft": "var(--color-primary-soft)",
+  "--color-background": "var(--color-bg)",
+  "--color-bg": "var(--jelluvi-night)",
+  "--color-border": "var(--jelluvi-night-line)",
+  "--color-danger": "var(--jelluvi-coral-glow)",
+  "--color-danger-soft": "rgba(248, 113, 113, 0.15)",
+  "--color-info": "var(--jelluvi-cyan)",
+  "--color-info-soft": "var(--color-primary-soft)",
+  "--color-primary": "var(--jelluvi-blue)",
+  "--color-primary-hover": "#39d9ff",
+  "--color-primary-soft": "rgba(0, 198, 255, 0.14)",
   "--color-shadow": "#000000",
-  "--color-success": "#22C55E",
-  "--color-success-soft": "#052E16",
-  "--color-surface": "#0F172A",
-  "--color-surface-accent": "#1E293B",
-  "--color-surface-muted": "#111827",
-  "--color-text": "#F8FAFC",
-  "--color-text-muted": "#94A3B8",
-  "--color-warning-soft": "#451A03"
+  "--color-success": "var(--jelluvi-mint-glow)",
+  "--color-success-soft": "rgba(34, 211, 166, 0.15)",
+  "--color-surface": "var(--jelluvi-night-surface)",
+  "--color-surface-accent": "var(--color-surface-muted)",
+  "--color-surface-muted": "var(--jelluvi-night-lifted)",
+  "--color-text": "var(--jelluvi-moon-text)",
+  "--color-text-muted": "var(--jelluvi-moon-muted)",
+  "--color-warning": "var(--jelluvi-amber-glow)",
+  "--color-warning-soft": "rgba(251, 191, 36, 0.16)"
 } as const;
 const oldPurpleHexes = [
   "#1A1040",
@@ -60,11 +70,12 @@ const oldPurpleHexes = [
 
 describe("icon and product palette assets", () => {
   test("icon SVG is a safe local source of truth", () => {
-    const svg = readFileSync(resolve(projectRoot, "assets/icon/icon.svg"), "utf8");
+    const svg = readFileSync(resolve(projectRoot, "assets/brand/jelluvi.svg"), "utf8");
 
-    expect(svg).toContain("#0284C7");
+    expect(svg).toContain("#0D1B4D");
+    expect(svg).toContain("#82F3FC");
     expect(svg).toContain("#FFFFFF");
-    expect(svg).not.toMatch(/data:image|base64|<script\b|https?:\/\//i);
+    expect(svg).not.toMatch(/data:image|base64|<script\b/i);
     expect(svg).not.toMatch(/\b(?:href|xlink:href)\s*=\s*["'](?:https?:|data:)/i);
     expect(svg).not.toMatch(/<text\b/i);
   });
@@ -100,7 +111,7 @@ describe("icon and product palette assets", () => {
     expect(iconPaths.every((path) => !path.endsWith(".svg"))).toBe(true);
   });
 
-  test("palette CSS exposes semantic AI Chat Export light and dark tokens", () => {
+  test("palette CSS exposes semantic Jelluvi light and dark tokens", () => {
     const palette = readFileSync(resolve(projectRoot, "src/ui/styles/palette.css"), "utf8");
     const normalizedPalette = palette.toLowerCase();
 
@@ -118,9 +129,9 @@ describe("icon and product palette assets", () => {
   test("UI source uses semantic accent tokens without hard-coded old purple colors", () => {
     const styles = readFileSync(resolve(projectRoot, "src/ui/styles.css"), "utf8");
 
-    expect(styles).toContain("a {\n  color: var(--color-accent);");
-    expect(styles).toContain("h2,\nlegend {\n  color: var(--color-accent);");
-    expect(styles).toContain("background: var(--color-accent);");
+    expect(styles).toContain("a {\n  color: var(--color-primary);");
+    expect(styles).toContain("h2,\nlegend {\n  color: var(--color-primary);");
+    expect(styles).toContain(":focus-visible {\n  outline: 2px solid var(--color-accent);");
     expect(styles).not.toMatch(/--color-product-/u);
 
     const checkedFiles = [

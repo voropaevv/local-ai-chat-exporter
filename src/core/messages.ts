@@ -3,30 +3,30 @@ import type { BatchCandidateTab, BatchManifestResult } from "./batch";
 import type { CompletenessReport, ChatRole, ConversationExport } from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
-export const POPUP_SCAN_MESSAGE = "logthread/scan-current-tab";
-export const POPUP_CANCEL_SCAN_MESSAGE = "logthread/cancel-scan";
-export const POPUP_EXPORT_MESSAGE = "logthread/export-current-tab";
-export const POPUP_BATCH_LIST_MESSAGE = "logthread/list-open-chat-tabs";
-export const POPUP_BATCH_EXPORT_MESSAGE = "logthread/export-open-chat-tabs";
-export const POPUP_START_SELECTION_MESSAGE = "logthread/start-selection";
-export const POPUP_CLEAR_SELECTION_MESSAGE = "logthread/clear-selection";
-export const POPUP_GET_ACTIVE_TAB_INFO_MESSAGE = "logthread/get-active-tab-info";
+export const POPUP_SCAN_MESSAGE = "jelluvi/scan-current-tab";
+export const POPUP_CANCEL_SCAN_MESSAGE = "jelluvi/cancel-scan";
+export const POPUP_EXPORT_MESSAGE = "jelluvi/export-current-tab";
+export const POPUP_BATCH_LIST_MESSAGE = "jelluvi/list-open-chat-tabs";
+export const POPUP_BATCH_EXPORT_MESSAGE = "jelluvi/export-open-chat-tabs";
+export const POPUP_START_SELECTION_MESSAGE = "jelluvi/start-selection";
+export const POPUP_CLEAR_SELECTION_MESSAGE = "jelluvi/clear-selection";
+export const POPUP_GET_ACTIVE_TAB_INFO_MESSAGE = "jelluvi/get-active-tab-info";
 export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE =
-  "logthread/get-scan-cache-summary";
+  "jelluvi/get-scan-cache-summary";
 export const POPUP_GET_CACHED_CONVERSATION_MESSAGE =
-  "logthread/get-cached-conversation";
-export const POPUP_OPEN_PREVIEW_MESSAGE = "logthread/open-preview";
+  "jelluvi/get-cached-conversation";
+export const POPUP_OPEN_PREVIEW_MESSAGE = "jelluvi/open-preview";
 export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE =
-  "logthread/preview-get-cached-conversation";
-export const CONTENT_SCAN_MESSAGE = "logthread/content-scan";
-export const CONTENT_CANCEL_SCAN_MESSAGE = "logthread/content-cancel-scan";
-export const CONTENT_EXPORT_MESSAGE = "logthread/content-export";
-export const CONTENT_START_SELECTION_MESSAGE = "logthread/content-start-selection";
-export const CONTENT_CLEAR_SELECTION_MESSAGE = "logthread/content-clear-selection";
+  "jelluvi/preview-get-cached-conversation";
+export const CONTENT_SCAN_MESSAGE = "jelluvi/content-scan";
+export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/content-cancel-scan";
+export const CONTENT_EXPORT_MESSAGE = "jelluvi/content-export";
+export const CONTENT_START_SELECTION_MESSAGE = "jelluvi/content-start-selection";
+export const CONTENT_CLEAR_SELECTION_MESSAGE = "jelluvi/content-clear-selection";
 export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE =
-  "logthread/content-get-scan-cache-summary";
+  "jelluvi/content-get-scan-cache-summary";
 export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE =
-  "logthread/content-get-cached-conversation";
+  "jelluvi/content-get-cached-conversation";
 
 export interface PreviewMessage {
   readonly index: number;

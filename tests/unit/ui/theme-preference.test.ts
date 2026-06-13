@@ -34,7 +34,7 @@ describe("theme preference helpers", () => {
   });
 
   test("reads and writes the shared UI theme preference", () => {
-    expect(THEME_STORAGE_KEY).toBe("ai-chat-export/theme");
+    expect(THEME_STORAGE_KEY).toBe("jelluvi/theme");
     expect(readThemePreference()).toBe("system");
 
     writeThemePreference("dark");

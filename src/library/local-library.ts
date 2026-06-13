@@ -2,7 +2,7 @@ import type { CompletenessStatus, ConversationExport } from "../core/schema";
 import { renderers, type RenderedBytes, type RenderedFile } from "../renderers";
 import { stableHash } from "../utils/hash";
 
-const DATABASE_NAME = "logthread-local-library";
+const DATABASE_NAME = "jelluvi-local-library";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "records";
 
@@ -137,7 +137,7 @@ export function createLocalLibraryBackupFile(
   return {
     bytes: JSON.stringify(backup, null, 2),
     encoding: "utf-8",
-    filename: `ai-chat-export-local-library-backup-${exportedAt.slice(0, 10)}.json`,
+    filename: `jelluvi-local-library-backup-${exportedAt.slice(0, 10)}.json`,
     format: "json",
     mimeType: "application/json;charset=utf-8"
   };

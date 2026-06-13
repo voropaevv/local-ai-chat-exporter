@@ -1,6 +1,6 @@
 # Provider QA Checklists
 
-AI Chat Export keeps provider support conservative. Store copy must not claim a provider unless the
+Jelluvi keeps provider support conservative. Store copy must not claim a provider unless the
 provider has automated fixtures and a current live QA pass.
 
 ## Support Status

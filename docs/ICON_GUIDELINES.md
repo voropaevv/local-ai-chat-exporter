@@ -1,14 +1,15 @@
 # Icon Guidelines
 
-Product name: AI Chat Export.
+Product name: Jelluvi.
 
 Canonical editable source:
 
-- `assets/icon/icon.svg`
+- `assets/brand/jelluvi.svg`
 
-Primary accent color:
+Primary brand colors:
 
-- `#0284C7`
+- Jelluvi Blue `#168BFF` for primary actions.
+- Jelluvi Cyan `#00C6FF` for focus rings and active outlines.
 
 Generated extension icons:
 

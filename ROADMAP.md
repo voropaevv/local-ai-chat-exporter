@@ -1,10 +1,10 @@
-# AI Chat Export Roadmap
+# Jelluvi Roadmap
 
 ## Business Model
 
 - Core free/open-source: current-tab export, local rendering, local settings, and supported format
   improvements remain free in v1.
-- Donations: GitHub Sponsors and OpenCollective support maintenance, docs, provider fixtures, and
+- Donations: GitHub Sponsors and GitHub Sponsors support maintenance, docs, provider fixtures, and
   compatibility updates.
 - Paid support: optional setup help, QA guidance, and migration support.
 - Custom enterprise build: optional packaging or policy-specific variants for organizations.

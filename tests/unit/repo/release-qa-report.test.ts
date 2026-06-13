@@ -13,7 +13,7 @@ describe("release QA report", () => {
     const report = readFileSync(reportPath, "utf8");
 
     for (const expected of [
-      "Release QA - AI Chat Export 0.1.0",
+      "Release QA - Jelluvi 0.1.0",
       "No P0/P1 bugs open",
       "Static checks",
       "Brave manual QA",

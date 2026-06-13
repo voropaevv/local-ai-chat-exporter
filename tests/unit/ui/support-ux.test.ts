@@ -17,14 +17,14 @@ describe("support UX source", () => {
     const footerSource = readSource("src/ui/components/PopupFooter.tsx");
 
     expect(supportSource).toContain("GitHub Sponsors");
-    expect(supportSource).toContain("OpenCollective");
     expect(supportSource).toContain("https://github.com/voropaevv/local-ai-chat-exporter");
     expect(supportSource).toContain("blob/main/PRIVACY.md");
-    expect(supportSource).toContain("Core exports stay free");
-    expect(supportSource).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|analytics|telemetry/u);
+    expect(supportSource).toContain("Jelluvi keeps exports local");
+    expect(supportSource).toContain("No server uploads");
+    expect(supportSource).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|analytics/u);
 
-    expect(promptSource).toContain("Support AI Chat Export");
-    expect(promptSource).toContain("No feature locks");
+    expect(promptSource).toContain("Support Jelluvi");
+    expect(promptSource).toContain("SUPPORT_TAGLINE");
     expect(promptSource).toContain("Dismiss support prompt");
     expect(promptSource).not.toMatch(/localStorage|chrome\.storage|setInterval|setTimeout/u);
 

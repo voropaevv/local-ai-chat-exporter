@@ -18,8 +18,8 @@ const SOURCE_KIND_LABELS = new Set<ExportedSourceKind>([
 ]);
 
 const THINKING_SELECTORS = [
-  "[data-logthread-advanced-kind='thinking']",
-  "[data-logthread-advanced-kind='reasoning']",
+  "[data-jelluvi-advanced-kind='thinking']",
+  "[data-jelluvi-advanced-kind='reasoning']",
   "[data-testid*='thinking' i]",
   "[data-testid*='reasoning' i]",
   "[data-testid*='thought' i]",
@@ -29,14 +29,14 @@ const THINKING_SELECTORS = [
 ].join(",");
 
 const CANVAS_SELECTORS = [
-  "[data-logthread-canvas]",
+  "[data-jelluvi-canvas]",
   "[data-testid*='canvas' i]",
   "[aria-label*='canvas' i]"
 ].join(",");
 
 const SOURCE_ANCHOR_SELECTORS = [
   "sup a[href]",
-  "[data-logthread-source-kind][href]",
+  "[data-jelluvi-source-kind][href]",
   "[data-testid*='citation' i] a[href]",
   "[data-testid*='source' i] a[href]",
   "[data-source-id][href]",
@@ -103,8 +103,8 @@ function detectContentKind(
   turn: Element | null
 ): "deep_research" | undefined {
   const explicit =
-    firstNonEmptyAttribute(messageElement, ["data-logthread-content-type", "data-content-type"]) ??
-    firstNonEmptyAttribute(turn, ["data-logthread-content-type", "data-content-type"]);
+    firstNonEmptyAttribute(messageElement, ["data-jelluvi-content-type", "data-content-type"]) ??
+    firstNonEmptyAttribute(turn, ["data-jelluvi-content-type", "data-content-type"]);
 
   if (explicit?.toLocaleLowerCase().replace(/[\s-]+/g, "_") === "deep_research") {
     return "deep_research";
@@ -172,7 +172,7 @@ function detectSourceKind(
   contentKind: "deep_research" | undefined
 ): ExportedSourceKind {
   const explicit = firstNonEmptyAttribute(anchor, [
-    "data-logthread-source-kind",
+    "data-jelluvi-source-kind",
     "data-source-kind"
   ])?.toLocaleLowerCase();
 
@@ -226,8 +226,8 @@ function extractCanvasRefs(messageElement: Element): readonly ExportedCanvasRef[
         firstSelectorText(element, ["h1", "h2", "h3"]) ??
         "Canvas";
       const text =
-        firstNonEmptyAttribute(element, ["data-logthread-canvas-text"]) ??
-        firstSelectorText(element, ["[data-logthread-canvas-text]"]);
+        firstNonEmptyAttribute(element, ["data-jelluvi-canvas-text"]) ??
+        firstSelectorText(element, ["[data-jelluvi-canvas-text]"]);
 
       return {
         title,

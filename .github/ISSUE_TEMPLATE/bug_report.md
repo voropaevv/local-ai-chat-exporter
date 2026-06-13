@@ -6,12 +6,12 @@ Describe the problem and the visible error message.
 
 ## Expected behavior
 
-Describe what you expected AI Chat Export to do.
+Describe what you expected Jelluvi to do.
 
 ## Context
 
 - Browser:
-- AI Chat Export version:
+- Jelluvi version:
 - Platform: ChatGPT, Claude, Gemini, Perplexity, NotebookLM, or other:
 - Export format:
 

@@ -1,19 +1,19 @@
 import {
-  LOGTHREAD_GITHUB_URL,
-  LOGTHREAD_PRIVACY_URL,
-  LOGTHREAD_SPONSORS_URL
+  JELLUVI_GITHUB_URL,
+  JELLUVI_PRIVACY_URL,
+  JELLUVI_SPONSORS_URL
 } from "../support-links";
 
 export function PopupFooter() {
   return (
     <footer className="popup-footer">
-      <a href={LOGTHREAD_GITHUB_URL} target="_blank" rel="noreferrer">
+      <a href={JELLUVI_GITHUB_URL} target="_blank" rel="noreferrer">
         GitHub
       </a>
-      <a href={LOGTHREAD_SPONSORS_URL} target="_blank" rel="noreferrer">
+      <a href={JELLUVI_SPONSORS_URL} target="_blank" rel="noreferrer">
         Sponsors
       </a>
-      <a href={LOGTHREAD_PRIVACY_URL} target="_blank" rel="noreferrer">
+      <a href={JELLUVI_PRIVACY_URL} target="_blank" rel="noreferrer">
         Privacy
       </a>
     </footer>

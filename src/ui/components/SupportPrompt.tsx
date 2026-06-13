@@ -6,10 +6,10 @@ interface SupportPromptProps {
 
 export function SupportPrompt({ onDismiss }: SupportPromptProps) {
   return (
-    <aside className="support-prompt" aria-label="Support AI Chat Export">
+    <aside className="support-prompt" aria-label="Support Jelluvi">
       <div>
-        <strong>Support AI Chat Export</strong>
-        <p>{SUPPORT_TAGLINE} No feature locks.</p>
+        <strong>Support Jelluvi</strong>
+        <p>{SUPPORT_TAGLINE}</p>
       </div>
       <div className="support-prompt-actions">
         {SUPPORT_LINKS.map((link) => (

@@ -118,7 +118,7 @@ describe("popup state", () => {
         scope: "assistant_only"
       },
       returnFiles: false,
-      type: "logthread/export-current-tab"
+      type: "jelluvi/export-current-tab"
     });
     expect(buildCopyMarkdownRequest(state)).toMatchObject({
       copyToClipboard: false,
@@ -138,16 +138,16 @@ describe("popup state", () => {
       returnFiles: true
     });
     expect(buildGetScanCacheSummaryRequest()).toEqual({
-      type: "logthread/get-scan-cache-summary"
+      type: "jelluvi/get-scan-cache-summary"
     });
     expect(buildGetActiveTabInfoRequest()).toEqual({
-      type: "logthread/get-active-tab-info"
+      type: "jelluvi/get-active-tab-info"
     });
     expect(buildGetCachedConversationRequest()).toEqual({
-      type: "logthread/get-cached-conversation"
+      type: "jelluvi/get-cached-conversation"
     });
     expect(buildOpenPreviewRequest()).toEqual({
-      type: "logthread/open-preview"
+      type: "jelluvi/open-preview"
     });
   });
 

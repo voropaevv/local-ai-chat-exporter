@@ -4,9 +4,10 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
-const productName = "AI Chat Export";
+const productName = "Jelluvi";
+const manifestStoreName = "Jelluvi - AI Chat Export";
 
-describe("AI Chat Export branding", () => {
+describe("Jelluvi branding", () => {
   test("manifest uses the current product name and PNG icons", () => {
     const manifest = JSON.parse(
       readFileSync(resolve(projectRoot, "extension/manifest.json"), "utf8")
@@ -18,7 +19,7 @@ describe("AI Chat Export branding", () => {
       short_name?: string;
     };
 
-    expect(manifest.name).toBe(productName);
+    expect(manifest.name).toBe(manifestStoreName);
     expect(manifest.short_name).toBe(productName);
     expect(manifest.action?.default_title).toBe(productName);
     expect(manifest.description).toContain("AI chat");
@@ -39,11 +40,12 @@ describe("AI Chat Export branding", () => {
     const previewHtml = readFileSync(resolve(projectRoot, "extension/preview/index.html"), "utf8");
 
     expect(brandIcon).toContain(`alt={decorative ? "" : "${productName}"}`);
-    expect(brandIcon).toContain('getExtensionAssetUrl("brand/icon.svg")');
+    expect(brandIcon).toContain('getExtensionAssetUrl("brand/jelluvi.svg")');
     expect(popupHeader).toContain(`<h1>${productName}</h1>`);
     expect(optionsApp).toContain("<h1>Settings</h1>");
     expect(optionsApp).toContain(`<span>${productName}</span>`);
     expect(previewApp).toContain(`<p className="brand-kicker">${productName}</p>`);
+    expect(previewApp).toContain("applyThemePreference(readThemePreference())");
     expect(previewHtml).toContain(`<title>${productName} Preview</title>`);
   });
 

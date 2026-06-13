@@ -103,7 +103,7 @@ describe("security release scripts", () => {
         '(()=>{const ready = true; globalThis.__logThreadReady = ready;})();\n'
       );
       writeFileSync(
-        resolve(releaseDir, "ai-chat-export-v0.1.0.zip"),
+        resolve(releaseDir, "jelluvi-v0.1.0.zip"),
         Buffer.from(
           zipSync({
             "content/main.js": new TextEncoder().encode(
@@ -135,7 +135,7 @@ describe("security release scripts", () => {
         'import { value } from "../assets/shared.js";\nexport const ready = value;\n'
       );
       writeFileSync(
-        resolve(releaseDir, "ai-chat-export-v0.1.0.zip"),
+        resolve(releaseDir, "jelluvi-v0.1.0.zip"),
         Buffer.from(
           zipSync({
             "content/main.js": new TextEncoder().encode("import('../assets/shared.js');\n"),

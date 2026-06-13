@@ -7,11 +7,11 @@ interface BrandIconProps {
 export function BrandIcon({ decorative = true }: BrandIconProps) {
   return (
     <img
-      alt={decorative ? "" : "AI Chat Export"}
+      alt={decorative ? "" : "Jelluvi"}
       aria-hidden={decorative}
       className="brand-mark"
       height="40"
-      src={getExtensionAssetUrl("brand/icon.svg")}
+      src={getExtensionAssetUrl("brand/jelluvi.svg")}
       width="40"
     />
   );

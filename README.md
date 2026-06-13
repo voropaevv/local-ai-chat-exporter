@@ -1,16 +1,17 @@
-# AI Chat Export
+# Jelluvi
 
 Open-source, local-first browser extension for exporting the AI chat conversation currently open in your browser to local files.
 
 The extension is designed around no telemetry, no analytics, no remote rendering, no external export servers, no remote hosted code, and minimal Manifest V3 permissions.
 
-No account is required to use AI Chat Export. The extension operates on the supported AI chat page already open in your browser.
+No account is required to use Jelluvi. The extension operates on the supported AI chat page already open in your browser.
 
 ## Brand and Theme
 
-- Product name: AI Chat Export.
-- Icon source: `assets/icon/icon.svg`.
-- Primary accent color: `#0284C7`.
+- Product name: Jelluvi.
+- Icon source: `assets/brand/jelluvi.svg`.
+- Primary action color: `#168BFF`.
+- Focus/accent color: `#00C6FF`.
 - Light theme uses a clean white background and neutral slate text.
 - Dark theme uses a dark navy or near-black background with readable slate text.
 - Core exports remain local-first with no telemetry, no server uploads, no remote rendering, no external fonts, and no remote hosted code.
@@ -83,13 +84,12 @@ pnpm test:e2e
 
 ## Support and Business Model
 
-Core exports stay free and open-source. AI Chat Export does not add ads, telemetry, branding in exports
+Core exports stay free and open-source. Jelluvi does not add ads, telemetry, branding in exports
 by default, feature lockouts, or pricing gates around the core local export workflow.
 
 Support channels:
 
 - GitHub Sponsors: `https://github.com/sponsors/voropaevv`
-- OpenCollective: `https://opencollective.com/logthread`
 
 Business model:
 
@@ -103,8 +103,8 @@ Business model:
 
 - Processing happens locally in the browser after explicit user action.
 - No telemetry, analytics, ads, trackers, session replay, remote logging, remote rendering, or export server is used.
-- No AI Chat Export account is required.
-- Conversation content is not uploaded to AI Chat Export or any export server.
+- No Jelluvi account is required.
+- Conversation content is not uploaded to Jelluvi or any export server.
 - Conversation content is not stored by default.
 - Browser storage is used for local preferences such as redaction settings.
 - Optional permissions are requested only for user-facing workflows such as downloads and batch export.
@@ -114,7 +114,7 @@ Business model:
 - ChatGPT is the primary v1 platform.
 - Secondary platform adapters are best-effort and currently scan visible loaded messages only.
 - The extension exports the current conversation only; it does not scrape account-wide history in the background.
-- PDF output is generated locally from the normalized conversation model. If local PDF generation fails, AI Chat Export falls back to local PDF-ready HTML and shows a warning.
+- PDF output is generated locally from the normalized conversation model. If local PDF generation fails, Jelluvi falls back to local PDF-ready HTML and shows a warning.
 - PDF v1 uses built-in PDF fonts. CJK text, complex emoji, and advanced formula layout may use fallback glyphs; formulas are preserved as plain text.
 - PNG export is a local semantic long-image renderer for moderate selected or range exports. The maximum local PNG height is 16,000 px; longer chats fall back to a local text explanation and should use selected messages, ranges, PDF, HTML, or text formats.
 - ZIP bundle mode stores selected formats under canonical `conversation.*` names, includes `manifest.json` with settings and file hashes, and preserves embedded data-image assets under `assets/` with hashed filenames.
@@ -135,7 +135,7 @@ pnpm build
 pnpm package
 ```
 
-The package script writes `release/ai-chat-export-v<version>.zip` and a matching `.sha256` checksum.
+The package script writes `release/jelluvi-v<version>.zip` and a matching `.sha256` checksum.
 
 ## Repository Hygiene
 

@@ -82,7 +82,7 @@ describe("batch export background flow", () => {
     const response = await handlePopupBatchExportRequest({
       options: { formats: ["html", "txt"] },
       tabIds: [10],
-      type: "logthread/export-open-chat-tabs"
+      type: "jelluvi/export-open-chat-tabs"
     });
 
     const exportRequest = sendMessage.mock.calls.find(
@@ -92,7 +92,7 @@ describe("batch export background flow", () => {
     expect(requestPermission).not.toHaveBeenCalled();
     expect(exportRequest?.options.formats).toEqual(["html", "txt"]);
     expect(response.zipFile?.format).toBe("zip");
-    expect(response.zipFilename).toMatch(/ai-chat-export-\d{4}-\d{2}-\d{2}\.zip/u);
+    expect(response.zipFilename).toMatch(/jelluvi-\d{4}-\d{2}-\d{2}\.zip/u);
   });
 
   test("fails before scanning when selected tab host access was not pre-approved", async () => {
@@ -129,7 +129,7 @@ describe("batch export background flow", () => {
       handlePopupBatchExportRequest({
         options: { formats: ["md"] },
         tabIds: [10],
-        type: "logthread/export-open-chat-tabs"
+        type: "jelluvi/export-open-chat-tabs"
       })
     ).rejects.toMatchObject({
       code: "unsupported_platform",
@@ -163,7 +163,7 @@ describe("batch export background flow", () => {
     const response = await handlePopupBatchExportRequest({
       options: { formats: ["md", "json"] },
       tabIds: [10],
-      type: "logthread/export-open-chat-tabs"
+      type: "jelluvi/export-open-chat-tabs"
     });
 
     expect(response.zipFile).toBeUndefined();
@@ -223,7 +223,7 @@ describe("batch export background flow", () => {
     const response = await handlePopupBatchExportRequest({
       options: { formats: ["png"] },
       tabIds: [10],
-      type: "logthread/export-open-chat-tabs"
+      type: "jelluvi/export-open-chat-tabs"
     });
 
     expect(response.zipFile).toBeUndefined();

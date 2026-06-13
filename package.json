@@ -1,7 +1,7 @@
 {
-  "name": "ai-chat-export",
+  "name": "jelluvi",
   "version": "0.1.0",
-  "description": "AI Chat Export is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
+  "description": "Jelluvi is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
   "type": "module",
   "private": true,
   "license": "GPL-3.0-or-later",

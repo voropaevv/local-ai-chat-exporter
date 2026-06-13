@@ -59,7 +59,7 @@ import {
   createInitialPopupState,
   type PopupState
 } from "./state/popup-state";
-import { LOGTHREAD_GITHUB_URL, LOGTHREAD_PRIVACY_URL, SUPPORT_LINKS } from "./support-links";
+import { JELLUVI_GITHUB_URL, JELLUVI_PRIVACY_URL, SUPPORT_LINKS } from "./support-links";
 import {
   applyThemePreference,
   readThemePreference,
@@ -448,11 +448,11 @@ export function OptionsApp() {
             <Heart size={18} strokeWidth={2.2} />
             GitHub Sponsors
           </a>
-          <a href={LOGTHREAD_PRIVACY_URL} target="_blank" rel="noreferrer">
+          <a href={JELLUVI_PRIVACY_URL} target="_blank" rel="noreferrer">
             <HelpCircle size={18} strokeWidth={2.2} />
             Privacy Policy
           </a>
-          <a href={`${LOGTHREAD_GITHUB_URL}/issues`} target="_blank" rel="noreferrer">
+          <a href={`${JELLUVI_GITHUB_URL}/issues`} target="_blank" rel="noreferrer">
             <Mail size={18} strokeWidth={2.2} />
             Send Feedback
           </a>
@@ -460,7 +460,7 @@ export function OptionsApp() {
       </SettingsCard>
 
       <footer className="settings-version">
-        <span>AI Chat Export</span>
+        <span>Jelluvi</span>
         <span>v0.1.0</span>
       </footer>
     </main>

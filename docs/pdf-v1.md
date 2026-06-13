@@ -1,6 +1,6 @@
 # Local PDF v1
 
-AI Chat Export PDF export is generated locally in the extension from the normalized conversation model, not from remote rendering, screenshots, or raw chat DOM.
+Jelluvi PDF export is generated locally in the extension from the normalized conversation model, not from remote rendering, screenshots, or raw chat DOM.
 
 ## Runtime Approach
 
