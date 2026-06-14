@@ -5,8 +5,8 @@ import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(process.argv[2] ?? fileURLToPath(new URL("../", import.meta.url)));
-const sourceIconPath = resolve(projectRoot, "assets/brand/jelluvi.svg");
-const iconGuidelinesPath = resolve(projectRoot, "docs/ICON_GUIDELINES.md");
+const sourceIconPath = resolve(projectRoot, "assets/brand/jelluvi.png");
+const legacySourceIconPath = resolve(projectRoot, "assets/brand/jelluvi.svg");
 const palettePath = resolve(projectRoot, "src/ui/styles/palette.css");
 const manifestPath = resolve(projectRoot, "extension/manifest.json");
 const extensionIconSizes = [16, 32, 48, 128, 512];
@@ -94,13 +94,7 @@ const actionIcons = new Map([
 
 async function main() {
   const violations = [];
-  const svg = await readText(sourceIconPath, violations, "assets/brand/jelluvi.svg");
-
-  if (svg !== undefined) {
-    const iconGuidelines = await readText(iconGuidelinesPath, violations, "docs/ICON_GUIDELINES.md");
-    validateSvgSafety(svg, iconGuidelines, violations);
-    validateSourceIcon(svg, violations);
-  }
+  await validateSourceIcon(violations);
 
   const palette = await readText(palettePath, violations, "src/ui/styles/palette.css");
 
@@ -134,50 +128,39 @@ async function readText(path, violations, label) {
   }
 }
 
-function validateSvgSafety(svg, iconGuidelines, violations) {
-  const sourceWithoutXmlNamespaces = svg.replace(
-    /\sxmlns(?::[A-Za-z0-9_-]+)?\s*=\s*["']https?:\/\/www\.w3\.org\/[^"']+["']/gi,
-    ""
-  );
-  const hasDataImage = /data:image/i.test(svg);
-
-  if (
-    hasDataImage &&
-    iconGuidelines !== undefined &&
-    !/data:image exception|embedded data:image/i.test(iconGuidelines)
-  ) {
-    violations.push(
-      "assets/brand/jelluvi.svg: data:image requires a documented exception in docs/ICON_GUIDELINES.md"
-    );
+async function validateSourceIcon(violations) {
+  try {
+    await stat(legacySourceIconPath);
+    violations.push("assets/brand/jelluvi.svg: legacy SVG source should be replaced by PNG");
+  } catch {
+    // Expected: the canonical brand source is the raster PNG supplied by the designer.
   }
 
-  const patterns = [
-    [/<script\b/i, "must not contain script tags"],
-    [/<animate\b|<set\b|<animateTransform\b|<animateMotion\b/i, "must not contain animation"],
-    [/\b(?:href|xlink:href)\s*=\s*["']https?:/i, "must not contain external href"],
-    [/\son[a-z]+\s*=/i, "must not contain event handler attributes"],
-    [/https?:\/\//i, "must not contain raw http:// or https:// outside XML namespaces"],
-    [/@font-face|font-family/i, "must not contain external fonts"],
-    [/<text\b/i, "must not contain visible text elements"],
-    [/\b(?:openai|chatgpt|anthropic|google|claude|gemini)\b/i, "must not contain platform logos"]
-  ];
+  try {
+    const png = await readFile(sourceIconPath);
+    const dimensions = readPngDimensions(png);
 
-  for (const [pattern, message] of patterns) {
-    if (pattern.test(sourceWithoutXmlNamespaces)) {
-      violations.push(`assets/brand/jelluvi.svg: ${message}`);
+    if (dimensions.width !== dimensions.height) {
+      violations.push(
+        `assets/brand/jelluvi.png: expected square PNG, found ${dimensions.width}x${dimensions.height}`
+      );
     }
-  }
-}
 
-function validateSourceIcon(svg, violations) {
-  const iconColors = extractHexColors(svg);
+    if (dimensions.width < 512 || dimensions.height < 512) {
+      violations.push(
+        `assets/brand/jelluvi.png: expected at least 512x512 source, found ${dimensions.width}x${dimensions.height}`
+      );
+    }
 
-  if (!iconColors.has("#0D1B4D")) {
-    violations.push("assets/brand/jelluvi.svg: missing #0D1B4D pupil navy");
-  }
-
-  if (/<text\b/i.test(svg)) {
-    violations.push("assets/brand/jelluvi.svg: editable text layers must be converted to paths");
+    if (!pngHasAlpha(png)) {
+      violations.push("assets/brand/jelluvi.png: expected RGBA or grayscale-alpha PNG");
+    }
+  } catch (error) {
+    violations.push(
+      `assets/brand/jelluvi.png: ${
+        error instanceof Error ? error.message : "missing, unreadable, or invalid PNG"
+      }`
+    );
   }
 }
 
@@ -243,6 +226,12 @@ function readPngDimensions(png) {
     height: png.readUInt32BE(20),
     width: png.readUInt32BE(16)
   };
+}
+
+function pngHasAlpha(png) {
+  const colorType = png.readUInt8(25);
+
+  return colorType === 4 || colorType === 6;
 }
 
 async function validateManifest(violations) {
@@ -343,7 +332,7 @@ async function validateOldBrandColorRemoval(violations) {
   for (const file of files) {
     const relativePath = relative(projectRoot, file).split("\\").join("/");
 
-    if (relativePath === "site/assets/jelluvi.svg") {
+    if (relativePath === "site/assets/jelluvi.png") {
       continue;
     }
 

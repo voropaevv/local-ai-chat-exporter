@@ -3,7 +3,7 @@
 Jelluvi must preserve these invariants:
 
 - Product branding must use the exact visible name `Jelluvi`.
-- The canonical icon source is `assets/brand/jelluvi.svg`; primary actions use `#168BFF`
+- The canonical icon source is `assets/brand/jelluvi.png`; primary actions use `#168BFF`
   and focus/active accents use `#00C6FF`.
 - Light theme must use a white background; dark theme must use a dark navy or near-black background.
 - No telemetry, analytics, remote logging, ads, trackers, external export servers, or remote hosted code.

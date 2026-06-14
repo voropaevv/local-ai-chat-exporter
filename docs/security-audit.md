@@ -8,7 +8,7 @@ Status: Task 01 public repo hygiene baseline.
 - Optional permissions are limited to `downloads` and `tabs`.
 - Optional host permissions are scoped to supported AI chat sites.
 - Manifest icons reference generated PNG files only.
-- The icon source is `assets/brand/jelluvi.svg`; primary actions use `#168BFF`,
+- The icon source is `assets/brand/jelluvi.png`; primary actions use `#168BFF`,
   focus/active accents use `#00C6FF`, and palette/safety checks cover both.
 - Release packaging generates a production extension ZIP and checksum.
 - Static checks cover remote code patterns, manifest permissions, classic content script constraints, and preview build shape.

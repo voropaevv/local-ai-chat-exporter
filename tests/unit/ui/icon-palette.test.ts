@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -69,15 +69,12 @@ const oldPurpleHexes = [
 ] as const;
 
 describe("icon and product palette assets", () => {
-  test("icon SVG is a safe local source of truth", () => {
-    const svg = readFileSync(resolve(projectRoot, "assets/brand/jelluvi.svg"), "utf8");
+  test("icon PNG is a safe local source of truth", () => {
+    const sourcePng = readFileSync(resolve(projectRoot, "assets/brand/jelluvi.png"));
 
-    expect(svg).toContain("#0D1B4D");
-    expect(svg).toContain("#82F3FC");
-    expect(svg).toContain("#FFFFFF");
-    expect(svg).not.toMatch(/data:image|base64|<script\b/i);
-    expect(svg).not.toMatch(/\b(?:href|xlink:href)\s*=\s*["'](?:https?:|data:)/i);
-    expect(svg).not.toMatch(/<text\b/i);
+    expect(readPngSize(sourcePng)).toEqual({ height: 1200, width: 1200 });
+    expect(pngHasAlpha(sourcePng)).toBe(true);
+    expect(existsSync(resolve(projectRoot, "assets/brand/jelluvi.svg"))).toBe(false);
   });
 
   test.each(requiredIconSizes)("generated PNG icon-%i has the correct dimensions", (size) => {
@@ -178,4 +175,10 @@ function readPngSize(png: Buffer): { readonly height: number; readonly width: nu
     height: png.readUInt32BE(20),
     width: png.readUInt32BE(16)
   };
+}
+
+function pngHasAlpha(png: Buffer): boolean {
+  const colorType = png.readUInt8(25);
+
+  return colorType === 4 || colorType === 6;
 }

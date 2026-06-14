@@ -44,7 +44,7 @@ describe("landing site and store assets", () => {
     }
 
     expect(`${html}\n${styles}`).not.toMatch(/https?:\/\//u);
-    expect(html).toContain("assets/jelluvi.svg");
+    expect(html).toContain("assets/jelluvi.png");
     expect(html).toContain("<footer");
     expect(html).toContain("Support Jelluvi");
     expect(html).toContain("Core exports stay free and open-source.");

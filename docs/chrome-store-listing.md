@@ -19,7 +19,7 @@ Jelluvi does not include telemetry, analytics, ads, trackers, remote logging, re
 ## Branding
 
 - Product name: Jelluvi.
-- Icon source: `assets/brand/jelluvi.svg`.
+- Icon source: `assets/brand/jelluvi.png`.
 - Primary action color: `#168BFF`.
 - Focus/accent color: `#00C6FF`.
 - Light theme uses a white background.

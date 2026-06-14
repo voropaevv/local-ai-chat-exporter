@@ -2,9 +2,9 @@
 
 Product name: Jelluvi.
 
-Canonical editable source:
+Canonical source:
 
-- `assets/brand/jelluvi.svg`
+- `assets/brand/jelluvi.png`
 
 Primary brand colors:
 
@@ -27,10 +27,10 @@ Chrome Web Store assets:
 
 Rules:
 
-- Keep SVG as the editable source only.
+- Keep the high-resolution transparent PNG as the canonical mascot source.
 - Manifest icons must reference PNG files only.
 - The Chrome Web Store 128 icon must keep 96x96 actual icon content centered with 16px transparent padding.
-- The SVG source must not contain scripts, animations, embedded raster images, data URIs, base64, remote hrefs, external fonts, platform logos, or visible text nodes.
+- The source PNG must be square, transparent, and at least 512x512.
 - Do not use OpenAI, ChatGPT, Claude, Gemini, Google, Anthropic, Perplexity, or other platform logos in the app icon.
 
 Generate and verify icons with:

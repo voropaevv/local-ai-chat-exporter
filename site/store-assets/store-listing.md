@@ -2,7 +2,7 @@
 
 ## Asset Paths
 
-- Icon source: `assets/brand/jelluvi.svg`
+- Icon source: `assets/brand/jelluvi.png`
 - Primary action color: `#168BFF`
 - Focus/accent color: `#00C6FF`
 - 128 icon: `site/store-assets/icons/icon-128.png`

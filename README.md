@@ -9,7 +9,7 @@ No account is required to use Jelluvi. The extension operates on the supported A
 ## Brand and Theme
 
 - Product name: Jelluvi.
-- Icon source: `assets/brand/jelluvi.svg`.
+- Icon source: `assets/brand/jelluvi.png`.
 - Primary action color: `#168BFF`.
 - Focus/accent color: `#00C6FF`.
 - Light theme uses a clean white background and neutral slate text.

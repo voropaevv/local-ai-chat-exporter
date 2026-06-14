@@ -24,8 +24,8 @@ function copyExtensionStaticFiles(): Plugin {
       await rm(distBrand, { force: true, recursive: true });
       await mkdir(distBrand, { recursive: true });
       await copyFile(
-        resolve(projectRoot, "assets/brand/jelluvi.svg"),
-        resolve(distBrand, "jelluvi.svg")
+        resolve(projectRoot, "assets/brand/jelluvi.png"),
+        resolve(distBrand, "jelluvi.png")
       );
     }
   };

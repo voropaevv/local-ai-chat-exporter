@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const sourceIconPath = resolve(projectRoot, "assets/brand/jelluvi.svg");
+const sourceIconPath = resolve(projectRoot, "assets/brand/jelluvi.png");
 const outputRoot = resolve(projectRoot, "site/store-assets");
 const iconOutputRoot = resolve(outputRoot, "icons");
 const screenOutputRoot = resolve(outputRoot, "store-screens");
@@ -70,13 +70,14 @@ const screenshots = [
 ];
 
 async function main() {
-  const iconSvg = prepareSvgForRenderer(await readFile(sourceIconPath, "utf8"));
+  const iconPng = await readFile(sourceIconPath);
+  const iconDataUri = `data:image/png;base64,${iconPng.toString("base64")}`;
 
   await mkdir(iconOutputRoot, { recursive: true });
   await mkdir(screenOutputRoot, { recursive: true });
 
   for (const size of iconSizes) {
-    const renderer = new Resvg(renderIconCanvasSvg(iconSvg, size, size), {
+    const renderer = new Resvg(renderIconCanvasSvg(iconDataUri, size, size), {
       background: "transparent",
       fitTo: { mode: "width", value: size },
       font: { loadSystemFonts: false }
@@ -84,7 +85,7 @@ async function main() {
     await writeFile(resolve(iconOutputRoot, `icon-${size}.png`), renderer.render().asPng());
   }
 
-  const storeIconRenderer = new Resvg(renderStoreIconSvg(iconSvg), {
+  const storeIconRenderer = new Resvg(renderStoreIconSvg(iconDataUri), {
     background: "transparent",
     fitTo: { mode: "width", value: 128 },
     font: { loadSystemFonts: false }
@@ -95,7 +96,7 @@ async function main() {
   );
 
   for (const screenshot of screenshots) {
-    const renderer = new Resvg(renderScreenshotSvg(screenshot), {
+    const renderer = new Resvg(renderScreenshotSvg(screenshot, iconDataUri), {
       background: "white",
       fitTo: { mode: "width", value: 1280 },
       font: { loadSystemFonts: true }
@@ -106,53 +107,20 @@ async function main() {
   console.log(`Wrote ${iconSizes.length + 1} icons and ${screenshots.length} screenshots.`);
 }
 
-function renderStoreIconSvg(svg) {
-  return renderIconCanvasSvg(svg, 128, 96);
+function renderStoreIconSvg(iconDataUri) {
+  return renderIconCanvasSvg(iconDataUri, 128, 96);
 }
 
-function renderIconCanvasSvg(svg, canvasSize, contentSize) {
-  const innerSvg = extractInnerSvg(svg);
-  const viewBox = extractViewBox(svg);
-  const scale = contentSize / Math.max(viewBox.width, viewBox.height);
-  const offsetX = (canvasSize - viewBox.width * scale) / 2;
-  const offsetY = (canvasSize - viewBox.height * scale) / 2;
+function renderIconCanvasSvg(iconDataUri, canvasSize, contentSize) {
+  const offset = (canvasSize - contentSize) / 2;
 
   return `
 <svg width="${canvasSize}" height="${canvasSize}" viewBox="0 0 ${canvasSize} ${canvasSize}" xmlns="http://www.w3.org/2000/svg">
-  <g transform="translate(${offsetX} ${offsetY}) scale(${scale}) translate(${-viewBox.minX} ${-viewBox.minY})">
-    ${innerSvg}
-  </g>
+  <image href="${iconDataUri}" x="${offset}" y="${offset}" width="${contentSize}" height="${contentSize}" preserveAspectRatio="xMidYMid meet"/>
 </svg>`;
 }
 
-function extractViewBox(svg) {
-  const match = svg.match(
-    /\bviewBox\s*=\s*["'](?<minX>-?\d+(?:\.\d+)?)\s+(?<minY>-?\d+(?:\.\d+)?)\s+(?<width>\d+(?:\.\d+)?)\s+(?<height>\d+(?:\.\d+)?)["']/u
-  );
-
-  if (match?.groups === undefined) {
-    throw new Error("Source SVG must define a numeric viewBox.");
-  }
-
-  return {
-    height: Number.parseFloat(match.groups.height),
-    minX: Number.parseFloat(match.groups.minX),
-    minY: Number.parseFloat(match.groups.minY),
-    width: Number.parseFloat(match.groups.width)
-  };
-}
-
-function extractInnerSvg(svg) {
-  const match = svg.match(/<svg\b[^>]*>(?<body>[\s\S]*)<\/svg>\s*$/u);
-
-  if (match?.groups?.body === undefined) {
-    throw new Error("Could not extract source SVG body.");
-  }
-
-  return match.groups.body;
-}
-
-function renderScreenshotSvg({ title, subtitle, panelTitle, bullets }) {
+function renderScreenshotSvg({ title, subtitle, panelTitle, bullets }, iconDataUri) {
   const bulletRows = bullets
     .map(
       (bullet, index) => `
@@ -182,12 +150,7 @@ function renderScreenshotSvg({ title, subtitle, panelTitle, bullets }) {
   <rect width="1280" height="800" fill="${brand.mist}"/>
   <rect x="72" y="64" width="1136" height="672" rx="34" fill="${brand.white}" stroke="${brand.border}"/>
   <g transform="translate(112 104)">
-    <rect width="72" height="72" rx="18" fill="${brand.ice}"/>
-    <circle cx="36" cy="36" r="28" fill="url(#brand)"/>
-    <circle cx="25" cy="34" r="8" fill="${brand.white}"/>
-    <circle cx="47" cy="34" r="8" fill="${brand.white}"/>
-    <circle cx="25" cy="35" r="4" fill="${brand.navy}"/>
-    <circle cx="47" cy="35" r="4" fill="${brand.navy}"/>
+    <image href="${iconDataUri}" width="72" height="72" preserveAspectRatio="xMidYMid meet"/>
     <text x="92" y="45" class="label">Jelluvi</text>
     <text x="92" y="70" class="muted">Export AI chats locally</text>
   </g>
@@ -211,10 +174,6 @@ function renderScreenshotSvg({ title, subtitle, panelTitle, bullets }) {
     ${bulletRows}
   </g>
 </svg>`;
-}
-
-function prepareSvgForRenderer(svg) {
-  return svg.replaceAll("http&#58;//", "http://");
 }
 
 function escapeXml(value) {

@@ -11,7 +11,7 @@ export function BrandIcon({ decorative = true }: BrandIconProps) {
       aria-hidden={decorative}
       className="brand-mark"
       height="40"
-      src={getExtensionAssetUrl("brand/jelluvi.svg")}
+      src={getExtensionAssetUrl("brand/jelluvi.png")}
       width="40"
     />
   );

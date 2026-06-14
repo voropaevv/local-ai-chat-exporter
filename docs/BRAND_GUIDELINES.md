@@ -12,15 +12,14 @@ manifest, SEO, and documentation contexts.
 
 ## Logo
 
-- Canonical source: `assets/brand/jelluvi.svg`.
+- Canonical source: `assets/brand/jelluvi.png`.
 - Generated extension PNG icons live in `extension/icons/`.
 - The manifest must reference PNG icons only.
 - Do not use OpenAI, ChatGPT, Claude, Gemini, Anthropic, Google, Perplexity, or other platform
   logos in the app icon.
 
-The SVG source must not contain scripts, animations, remote hrefs, remote fonts, event handlers, or
-visible text nodes. Embedded `data:image` is allowed only in `assets/brand/jelluvi.svg` if this
-exception is documented in `docs/ICON_GUIDELINES.md`; generated manifest icons must still be PNG.
+The source PNG must be square, transparent, at least 512x512, and free of platform provider logos.
+Generated manifest icons must still be PNG.
 
 ## Core Promise
 
