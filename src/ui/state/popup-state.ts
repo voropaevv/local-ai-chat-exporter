@@ -81,6 +81,7 @@ export interface ExportStatusMessageInput {
 }
 
 export type PopupAction =
+  | { readonly message: string; readonly type: "active_tab_info_failed" }
   | { readonly type: "scan_started" }
   | { readonly type: "scan_succeeded"; readonly scan: ScanSummary }
   | { readonly type: "scan_failed"; readonly message: string }
@@ -162,6 +163,15 @@ export function createInitialPopupState(): PopupState {
 
 export function popupReducer(state: PopupState, action: PopupAction): PopupState {
   switch (action.type) {
+    case "active_tab_info_failed":
+      return {
+        ...state,
+        canCancelScan: false,
+        errorMessage: action.message,
+        progressLabel: action.message,
+        scanStatus: "error",
+        sourceSupported: false
+      };
     case "scan_started":
       return {
         ...state,

@@ -126,6 +126,8 @@ Business model:
 ## Troubleshooting
 
 - Run `pnpm build` again after changing source files, then reload the unpacked extension.
+- If the popup stays on `Checking` after a rebuild, reload Jelluvi and the chat tab. The current
+  build recovers from an older background worker and exits an unanswered check after three seconds.
 - If no messages are found, confirm the active tab is an open supported AI chat conversation.
 - If an export is marked partial, let the current chat finish loading and use Refresh snapshot.
 - If a download does not appear, check whether the browser blocked page-initiated downloads.

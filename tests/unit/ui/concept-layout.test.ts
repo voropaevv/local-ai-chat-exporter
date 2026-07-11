@@ -15,6 +15,9 @@ describe("concept-inspired popup and settings layout", () => {
     expect(popupSource).toContain("PageStatusCard");
     expect(popupSource).toContain("PopupExportPanel");
     expect(popupSource).toContain("buildGetActiveTabInfoRequest");
+    expect(popupSource).toContain("normalizeActiveTabInfo");
+    expect(popupSource).toContain("waitForActiveTabInfo");
+    expect(popupSource).toContain("active_tab_info_failed");
     expect(popupSource).toContain("ensureFreshConversation");
     expect(popupSource).toContain("Options");
     expect(popupSource).toContain("advanced-drawer");

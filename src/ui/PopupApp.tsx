@@ -9,6 +9,11 @@ import type {
   ScanCacheSummaryResult,
   ScanSummary
 } from "../core/messages";
+import {
+  ACTIVE_TAB_INFO_ERROR_MESSAGE,
+  normalizeActiveTabInfo,
+  waitForActiveTabInfo
+} from "./active-tab-info";
 import { readStoredExportSettings } from "./export-settings-storage";
 import { getCachedScanSummary } from "./popup-cache";
 import { AdvancedExportOptions } from "./components/AdvancedExportOptions";
@@ -71,20 +76,31 @@ export function PopupApp() {
   useEffect(() => {
     let cancelled = false;
 
-    sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest())
+    waitForActiveTabInfo(sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest()))
       .then((response) => {
-        if (!cancelled && response.ok) {
+        if (cancelled) {
+          return;
+        }
+
+        if (response.ok) {
+          const activeTabInfo = normalizeActiveTabInfo(response.value);
+
           dispatch({
-            platformLabel: response.value.platformLabel,
-            sourceUrl: response.value.sourceUrl,
-            supported: response.value.supported,
-            title: response.value.title,
+            platformLabel: activeTabInfo.platformLabel,
+            sourceUrl: activeTabInfo.sourceUrl,
+            supported: activeTabInfo.supported,
+            title: activeTabInfo.title,
             type: "set_active_tab_info"
           });
+          return;
         }
+
+        dispatch({ message: ACTIVE_TAB_INFO_ERROR_MESSAGE, type: "active_tab_info_failed" });
       })
       .catch(() => {
-        // If the active tab URL is unavailable, the scan result will fill it later.
+        if (!cancelled) {
+          dispatch({ message: ACTIVE_TAB_INFO_ERROR_MESSAGE, type: "active_tab_info_failed" });
+        }
       });
 
     return () => {

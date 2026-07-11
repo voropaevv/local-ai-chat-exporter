@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 
-Last verified: 2026-07-11 17:58:51 +04
+Last verified: 2026-07-11 21:19:00 +04
 
 ## Release status
 
@@ -11,27 +11,29 @@ Last verified: 2026-07-11 17:58:51 +04
 - Chrome Web Store submission: not completed.
 - Live provider toolbar matrix: not completed in this pass; it requires non-sensitive live chats.
 - Headed CI E2E: six checks passed; one toolbar-popup case skipped and remains a release gate.
+- Active-tab detection: legacy worker fallback and a three-second timeout prevent permanent
+  `Checking`.
 
 ## Verified checks
 
 | Check                                                                                                         | Result                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm check`                                                                                                  | Pass — lint, typecheck, 58 test files / 243 tests, palette, brand, build, content-script and preview guards, site build. |
+| `pnpm check`                                                                                                  | Pass — lint, typecheck, 59 test files / 249 tests, palette, brand, build, content-script and preview guards, site build. |
 | [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain) | Pass — clean Linux build, six E2E checks passed, one toolbar-popup case skipped, release candidate uploaded.             |
 | `pnpm store-assets:build`                                                                                     | Pass — three icons, five real UI screenshots and one promo validated.                                                    |
 | `node scripts/check-no-remote-code.mjs`                                                                       | Pass.                                                                                                                    |
 | `node scripts/check-manifest-permissions.mjs`                                                                 | Pass — no `tabs` or `downloads`; optional access is limited to supported sites.                                          |
 | `node scripts/check-export-output-hygiene.mjs qa-artifacts/exports`                                           | Pass — nine newly generated formats.                                                                                     |
 | `pnpm audit --prod`                                                                                           | No known vulnerabilities.                                                                                                |
-| Gitleaks current tree and full history                                                                        | No leaks across 78 commits.                                                                                              |
+| Gitleaks current tree and full history                                                                        | No leaks across 80 commits.                                                                                              |
 | `pnpm package` twice                                                                                          | Pass; byte-for-byte deterministic.                                                                                       |
 
 Release package:
 
 - Path: `release/jelluvi-v0.1.0.zip`
-- Size: 289,549 bytes
+- Size: 289,808 bytes
 - Files: 24 production files
-- SHA256: `1cfc3d29de2d87b3da447c9cc7e1f950ad78495bb2c10a9d2c88e60fb4975314`
+- SHA256: `e9165b54c2f1134cecf2cea9e5b39020fafa969119a7f716d8b7f435bb9c9524`
 - Contains `LICENSE.txt` and `THIRD_PARTY_NOTICES.txt`
 - Does not contain source, tests, docs, Store screenshots, site files, QA artifacts, build nesting,
   local archives, or task files

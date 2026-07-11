@@ -187,6 +187,17 @@ describe("popup state", () => {
     expect(state.title).toBe("Example chat");
   });
 
+  test("leaves checking with an actionable error when active tab detection fails", () => {
+    const state = popupReducer(createInitialPopupState(), {
+      message: "Reload Jelluvi and this tab.",
+      type: "active_tab_info_failed"
+    });
+
+    expect(state.sourceSupported).toBe(false);
+    expect(state.scanStatus).toBe("error");
+    expect(state.errorMessage).toBe("Reload Jelluvi and this tab.");
+  });
+
   test("builds export requests with stored custom redaction settings", () => {
     const state = popupReducer(createInitialPopupState(), {
       redaction: {

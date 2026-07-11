@@ -39,21 +39,24 @@ export function PageStatusCard({
   );
 }
 
-function getPageStatus(
+export function getPageStatus(
   scanStatus: PopupScanStatus,
   sourceSupported: boolean | undefined,
   platformLabel: string | undefined
 ): { readonly label: string; readonly tone: "error" | "neutral" | "success" } {
+  if (scanStatus === "error") {
+    return {
+      label: sourceSupported === false ? "Unavailable" : "Check chat",
+      tone: "error"
+    };
+  }
+
   if (sourceSupported === false) {
     return { label: "Unsupported", tone: "error" };
   }
 
   if (sourceSupported === undefined) {
     return { label: "Checking", tone: "neutral" };
-  }
-
-  if (scanStatus === "error") {
-    return { label: "Check chat", tone: "error" };
   }
 
   return { label: platformLabel ?? "Supported", tone: "success" };
