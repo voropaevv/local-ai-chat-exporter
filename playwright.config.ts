@@ -4,7 +4,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   fullyParallel: true,
   outputDir: "test-results/e2e",
-  reporter: "list",
+  reporter: process.env.CI ? "github" : "list",
   testDir: "./tests/e2e",
   timeout: 30_000,
   use: {
