@@ -46,6 +46,7 @@ describe("open-source governance docs", () => {
     expect(existsSync(noticesPath)).toBe(true);
     expect(readProjectFile("THIRD_PARTY_NOTICES.md")).toContain("Lucide Preact");
     expect(packageScript).toContain('"LICENSE.txt"');
+    expect(packageScript).toContain('"NOTO_FONT_LICENSE.txt"');
     expect(packageScript).toContain('"THIRD_PARTY_NOTICES.txt"');
   });
 });

@@ -49,6 +49,8 @@ Store listing, and website.
 - Automatic preparation on every primary action; manual `Scan` removed as the primary CTA.
 - Active-tab detection recovers from an older background worker and can no longer remain on
   `Checking` indefinitely.
+- PDF exports embed local Unicode fonts, preserving searchable and copyable Cyrillic without any
+  remote font request.
 - Same-URL cache invalidation through a conversation mutation observer.
 - Original ChatGPT scroll position restored after collection, cancellation, and errors.
 - All eight standalone formats plus ZIP available in the popup and Settings.
@@ -86,7 +88,7 @@ provider-aware archive engine with a one-action surface and unusually broad loca
 
 ## Release proof
 
-- `pnpm check`: pass — 59 test files, 249 tests.
+- `pnpm check`: pass — 59 test files, 251 tests.
 - [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain): pass —
   clean Linux build, six E2E checks passed, one toolbar-popup case skipped, release candidate uploaded.
 - Store asset build and dimensions: pass — five 1280×800 real UI screenshots and one 440×280
@@ -96,9 +98,9 @@ provider-aware archive engine with a one-action surface and unusually broad loca
 - Manifest permission guard: pass.
 - Production dependency audit: no known vulnerabilities.
 - Gitleaks current tree and full history: no leaks.
-- Release ZIP: 289,808 bytes, 24 production files.
+- Release ZIP: 980,217 bytes, 25 production files, including the exact bundled-font license.
 - Repeated package SHA256:
-  `e9165b54c2f1134cecf2cea9e5b39020fafa969119a7f716d8b7f435bb9c9524`.
+  `f49b44306843ea888320748d108667f629e0d3c9b91a3695753eefc3003d195c`.
 
 ## Remaining release gates
 

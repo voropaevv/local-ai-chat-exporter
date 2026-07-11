@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import type { ConversationExport } from "../../../src/core/schema";
 import { createPreviewRenderState } from "../../../src/ui/preview-rendering";
+import { extractPdfText } from "../../helpers/pdf";
 
 function makeConversation(): ConversationExport {
   const messages = [
@@ -67,9 +68,7 @@ describe("preview rendering", () => {
     expect(rendered.pdf.mimeType).toBe("application/pdf");
     expect(rendered.pdf.encoding).toBe("binary");
     expect(rendered.pdf.bytes).toBeInstanceOf(Uint8Array);
-    expect(new TextDecoder("latin1").decode(rendered.pdf.bytes as Uint8Array)).toContain(
-      "Cached answer"
-    );
+    expect(extractPdfText(rendered.pdf.bytes as Uint8Array)).toContain("Cached answer");
   });
 
   test("returns a clear missing-cache message", () => {

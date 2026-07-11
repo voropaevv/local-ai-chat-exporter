@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { ConversationExport, ExportedMessage } from "../../../src/core/schema";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../../../src/renderers/pdf-settings";
 import { renderPdf, renderPdfFromNormalizedConversation } from "../../../src/renderers/pdf";
+import { extractPdfText, pdfBodyFromBytes } from "../../helpers/pdf";
 
 function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage {
   return {
@@ -32,6 +33,7 @@ describe("renderPdf", () => {
       })
     );
     const body = textFromBytes(rendered.bytes);
+    const text = extractPdfText(rendered.bytes);
 
     expect(rendered.format).toBe("pdf");
     expect(rendered.filename).toBe("2026-05-31T10-20-30Z_chatgpt_PDF-Export.pdf");
@@ -40,11 +42,17 @@ describe("renderPdf", () => {
     expect(rendered.bytes).toBeInstanceOf(Uint8Array);
     expect(body).toMatch(/^%PDF-1\.[34]/u);
     expect(body).toContain("%%EOF");
-    expect(body).toContain("PDF Export");
-    expect(body).toContain("ChatGPT");
-    expect(body).toContain("First item");
-    expect(body).toContain("Format");
-    expect(body).toContain("console.log");
+    expect(body).toContain("/BaseFont /NotoSans-Regular");
+    expect(body).toContain("/BaseFont /NotoSans-Bold");
+    expect(body).toContain("/BaseFont /NotoSansMono-Regular");
+    expect(body).toContain("/Encoding /Identity-H");
+    expect(body).toContain("/FontFile2");
+    expect(body).toContain("/ToUnicode");
+    expect(text).toContain("PDF Export");
+    expect(text).toContain("ChatGPT");
+    expect(text).toContain("First item");
+    expect(text).toContain("Format");
+    expect(text).toContain("console.log");
     expect(body).not.toContain("<html");
     expect(body).not.toContain("<script");
     expect(body).not.toContain("data-testid");
@@ -65,10 +73,11 @@ describe("renderPdf", () => {
       }
     });
     const body = textFromBytes(rendered.bytes);
+    const text = extractPdfText(rendered.bytes);
 
     expect(body).toContain("/MediaBox [0 0 792 612]");
-    expect(body).toContain("Table of contents");
-    expect(body).toContain("PDF Export");
+    expect(text).toContain("Table of contents");
+    expect(text).toContain("PDF Export");
     expect(body).toContain("0.067 0.094 0.153 rg");
   });
 
@@ -88,11 +97,11 @@ describe("renderPdf", () => {
 
   test("can omit source metadata when metadata is disabled", () => {
     const rendered = renderPdf(makeConversation(), { includeMetadata: false });
-    const body = textFromBytes(rendered.bytes);
+    const text = extractPdfText(rendered.bytes);
 
-    expect(body).not.toContain("Source:");
-    expect(body).not.toContain("https://chatgpt.com/c/pdf");
-    expect(body).toContain("Print-ready answer");
+    expect(text).not.toContain("Source:");
+    expect(text).not.toContain("https://chatgpt.com/c/pdf");
+    expect(text).toContain("Print-ready answer");
   });
 
   test("renders advanced sources, canvas fallback, and visible thinking in local PDF", () => {
@@ -121,15 +130,57 @@ describe("renderPdf", () => {
         ]
       })
     );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain("Sources");
+    expect(text).toContain("Deep Research source");
+    expect(text).toContain("Genome Paper");
+    expect(text).toContain("Canvas");
+    expect(text).toContain("Canvas content was detected");
+    expect(text).toContain("Visible thinking / reasoning");
+    expect(text).toContain("Visible reasoning text.");
+  });
+
+  test("preserves Cyrillic in embedded PDF text", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        title: "Спикеры мастер-класса YouTube",
+        messages: [
+          makeMessage({
+            authorLabel: "Пользователь",
+            markdown:
+              'Кто будет выступать тут? Представители YouTube Academy.\n\n**Мероприятие:** 30 июля 2026 года.\n\n```ts\nconst привет = "мир";\n```'
+          })
+        ]
+      })
+    );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain("Спикеры мастер-класса YouTube");
+    expect(text).toContain("Пользователь");
+    expect(text).toContain("Кто будет выступать тут?");
+    expect(text).toContain("Мероприятие: 30 июля 2026 года.");
+    expect(text).toContain('const привет = "мир";');
+    expect(text).not.toContain("????");
+  });
+
+  test("omits the monospaced font when the conversation has no code", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: "Обычный текст без блока кода.",
+            text: "Обычный текст без блока кода."
+          })
+        ]
+      })
+    );
     const body = textFromBytes(rendered.bytes);
 
-    expect(body).toContain("Sources");
-    expect(body).toContain("Deep Research source");
-    expect(body).toContain("Genome Paper");
-    expect(body).toContain("Canvas");
-    expect(body).toContain("Canvas content was detected");
-    expect(body).toContain("Visible thinking / reasoning");
-    expect(body).toContain("Visible reasoning text.");
+    expect(body).not.toContain("/BaseFont /NotoSansMono-Regular");
+    expect(body).toContain("/F3 3 0 R");
+    expect(extractPdfText(rendered.bytes)).toContain("Обычный текст без блока кода.");
   });
 
   test("falls back to local PDF-ready HTML with a visible warning if PDF generation fails", () => {
@@ -198,5 +249,5 @@ function makeConversation(overrides: Partial<ConversationExport> = {}): Conversa
 function textFromBytes(bytes: string | Uint8Array): string {
   expect(bytes).toBeInstanceOf(Uint8Array);
 
-  return new TextDecoder("latin1").decode(bytes as Uint8Array);
+  return pdfBodyFromBytes(bytes as Uint8Array);
 }

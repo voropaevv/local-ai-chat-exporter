@@ -7,6 +7,7 @@ const extensionRoot = resolve(projectRoot, "extension");
 const distDir = resolve(projectRoot, "dist");
 
 export default defineConfig({
+  assetsInclude: ["**/*.zlib"],
   root: extensionRoot,
   publicDir: false,
   build: {

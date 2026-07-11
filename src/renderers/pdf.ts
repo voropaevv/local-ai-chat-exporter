@@ -9,16 +9,11 @@ import {
   sanitizeConversationImagesForOutput
 } from "../core/image-safety";
 import { renderFilenameTemplate } from "../utils/filename-template";
-import {
-  formatCanvasPlain,
-  formatSourcePlain,
-  formatThinkingPlain
-} from "./advanced-content";
+import { formatCanvasPlain, formatSourcePlain, formatThinkingPlain } from "./advanced-content";
 import { renderHtml } from "./html";
+import { normalizePdfText, PdfFontRegistry, type PdfEmbeddedFont, type PdfFont } from "./pdf-font";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettings } from "./pdf-settings";
 import type { RenderedFile, RendererOptions } from "./types";
-
-type PdfFont = "regular" | "bold" | "mono";
 
 interface PdfTheme {
   readonly background: PdfColor;
@@ -45,6 +40,7 @@ interface PdfPage {
 }
 
 interface PdfDocument {
+  readonly fonts: PdfFontRegistry;
   readonly pages: readonly PdfPage[];
   readonly size: PdfPageSize;
 }
@@ -94,9 +90,6 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
     text: { b: 0, g: 0, r: 0 }
   }
 };
-
-const PDF_LIMITATION_NOTE =
-  "PDF v1 uses built-in PDF fonts; CJK text, complex emoji, and advanced formula layout may fall back to replacement glyphs. Markdown formulas are preserved as plain text.";
 
 export function renderPdf(
   conversation: ConversationExport,
@@ -162,8 +155,6 @@ function renderLocalPdfBytes(
     layout.heading("Warnings", 2);
     layout.list(warnings, false);
   }
-
-  layout.note(PDF_LIMITATION_NOTE);
 
   if (settings.includeToc) {
     layout.heading("Table of contents", 2);
@@ -394,6 +385,7 @@ function parseMarkdownBlocks(
 
 class PdfLayout {
   private readonly contentWidth: number;
+  private readonly fonts = new PdfFontRegistry();
   private readonly lineHeight: number;
   private readonly margin: number;
   private readonly pages: PdfPage[] = [];
@@ -489,7 +481,8 @@ class PdfLayout {
     const wrappedLines = lines.flatMap((line) =>
       wrapText(line.length > 0 ? line : " ", this.contentWidth - 16, size, "mono")
     );
-    const blockHeight = lineHeight * (wrappedLines.length + 1) + 14;
+    const codeAreaHeight = lineHeight * wrappedLines.length;
+    const blockHeight = lineHeight + codeAreaHeight + size + 18;
 
     this.ensureSpace(blockHeight);
     this.drawWrappedText(label, {
@@ -499,11 +492,14 @@ class PdfLayout {
     });
 
     if (this.theme.codeBackground !== undefined) {
+      const codeBottom = this.y - codeAreaHeight - 3;
+      const codeTop = this.y + size + 5;
+
       this.fillRect(
         this.margin,
-        this.y - blockHeight + lineHeight,
+        codeBottom,
         this.contentWidth,
-        blockHeight - lineHeight,
+        codeTop - codeBottom,
         this.theme.codeBackground
       );
     }
@@ -511,7 +507,7 @@ class PdfLayout {
     wrappedLines.forEach((line) => {
       this.line(line, this.margin + 8, "mono", size, this.theme.text);
     });
-    this.space(8);
+    this.space(size + 6);
   }
 
   table(rows: readonly (readonly string[])[]): void {
@@ -569,6 +565,7 @@ class PdfLayout {
 
   toDocument(): PdfDocument {
     return {
+      fonts: this.fonts,
       pages: this.pages,
       size: this.size
     };
@@ -623,8 +620,10 @@ class PdfLayout {
     size: number,
     color: PdfColor
   ): void {
+    const encodedText = this.fonts.encodeText(font, text);
+
     this.currentPage.commands.push(
-      `BT ${colorOperator(color, "fill")} /${fontResource(font)} ${formatNumber(size)} Tf ${formatNumber(x)} ${formatNumber(y)} Td (${escapePdfString(text)}) Tj ET`
+      `BT ${colorOperator(color, "fill")} /${fontResource(font)} ${formatNumber(size)} Tf ${formatNumber(x)} ${formatNumber(y)} Td <${encodedText}> Tj ET`
     );
   }
 
@@ -645,51 +644,217 @@ class PdfLayout {
   }
 }
 
+type PdfObject = string | Uint8Array;
+
+interface EmbeddedFontObjectIds {
+  readonly cidFont: number;
+  readonly descriptor: number;
+  readonly fontFile: number;
+  readonly toUnicode: number;
+  readonly type0: number;
+}
+
+const REGULAR_FONT_OBJECTS: EmbeddedFontObjectIds = {
+  cidFont: 4,
+  descriptor: 5,
+  fontFile: 6,
+  toUnicode: 7,
+  type0: 3
+};
+const BOLD_FONT_OBJECTS: EmbeddedFontObjectIds = {
+  cidFont: 9,
+  descriptor: 10,
+  fontFile: 11,
+  toUnicode: 12,
+  type0: 8
+};
+const MONO_FONT_OBJECTS: EmbeddedFontObjectIds = {
+  cidFont: 14,
+  descriptor: 15,
+  fontFile: 16,
+  toUnicode: 17,
+  type0: 13
+};
+
 function writePdf(document: PdfDocument): Uint8Array {
-  const objects: string[] = [];
+  const objects: PdfObject[] = [];
   const pageRefs: string[] = [];
+  const usesMonoFont = document.fonts.hasUsedGlyphs("mono");
 
   objects[0] = "<< /Type /Catalog /Pages 2 0 R >>";
   objects[1] = "";
-  objects[2] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
-  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
-  objects[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>";
+  addEmbeddedFontObjects(objects, document.fonts.snapshot("regular"), REGULAR_FONT_OBJECTS);
+  addEmbeddedFontObjects(objects, document.fonts.snapshot("bold"), BOLD_FONT_OBJECTS);
+  if (usesMonoFont) {
+    addEmbeddedFontObjects(objects, document.fonts.snapshot("mono"), MONO_FONT_OBJECTS);
+  }
 
-  let nextObjectId = 6;
+  let nextObjectId = usesMonoFont ? 18 : 13;
+  const monoFontObjectId = usesMonoFont ? MONO_FONT_OBJECTS.type0 : REGULAR_FONT_OBJECTS.type0;
 
   for (const page of document.pages) {
-    const content = `${page.commands.join("\n")}\n`;
+    const content = new TextEncoder().encode(`${page.commands.join("\n")}\n`);
     const contentId = nextObjectId;
     const pageId = nextObjectId + 1;
 
-    objects[contentId - 1] = `<< /Length ${byteLength(content)} >>\nstream\n${content}endstream`;
+    objects[contentId - 1] = createStreamObject(content);
     objects[pageId - 1] =
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${formatNumber(document.size.width)} ${formatNumber(document.size.height)}] ` +
-      `/Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents ${contentId} 0 R >>`;
+      `/Resources << /Font << /F1 ${REGULAR_FONT_OBJECTS.type0} 0 R /F2 ${BOLD_FONT_OBJECTS.type0} 0 R /F3 ${monoFontObjectId} 0 R >> >> /Contents ${contentId} 0 R >>`;
     pageRefs.push(`${pageId} 0 R`);
     nextObjectId += 2;
   }
 
   objects[1] = `<< /Type /Pages /Kids [${pageRefs.join(" ")}] /Count ${pageRefs.length} >>`;
 
-  let output = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
-  const offsets = [0];
+  return serializePdfObjects(objects);
+}
 
-  objects.forEach((object, index) => {
-    offsets.push(byteLength(output));
-    output += `${index + 1} 0 obj\n${object}\nendobj\n`;
+function addEmbeddedFontObjects(
+  objects: PdfObject[],
+  font: PdfEmbeddedFont,
+  ids: EmbeddedFontObjectIds
+): void {
+  const widths = font.glyphs.map((glyph) => `${glyph.glyphId} [${glyph.width}]`).join(" ");
+
+  objects[ids.type0 - 1] =
+    `<< /Type /Font /Subtype /Type0 /BaseFont /${font.baseFontName} /Encoding /Identity-H ` +
+    `/DescendantFonts [${ids.cidFont} 0 R] /ToUnicode ${ids.toUnicode} 0 R >>`;
+  objects[ids.cidFont - 1] =
+    `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /${font.baseFontName} ` +
+    `/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> ` +
+    `/FontDescriptor ${ids.descriptor} 0 R /DW ${font.defaultWidth} ` +
+    `${widths.length > 0 ? `/W [${widths}] ` : ""}/CIDToGIDMap /Identity >>`;
+  objects[ids.descriptor - 1] =
+    `<< /Type /FontDescriptor /FontName /${font.baseFontName} /Flags 32 ` +
+    `/FontBBox [${font.bbox.join(" ")}] /ItalicAngle 0 /Ascent ${font.ascent} ` +
+    `/Descent ${font.descent} /CapHeight ${font.capHeight} /StemV 80 ` +
+    `/MissingWidth ${font.defaultWidth} /FontFile2 ${ids.fontFile} 0 R >>`;
+  objects[ids.fontFile - 1] = createStreamObject(font.compressedBytes, {
+    filter: "FlateDecode",
+    length1: font.fontBytesLength
   });
+  objects[ids.toUnicode - 1] = createStreamObject(
+    new TextEncoder().encode(buildToUnicodeCmap(font))
+  );
+}
 
-  const xrefOffset = byteLength(output);
-  output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+function buildToUnicodeCmap(font: PdfEmbeddedFont): string {
+  const mappingSections = chunkArray(font.glyphs, 100)
+    .map(
+      (glyphs) =>
+        `${glyphs.length} beginbfchar\n${glyphs
+          .map(
+            (glyph) =>
+              `<${glyph.glyphId.toString(16).padStart(4, "0")}> <${unicodeCodePointHex(glyph.unicodeCodePoint)}>`
+          )
+          .join("\n")}\nendbfchar`
+    )
+    .join("\n");
 
-  for (let index = 1; index < offsets.length; index += 1) {
-    output += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  return `/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /${font.baseFontName}-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+${mappingSections}
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end`;
+}
+
+function unicodeCodePointHex(codePoint: number): string {
+  if (codePoint <= 0xffff) {
+    return codePoint.toString(16).padStart(4, "0");
   }
 
-  output += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  const adjusted = codePoint - 0x10000;
+  const high = 0xd800 + (adjusted >> 10);
+  const low = 0xdc00 + (adjusted & 0x3ff);
 
-  return new TextEncoder().encode(output);
+  return `${high.toString(16).padStart(4, "0")}${low.toString(16).padStart(4, "0")}`;
+}
+
+function createStreamObject(
+  bytes: Uint8Array,
+  options: { readonly filter?: "FlateDecode"; readonly length1?: number } = {}
+): Uint8Array {
+  const attributes = [
+    `/Length ${bytes.length}`,
+    ...(options.length1 !== undefined ? [`/Length1 ${options.length1}`] : []),
+    ...(options.filter !== undefined ? [`/Filter /${options.filter}`] : [])
+  ].join(" ");
+
+  return concatenateBytes(
+    new TextEncoder().encode(`<< ${attributes} >>\nstream\n`),
+    bytes,
+    new TextEncoder().encode("\nendstream")
+  );
+}
+
+function serializePdfObjects(objects: readonly PdfObject[]): Uint8Array {
+  const encoder = new TextEncoder();
+  const chunks: Uint8Array[] = [
+    concatenateBytes(
+      encoder.encode("%PDF-1.4\n%"),
+      new Uint8Array([0xe2, 0xe3, 0xcf, 0xd3]),
+      encoder.encode("\n")
+    )
+  ];
+  const offsets = [0];
+  let outputLength = chunks[0].length;
+
+  objects.forEach((object, index) => {
+    offsets.push(outputLength);
+    const objectBytes = typeof object === "string" ? encoder.encode(object) : object;
+    const chunk = concatenateBytes(
+      encoder.encode(`${index + 1} 0 obj\n`),
+      objectBytes,
+      encoder.encode("\nendobj\n")
+    );
+
+    chunks.push(chunk);
+    outputLength += chunk.length;
+  });
+
+  const xrefOffset = outputLength;
+  let trailer = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+
+  for (let index = 1; index < offsets.length; index += 1) {
+    trailer += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  }
+
+  trailer += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  chunks.push(encoder.encode(trailer));
+
+  return concatenateBytes(...chunks);
+}
+
+function concatenateBytes(...chunks: readonly Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return result;
+}
+
+function chunkArray<T>(values: readonly T[], size: number): readonly (readonly T[])[] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 function resolvePageSize(settings: PdfSettings): PdfPageSize {
@@ -852,20 +1017,6 @@ function normalizeSingleLine(value: string): string {
   return value.replace(/\s+/gu, " ").trim();
 }
 
-function normalizePdfText(value: string): string {
-  return value
-    .replace(/\t/gu, "    ")
-    .replace(/[^\n\r -~]/gu, "?")
-    .replace(/\r\n?/gu, "\n");
-}
-
-function escapePdfString(value: string): string {
-  return normalizePdfText(value)
-    .replace(/\\/gu, "\\\\")
-    .replace(/\(/gu, "\\(")
-    .replace(/\)/gu, "\\)");
-}
-
 function escapeHtml(input: string): string {
   return input
     .replace(/&/gu, "&amp;")
@@ -899,8 +1050,4 @@ function formatNumber(value: number): string {
   return Number.isInteger(value)
     ? String(value)
     : value.toFixed(3).replace(/0+$/u, "").replace(/\.$/u, "");
-}
-
-function byteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
 }

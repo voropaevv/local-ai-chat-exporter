@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  assetsInclude: ["**/*.zlib"],
   test: {
     clearMocks: true,
     environment: "node",

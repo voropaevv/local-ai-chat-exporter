@@ -32,6 +32,7 @@ function copyExtensionStaticFiles(): Plugin {
 }
 
 export default defineConfig({
+  assetsInclude: ["**/*.zlib"],
   root: extensionRoot,
   publicDir: false,
   plugins: [preact(), copyExtensionStaticFiles()],

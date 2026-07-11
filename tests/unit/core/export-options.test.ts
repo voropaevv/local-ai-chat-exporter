@@ -9,6 +9,7 @@ import {
   type ExportOptions
 } from "../../../src/core/export-options";
 import { DEFAULT_PDF_SETTINGS } from "../../../src/renderers/pdf-settings";
+import { extractPdfText } from "../../helpers/pdf";
 
 const fakeProjectKey = ["sk", "proj", "abcdefghijklmnopqrstuvwxyz1234567890"].join("-");
 
@@ -315,9 +316,7 @@ describe("renderConversationFiles", () => {
       mimeType: "application/pdf"
     });
     expect(files[0].bytes).toBeInstanceOf(Uint8Array);
-    expect(new TextDecoder("latin1").decode(files[0].bytes as Uint8Array)).toContain(
-      "Table of contents"
-    );
+    expect(extractPdfText(files[0].bytes as Uint8Array)).toContain("Table of contents");
   });
 
   test("reports a user-readable no-messages error after scope filtering", () => {

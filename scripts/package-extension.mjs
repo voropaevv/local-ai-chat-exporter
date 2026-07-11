@@ -66,6 +66,7 @@ async function main() {
 
   for (const [archivePath, sourcePath] of [
     ["LICENSE.txt", resolve(projectRoot, "LICENSE")],
+    ["NOTO_FONT_LICENSE.txt", resolve(projectRoot, "src/renderers/fonts/OFL.txt")],
     ["THIRD_PARTY_NOTICES.txt", resolve(projectRoot, "THIRD_PARTY_NOTICES.md")]
   ]) {
     zipEntries[archivePath] = [

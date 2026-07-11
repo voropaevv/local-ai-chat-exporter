@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 
-Last verified: 2026-07-11 21:19:00 +04
+Last verified: 2026-07-11 22:17:30 +04
 
 ## Release status
 
@@ -13,28 +13,29 @@ Last verified: 2026-07-11 21:19:00 +04
 - Headed CI E2E: six checks passed; one toolbar-popup case skipped and remains a release gate.
 - Active-tab detection: legacy worker fallback and a three-second timeout prevent permanent
   `Checking`.
+- PDF Unicode: local embedded fonts preserve searchable Cyrillic and monospaced Cyrillic code.
 
 ## Verified checks
 
 | Check                                                                                                         | Result                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm check`                                                                                                  | Pass — lint, typecheck, 59 test files / 249 tests, palette, brand, build, content-script and preview guards, site build. |
+| `pnpm check`                                                                                                  | Pass — lint, typecheck, 59 test files / 251 tests, palette, brand, build, content-script and preview guards, site build. |
 | [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain) | Pass — clean Linux build, six E2E checks passed, one toolbar-popup case skipped, release candidate uploaded.             |
 | `pnpm store-assets:build`                                                                                     | Pass — three icons, five real UI screenshots and one promo validated.                                                    |
 | `node scripts/check-no-remote-code.mjs`                                                                       | Pass.                                                                                                                    |
 | `node scripts/check-manifest-permissions.mjs`                                                                 | Pass — no `tabs` or `downloads`; optional access is limited to supported sites.                                          |
 | `node scripts/check-export-output-hygiene.mjs qa-artifacts/exports`                                           | Pass — nine newly generated formats.                                                                                     |
 | `pnpm audit --prod`                                                                                           | No known vulnerabilities.                                                                                                |
-| Gitleaks current tree and full history                                                                        | No leaks across 80 commits.                                                                                              |
+| Gitleaks current tree and full history                                                                        | No leaks across 81 commits.                                                                                              |
 | `pnpm package` twice                                                                                          | Pass; byte-for-byte deterministic.                                                                                       |
 
 Release package:
 
 - Path: `release/jelluvi-v0.1.0.zip`
-- Size: 289,808 bytes
-- Files: 24 production files
-- SHA256: `e9165b54c2f1134cecf2cea9e5b39020fafa969119a7f716d8b7f435bb9c9524`
-- Contains `LICENSE.txt` and `THIRD_PARTY_NOTICES.txt`
+- Size: 980,217 bytes
+- Files: 25 production files
+- SHA256: `f49b44306843ea888320748d108667f629e0d3c9b91a3695753eefc3003d195c`
+- Contains `LICENSE.txt`, `NOTO_FONT_LICENSE.txt`, and `THIRD_PARTY_NOTICES.txt`
 - Does not contain source, tests, docs, Store screenshots, site files, QA artifacts, build nesting,
   local archives, or task files
 
@@ -47,6 +48,8 @@ Verified in the selected in-app Browser with realistic local data:
 - full cached conversation preview;
 - Settings and batch discovery with three supported tabs;
 - Local Library save, search, record metadata, re-export and delete controls;
+- generated A4 PDF with Cyrillic title, metadata, paragraphs, lists, punctuation and monospaced
+  Cyrillic code; code background remains inside the code block;
 - landing desktop and mobile layouts;
 - Store screenshots and 440×280 promo.
 

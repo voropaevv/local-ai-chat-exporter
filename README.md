@@ -118,7 +118,7 @@ Business model:
 - Secondary platform adapters are best-effort and currently scan visible loaded messages only.
 - The extension exports the current conversation only; it does not scrape account-wide history in the background.
 - PDF output is generated locally from the normalized conversation model. If local PDF generation fails, Jelluvi falls back to local PDF-ready HTML and shows a warning.
-- PDF v1 uses built-in PDF fonts. CJK text, complex emoji, and advanced formula layout may use fallback glyphs; formulas are preserved as plain text.
+- PDF v1 embeds local Noto Sans and Noto Sans Mono fonts with Latin, Greek, and Cyrillic support. CJK text, complex emoji, and advanced formula layout may use fallback glyphs; formulas are preserved as plain text.
 - PNG export is a local semantic long-image renderer for moderate selected or range exports. The maximum local PNG height is 16,000 px; longer chats fall back to a local text explanation and should use selected messages, ranges, PDF, HTML, or text formats.
 - ZIP bundle mode stores selected formats under canonical `conversation.*` names, includes `manifest.json` with settings and file hashes, and preserves embedded data-image assets under `assets/` with hashed filenames.
 - Some AI platform UI changes may require fixture and selector updates.
