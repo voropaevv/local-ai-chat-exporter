@@ -10,8 +10,10 @@ No account is required to use Jelluvi. The extension operates on the supported A
 
 - Product name: Jelluvi.
 - Icon source: `assets/brand/jelluvi.png`.
-- Primary action color: `#168BFF`.
-- Focus/accent color: `#00C6FF`.
+- Runtime surfaces use generated 128px/512px derivatives so the canonical 1200px source is not
+  shipped on every popup or landing-page load.
+- Primary action and focus color: `#005FEF` in the light theme.
+- Brand accent color: `#00C6FF`.
 - Light theme uses a clean white background and neutral slate text.
 - Dark theme uses a dark navy or near-black background with readable slate text.
 - Core exports remain local-first with no telemetry, no server uploads, no remote rendering, no external fonts, and no remote hosted code.
@@ -107,7 +109,8 @@ Business model:
 - Conversation content is not uploaded to Jelluvi or any export server.
 - Conversation content is not stored by default.
 - Browser storage is used for local preferences such as redaction settings.
-- Optional permissions are requested only for user-facing workflows such as downloads and batch export.
+- Optional site access is requested only when the user starts batch discovery or batch export.
+- Jelluvi does not request browsing-history (`tabs`) or browser-downloads permissions.
 
 ## Limitations
 
@@ -124,9 +127,17 @@ Business model:
 
 - Run `pnpm build` again after changing source files, then reload the unpacked extension.
 - If no messages are found, confirm the active tab is an open supported AI chat conversation.
-- If an export is marked partial, scroll the conversation normally and scan again.
-- If downloads do not appear, grant the optional downloads permission or use the local anchor fallback.
+- If an export is marked partial, let the current chat finish loading and use Refresh snapshot.
+- If a download does not appear, check whether the browser blocked page-initiated downloads.
 - If a secondary platform export looks incomplete, verify the first and last messages before relying on the file.
+
+## Project status
+
+Product and release detail:
+
+- [Product audit and competitive position](docs/PRODUCT_AUDIT_2026-07-11.md)
+- [Current release QA](docs/release-qa.md)
+- [Privacy policy](PRIVACY.md)
 
 ## Packaging
 

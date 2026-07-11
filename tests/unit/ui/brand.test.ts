@@ -42,8 +42,9 @@ describe("Jelluvi branding", () => {
     expect(brandIcon).toContain(`alt={decorative ? "" : "${productName}"}`);
     expect(brandIcon).toContain('getExtensionAssetUrl("brand/jelluvi.png")');
     expect(popupHeader).toContain(`<h1>${productName}</h1>`);
+    expect(optionsApp).toContain("<BrandIcon />");
     expect(optionsApp).toContain("<h1>Settings</h1>");
-    expect(optionsApp).toContain(`<span>${productName}</span>`);
+    expect(optionsApp).not.toContain("settings-version");
     expect(previewApp).toContain(`<p className="brand-kicker">${productName}</p>`);
     expect(previewApp).toContain("applyThemePreference(readThemePreference())");
     expect(previewHtml).toContain(`<title>${productName} Preview</title>`);

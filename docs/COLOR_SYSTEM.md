@@ -26,6 +26,9 @@ The central app palette is defined in `src/ui/styles/palette.css`.
 - `--jelluvi-amber-glow`: `#FBBF24`
 - `--jelluvi-coral`: `#EF4444`
 - `--jelluvi-coral-glow`: `#F87171`
+- `--jelluvi-accessible-mint`: `#08745A`
+- `--jelluvi-accessible-amber`: `#8A5100`
+- `--jelluvi-accessible-coral`: `#C62838`
 
 ## Light Theme Mapping
 
@@ -35,13 +38,14 @@ The central app palette is defined in `src/ui/styles/palette.css`.
 - `--color-border`: `var(--jelluvi-line)`
 - `--color-text`: `var(--jelluvi-pupil-navy)`
 - `--color-text-muted`: `var(--jelluvi-slate)`
-- `--color-primary`: `var(--jelluvi-blue)`
-- `--color-primary-hover`: `#0877E8`
+- `--color-primary`: `var(--jelluvi-deep-blue)`
+- `--color-primary-hover`: `#004FC9`
+- `--color-action`: `var(--jelluvi-deep-blue)`
 - `--color-primary-soft`: `var(--jelluvi-ice)`
 - `--color-accent`: `var(--jelluvi-cyan)`
-- `--color-success`: `var(--jelluvi-mint)`
-- `--color-warning`: `var(--jelluvi-amber)`
-- `--color-danger`: `var(--jelluvi-coral)`
+- `--color-success`: `var(--jelluvi-accessible-mint)`
+- `--color-warning`: `var(--jelluvi-accessible-amber)`
+- `--color-danger`: `var(--jelluvi-accessible-coral)`
 
 ## Dark Theme Mapping
 
@@ -51,8 +55,9 @@ The central app palette is defined in `src/ui/styles/palette.css`.
 - `--color-border`: `var(--jelluvi-night-line)`
 - `--color-text`: `var(--jelluvi-moon-text)`
 - `--color-text-muted`: `var(--jelluvi-moon-muted)`
-- `--color-primary`: `var(--jelluvi-blue)`
-- `--color-primary-hover`: `#39D9FF`
+- `--color-primary`: `#39D9FF`
+- `--color-primary-hover`: `#7FE9FF`
+- `--color-action`: `var(--jelluvi-deep-blue)`
 - `--color-primary-soft`: `rgba(0, 198, 255, 0.14)`
 - `--color-accent`: `var(--jelluvi-cyan)`
 - `--color-success`: `var(--jelluvi-mint-glow)`
@@ -60,4 +65,5 @@ The central app palette is defined in `src/ui/styles/palette.css`.
 - `--color-danger`: `var(--jelluvi-coral-glow)`
 
 Components should consume semantic `--color-*` tokens rather than hard-coded brand hex values.
-Primary buttons use Jelluvi Blue. Focus rings and active outlines use Jelluvi Cyan.
+Primary buttons use the action token. Text links, focus rings, and active outlines use the
+theme-specific accessible primary token; cyan remains available as a decorative brand accent.

@@ -7,8 +7,8 @@ const projectRoot = resolve(import.meta.dirname, "../../..");
 describe("options app source", () => {
   test("keeps filename template controls in settings instead of popup export options", () => {
     const optionsSource = readFileSync(resolve(projectRoot, "src/ui/OptionsApp.tsx"), "utf8");
-    const popupSource = readFileSync(
-      resolve(projectRoot, "src/ui/components/ExportOptionsForm.tsx"),
+    const advancedSource = readFileSync(
+      resolve(projectRoot, "src/ui/components/AdvancedExportOptions.tsx"),
       "utf8"
     );
 
@@ -20,6 +20,6 @@ describe("options app source", () => {
     expect(optionsSource).toContain("toggleDefaultFormat");
     expect(optionsSource).toContain("Theme");
     expect(optionsSource).toContain("Privacy / redaction preset");
-    expect(popupSource).not.toContain("FilenameTemplateBuilder");
+    expect(advancedSource).not.toContain("FilenameTemplateBuilder");
   });
 });

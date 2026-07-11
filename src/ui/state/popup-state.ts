@@ -67,6 +67,7 @@ export interface PopupState {
   readonly progressLabel: string;
   readonly scanStatus: PopupScanStatus;
   readonly selectedMessageCount: number;
+  readonly sourceSupported?: boolean;
   readonly sourceUrl?: string;
   readonly title?: string;
 }
@@ -87,7 +88,13 @@ export type PopupAction =
   | { readonly type: "export_started" }
   | { readonly type: "export_finished"; readonly message: string }
   | { readonly selectedMessageCount: number; readonly type: "selection_count_changed" }
-  | { readonly sourceUrl?: string; readonly title?: string; readonly type: "set_active_tab_info" }
+  | {
+      readonly platformLabel?: string;
+      readonly sourceUrl?: string;
+      readonly supported: boolean;
+      readonly title?: string;
+      readonly type: "set_active_tab_info";
+    }
   | { readonly type: "set_format"; readonly format: ExportFormat }
   | { readonly type: "set_bundle_format"; readonly format: PopupFileFormat }
   | {
@@ -147,7 +154,7 @@ export function createInitialPopupState(): PopupState {
     options: DEFAULT_OPTIONS,
     platformLabel: "Current tab",
     previewMessages: [],
-    progressLabel: "Ready to scan.",
+    progressLabel: "Ready when you are.",
     scanStatus: "idle",
     selectedMessageCount: 0
   };
@@ -175,9 +182,10 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
             : "This export may be partial.",
         platformLabel: action.scan.platformLabel,
         previewMessages: action.scan.previewMessages,
-        progressLabel: `Scanned ${formatCount(action.scan.messageCount, "message")}. Ready to export.`,
+        progressLabel: `${formatCount(action.scan.messageCount, "message")} ready`,
         scanStatus: "scanned",
         selectedMessageCount: action.scan.selectedMessageCount,
+        sourceSupported: true,
         sourceUrl: action.scan.sourceUrl,
         title: action.scan.title
       };
@@ -193,14 +201,14 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return {
         ...state,
         canCancelScan: false,
-        progressLabel: "Scan cancelled.",
+        progressLabel: "Preparation cancelled.",
         scanStatus: "idle"
       };
     case "export_started":
       return {
         ...state,
         errorMessage: undefined,
-        progressLabel: "Exporting from scanned snapshot...",
+        progressLabel: "Creating local files...",
         scanStatus: "exporting"
       };
     case "export_finished":
@@ -226,6 +234,8 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
     case "set_active_tab_info":
       return {
         ...state,
+        ...(action.platformLabel !== undefined ? { platformLabel: action.platformLabel } : {}),
+        sourceSupported: action.supported,
         sourceUrl: action.sourceUrl,
         title: action.title
       };
@@ -559,14 +569,14 @@ export function buildExportStatusMessage(result: ExportStatusMessageInput): stri
     result.clipboardError === undefined ? "" : ` Clipboard: ${result.clipboardError.message}`;
 
   if (downloaded > 0) {
-    return `Exported ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot to ${formatCount(downloaded, "file")}.${copied}`;
+    return `Exported ${formatCount(result.exportedMessageCount, "message")} to ${formatCount(downloaded, "file")}.${copied}`;
   }
 
-  return `Exported ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot. Prepared local output.${copied}`;
+  return `Exported ${formatCount(result.exportedMessageCount, "message")}. Prepared local output.${copied}`;
 }
 
 export function buildCopyMarkdownStatusMessage(result: ExportStatusMessageInput): string {
-  return `Copied ${formatCount(result.exportedMessageCount, "message")} from scanned snapshot to clipboard.`;
+  return `Copied ${formatCount(result.exportedMessageCount, "message")} to clipboard.`;
 }
 
 function normalizeOneBasedIndex(value: number, maxValue: number | undefined): number {

@@ -194,7 +194,7 @@ describe("content request handler scan cache", () => {
       })
     ).rejects.toMatchObject({
       code: "scan_required",
-      message: "Scan the conversation before exporting."
+      message: "Prepare the conversation before exporting."
     });
     expect(scanCurrentConversationExport).not.toHaveBeenCalled();
   });
@@ -218,7 +218,7 @@ describe("content request handler scan cache", () => {
       })
     ).rejects.toMatchObject({
       code: "scan_stale",
-      message: "The conversation changed. Rescan before exporting."
+      message: "The conversation changed. Refresh it before exporting."
     });
   });
 
@@ -245,6 +245,70 @@ describe("content request handler scan cache", () => {
       reason: "stale"
     });
     expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
+  });
+
+  test("invalidates a cached scan when the observed conversation changes on the same URL", async () => {
+    let markConversationChanged: (() => void) | undefined;
+    const stopObserving = vi.fn();
+    const { handler, scanCurrentConversationExport } = createHandler({
+      observeConversationChanges: (onChange) => {
+        markConversationChanged = onChange;
+        return stopObserving;
+      }
+    });
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+    markConversationChanged?.();
+
+    await expect(handler({ type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE })).resolves.toEqual({
+      hasCache: false,
+      reason: "stale"
+    });
+    await expect(
+      handler({
+        copyToClipboard: false,
+        delivery: "return_files",
+        download: false,
+        options: { formats: ["md"] },
+        type: CONTENT_EXPORT_MESSAGE
+      })
+    ).rejects.toMatchObject({
+      code: "scan_stale",
+      message: "The conversation changed. Refresh it before exporting."
+    });
+    expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
+  });
+
+  test("replaces the conversation observer after a rescan", async () => {
+    const stopFirstObserver = vi.fn();
+    const stopSecondObserver = vi.fn();
+    const observeConversationChanges = vi
+      .fn()
+      .mockReturnValueOnce(stopFirstObserver)
+      .mockReturnValueOnce(stopSecondObserver);
+    const { handler } = createHandler({ observeConversationChanges });
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+
+    expect(observeConversationChanges).toHaveBeenCalledTimes(2);
+    expect(stopFirstObserver).toHaveBeenCalledTimes(1);
+    expect(stopSecondObserver).not.toHaveBeenCalled();
+  });
+
+  test("does not reuse the previous snapshot when a refresh fails", async () => {
+    const scanCurrentConversationExport = vi
+      .fn()
+      .mockResolvedValueOnce(makeConversation())
+      .mockRejectedValueOnce(new Error("Refresh failed"));
+    const { handler } = createHandler({ scanCurrentConversationExport });
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+    await expect(handler({ type: CONTENT_SCAN_MESSAGE })).rejects.toThrow("Refresh failed");
+    await expect(handler({ type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE })).resolves.toEqual({
+      hasCache: false,
+      reason: "stale"
+    });
   });
 
   test("selection export applies current selection to the cached conversation", async () => {

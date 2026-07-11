@@ -1,144 +1,88 @@
-# Release QA - Jelluvi 0.1.0
+# Release QA — Jelluvi 0.1.0
 
-Date: 2026-06-09
-Last verified: 2026-06-09 19:16:37 +04
+Date: 2026-07-11
 
-## Release Status
+Last verified: 2026-07-11 17:14:32 +04
 
-- No P0/P1 bugs open from automated QA.
-- Store ZIP passes static production checks.
-- Product claims match implemented functionality: ChatGPT is stable; Claude and Gemini are beta;
-  Perplexity and NotebookLM are experimental visible-message adapters.
-- Live provider manual QA not completed in this pass because it would require interacting with
-  user-owned chats or accounts. Do not submit claims beyond the documented provider status until
-  live non-sensitive provider chats are verified.
+## Release status
 
-## Static checks
+- Product and Store package: release candidate.
+- No known P0/P1 failures in automated checks.
+- Chrome Web Store submission: not completed.
+- Live provider toolbar matrix: not completed in this pass; it requires non-sensitive live chats.
+- Headed toolbar-popup E2E: not rerun in the final pass and remains a release gate.
 
-Required checks for this release candidate:
+## Verified checks
 
-- `pnpm install --frozen-lockfile`
-- `pnpm check`
-- `pnpm test:e2e`
-- `pnpm package`
-- `node scripts/check-no-remote-code.mjs`
-- `node scripts/check-manifest-permissions.mjs`
-- `node scripts/check-content-script-classic.mjs`
-- `node scripts/check-preview-build.mjs --release`
-- `node scripts/check-palette.mjs`
-- `node scripts/check-export-output-hygiene.mjs tests/fixtures/golden`
+| Check                                                               | Result                                                                                                                   |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm check`                                                        | Pass — lint, typecheck, 58 test files / 243 tests, palette, brand, build, content-script and preview guards, site build. |
+| `pnpm store-assets:build`                                           | Pass — three icons, five real UI screenshots and one promo validated.                                                    |
+| `node scripts/check-no-remote-code.mjs`                             | Pass.                                                                                                                    |
+| `node scripts/check-manifest-permissions.mjs`                       | Pass — no `tabs` or `downloads`; optional access is limited to supported sites.                                          |
+| `node scripts/check-export-output-hygiene.mjs qa-artifacts/exports` | Pass — nine newly generated formats.                                                                                     |
+| `pnpm audit --prod`                                                 | No known vulnerabilities.                                                                                                |
+| Gitleaks current tree and full history                              | No leaks across 73 commits.                                                                                              |
+| `pnpm package` twice                                                | Pass; byte-for-byte deterministic.                                                                                       |
 
-Expected result: all commands exit 0. `pnpm test:e2e` may keep the existing fixture popup export
-test skipped when headed extension automation cannot expose a toolbar popup page.
+Release package:
 
-Fresh local run result: all listed commands exited 0. Release package SHA256:
-`a578939ec891dbe41b3ea1dce95b6248c3a20ab17f9d35d6a1c5cacbfc1cf783`.
+- Path: `release/jelluvi-v0.1.0.zip`
+- Size: 289,549 bytes
+- Files: 24 production files
+- SHA256: `1cfc3d29de2d87b3da447c9cc7e1f950ad78495bb2c10a9d2c88e60fb4975314`
+- Contains `LICENSE.txt` and `THIRD_PARTY_NOTICES.txt`
+- Does not contain source, tests, docs, Store screenshots, site files, QA artifacts, build nesting,
+  local archives, or task files
 
-## Brave manual QA
+## Visual QA
 
-### Temporary Brave profile
+Verified in the selected in-app Browser with realistic local data:
 
-Safe Brave smoke used `/Applications/Brave Browser.app` with a temporary user data directory and
-`dist/` loaded by command-line extension args. It did not touch the user's existing Brave profile.
+- compact light popup with supported-page state and prepared snapshot;
+- dark popup with PDF selected and advanced options open;
+- full cached conversation preview;
+- Settings and batch discovery with three supported tabs;
+- Local Library save, search, record metadata, re-export and delete controls;
+- landing desktop and mobile layouts;
+- Store screenshots and 440×280 promo.
 
-Observed:
+The Store pack uses actual rendered product screens, not illustrative feature mockups:
 
-- Extension service worker loaded from the temporary profile.
-- Direct popup page loaded at `chrome-extension://.../popup/index.html`.
-- Popup rendered Jelluvi header, Settings, Simple/Advanced mode toggle, Scan, export actions,
-  privacy note, GitHub, Sponsors, and Privacy links.
-- Diagnostic run reported no popup `pageerror` entries.
-
-Blocked:
-
-- `chrome.action.openPopup()` did not expose a popup page to Playwright in this Brave automation
-  environment.
-- Opening `popup/index.html` directly renders the UI, but it changes active-tab semantics and is not
-  a valid substitute for scanning the active chat tab.
-
-### Manual Matrix
-
-| Area | Status | Notes |
-| --- | --- | --- |
-| Install unpacked `dist` in Brave | Partial | Verified in a temporary Brave profile by command-line load; not manually loaded through `brave://extensions`. |
-| Clear extension errors | Partial | No popup page errors in temporary-profile diagnostic; Brave extension error page was not manually inspected. |
-| Scan real non-sensitive ChatGPT chat | Not verified | Requires a user-provided non-sensitive live chat. |
-| Scan long chat | Not verified | Requires a user-provided non-sensitive live long chat. |
-| MD/TXT/JSON/CSV/HTML/DOCX/PDF/ZIP/Image | Automated | Unit renderer suites and package checks cover these formats; live popup export matrix not fully manual-verified. |
-| Preview | Automated | `check-preview-build` and e2e preview path checks pass. |
-| Filename builder | Automated | Unit/options tests cover Settings placement and storage behavior. |
-| Metadata/redaction | Automated | Unit tests cover metadata/redaction options and no default transcript storage. |
-| Selection/range | Automated | E2E selection overlay tests pass. |
-| Batch | Automated | E2E and unit batch permission/export tests pass. |
-| Provider pages | Not verified | Live provider pages require non-sensitive user sessions. |
-
-## Forbidden raw data export search
-
-Use `scripts/check-export-output-hygiene.mjs` to search exported files for:
-
-- `data:image`
-- `base64,`
-- `iVBOR`
-- raw provider internal DOM classes such as `text-token-text-primary`, `markdown prose`, and
-  `data-message-author-role`
-
-The release gate includes `node scripts/check-export-output-hygiene.mjs tests/fixtures/golden` as a
-committed golden-export smoke. For manual QA exports, run the same script against the local export
-directory before publishing screenshots or Store claims.
-
-## Screenshots
-
-Store screenshot assets are committed and generated locally:
-
-- `site/store-assets/store-screens/01-simple-popup.png`
+- `site/store-assets/store-screens/01-one-click-export.png`
 - `site/store-assets/store-screens/02-advanced-export.png`
 - `site/store-assets/store-screens/03-preview.png`
 - `site/store-assets/store-screens/04-batch-export.png`
 - `site/store-assets/store-screens/05-local-library.png`
-- `site/store-assets/store-screens/06-privacy-options.png`
+- `site/store-assets/small-promo-440x280.png`
 
-No additional CleanShot/manual screenshots are committed; local QA screenshots should stay ignored
-unless they are deliberate Store assets.
+## Manual release matrix
 
-## Release ZIP production-file proof
+| Area                               | Status                  | Required proof                                                              |
+| ---------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| Install unpacked production `dist` | Pending final pass      | Load through browser extension settings; confirm no extension errors.       |
+| Short ChatGPT chat                 | Pending final pass      | Export, copy and preview; compare first/last message and count.             |
+| Long ChatGPT chat                  | Pending final pass      | Automatic preparation, cancel, restored scroll position, completeness.      |
+| Same-URL new message               | Automated, live pending | Confirm DOM mutation invalidates the snapshot and next action refreshes it. |
+| Rich content                       | Automated, live pending | Code, table, math, citations, images and Canvas where available.            |
+| Formats                            | Automated               | MD, TXT, JSON, CSV, HTML, PDF, DOCX, PNG and ZIP generated in current QA.   |
+| Message scope                      | Automated, live pending | Selected, range, user-only and assistant-only.                              |
+| Batch                              | Automated, live pending | Real optional host prompt, success/failure manifest, one ZIP.               |
+| Secondary providers                | Pending final pass      | Verify against the documented beta/experimental status before Store claims. |
 
-Release ZIP must contain only production extension files:
-
-- `manifest.json`
-- `background/service-worker.js`
-- `content/main.js`
-- `popup/index.html`
-- `options/index.html`
-- `preview/index.html`
-- `icons/*.png`
-- hashed files under `assets/`
-
-It must not include source files, tests, docs, screenshots outside Store assets, `site/`, `release/`,
-`dist/` nesting, `qa-artifacts/`, `test-results/`, `.DS_Store`, task-pack files, or local archives.
-
-`content/main.js` must start as a classic IIFE, not top-level `import` or `export`. The background
-service worker may remain an ES module because the manifest declares it as module background code.
-
-## Chrome Web Store submission checklist
+## Chrome Web Store checklist
 
 - Store name: `Jelluvi - AI Chat Export`.
 - Version: `0.1.0`.
 - License: GPL-3.0-or-later.
-- Short description and long description ready in `site/store-assets/store-listing.md`.
-- Reviewer instructions ready in `site/store-assets/store-listing.md`.
-- Privacy policy content ready in `PRIVACY.md` and `site/store-assets/store-listing.md`.
-- Store icons ready in `site/store-assets/icons/`.
-- Store screenshots ready in `site/store-assets/store-screens/`.
-- No pricing wall in v1; donations/support are optional.
-- No unsupported provider claims beyond current stable/beta/experimental status.
-- No telemetry, remote rendering, remote code, broad permissions, default transcript persistence, or
-  export server claim conflict.
+- Listing and reviewer copy: `site/store-assets/store-listing.md`.
+- Privacy policy: `PRIVACY.md` with Limited Use and permission disclosures.
+- Icons, five screenshots and small promo: ready.
+- No pricing wall; support is optional and exists only outside the primary popup flow.
+- No remote code, telemetry, account, cloud rendering, default transcript persistence, or broad
+  browsing-history permission.
 
-## Bug list
+## Go/no-go
 
-- P0: none known from automated QA.
-- P1: none known from automated QA.
-- QA gap: live Brave provider matrix remains incomplete until a non-sensitive live ChatGPT long chat
-  and secondary provider pages are manually verified.
-- QA gap: Brave toolbar popup automation could not complete scan/download through Playwright in this
-  environment; direct popup rendering was verified only as a diagnostic.
+Code and submission artifacts are ready for a final live QA pass. Do not publish or create the
+public release tag until the toolbar popup and provider matrix above are signed off.

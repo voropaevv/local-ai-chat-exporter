@@ -11,22 +11,18 @@ export const POPUP_BATCH_EXPORT_MESSAGE = "jelluvi/export-open-chat-tabs";
 export const POPUP_START_SELECTION_MESSAGE = "jelluvi/start-selection";
 export const POPUP_CLEAR_SELECTION_MESSAGE = "jelluvi/clear-selection";
 export const POPUP_GET_ACTIVE_TAB_INFO_MESSAGE = "jelluvi/get-active-tab-info";
-export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE =
-  "jelluvi/get-scan-cache-summary";
-export const POPUP_GET_CACHED_CONVERSATION_MESSAGE =
-  "jelluvi/get-cached-conversation";
+export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/get-scan-cache-summary";
+export const POPUP_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/get-cached-conversation";
 export const POPUP_OPEN_PREVIEW_MESSAGE = "jelluvi/open-preview";
-export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE =
-  "jelluvi/preview-get-cached-conversation";
+export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/preview-get-cached-conversation";
+export const PREVIEW_RETURN_TO_SOURCE_MESSAGE = "jelluvi/preview-return-to-source";
 export const CONTENT_SCAN_MESSAGE = "jelluvi/content-scan";
 export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/content-cancel-scan";
 export const CONTENT_EXPORT_MESSAGE = "jelluvi/content-export";
 export const CONTENT_START_SELECTION_MESSAGE = "jelluvi/content-start-selection";
 export const CONTENT_CLEAR_SELECTION_MESSAGE = "jelluvi/content-clear-selection";
-export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE =
-  "jelluvi/content-get-scan-cache-summary";
-export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE =
-  "jelluvi/content-get-cached-conversation";
+export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/content-get-scan-cache-summary";
+export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/content-get-cached-conversation";
 
 export interface PreviewMessage {
   readonly index: number;
@@ -103,6 +99,11 @@ export interface PreviewGetCachedConversationRequest {
   readonly type: typeof PREVIEW_GET_CACHED_CONVERSATION_MESSAGE;
 }
 
+export interface PreviewReturnToSourceRequest {
+  readonly sourceTabId: number;
+  readonly type: typeof PREVIEW_RETURN_TO_SOURCE_MESSAGE;
+}
+
 export interface ContentScanRequest {
   readonly type: typeof CONTENT_SCAN_MESSAGE;
 }
@@ -161,7 +162,9 @@ export type ScanCacheSummaryResult =
     };
 
 export interface ActiveTabInfoResult {
+  readonly platformLabel?: string;
   readonly sourceUrl?: string;
+  readonly supported: boolean;
   readonly title?: string;
 }
 

@@ -44,7 +44,11 @@ export function getScrollHeight(container: Element): number {
 }
 
 export function scrollToTop(container: Element): void {
-  container.scrollTop = 0;
+  setScrollTop(container, 0);
+}
+
+export function setScrollTop(container: Element, scrollTop: number): void {
+  container.scrollTop = scrollTop;
 }
 
 export function scrollDownBy(container: Element, pixels: number): void {

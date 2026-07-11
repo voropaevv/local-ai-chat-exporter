@@ -9,7 +9,7 @@ import {
 import { formatCount } from "./pluralize";
 
 export const PREVIEW_MISSING_CACHE_MESSAGE =
-  "Scanned snapshot is no longer available. Return to the ChatGPT tab and scan again.";
+  "This local snapshot is no longer available. Return to the source chat and export or preview it again.";
 
 export type PreviewRenderState =
   | {
@@ -41,6 +41,6 @@ export function createPreviewRenderState(
     markdown: renderMarkdown(conversation),
     pdf: renderPdf(conversation),
     status: "ready",
-    statusMessage: `Previewing ${formatCount(conversation.messageCount, "scanned message")}.`
+    statusMessage: `Previewing ${formatCount(conversation.messageCount, "message")}.`
   };
 }

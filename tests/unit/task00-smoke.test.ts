@@ -22,7 +22,7 @@ describe("Task 00 scaffold", () => {
 
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.permissions).toEqual(["activeTab", "scripting", "storage"]);
-    expect(manifest.optional_permissions).toEqual(["downloads", "tabs"]);
+    expect(manifest.optional_permissions).toBeUndefined();
     expect(manifest.optional_host_permissions).toEqual([
       "https://chatgpt.com/*",
       "https://chat.openai.com/*",

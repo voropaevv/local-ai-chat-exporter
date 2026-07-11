@@ -8,6 +8,7 @@ import {
   getScrollTop,
   isAtBottom,
   isAtTop,
+  setScrollTop,
   scrollDownBy,
   scrollToTop
 } from "./scroll-container";
@@ -53,6 +54,7 @@ export async function collectChatGptConversation(
   const waitForDomSettle =
     options.waitForDomSettle ?? createDelayWait(options.settleDelayMs ?? DEFAULT_SETTLE_DELAY_MS);
   const scrollBy = options.scrollBy ?? scrollDownBy;
+  const originalScrollTop = getScrollTop(container);
   const messages: ExportedMessage[] = [];
   const dedupeState = createDedupeState();
   const warnings: string[] = [];
@@ -62,28 +64,10 @@ export async function collectChatGptConversation(
   let stalls = 0;
   let aborted = options.signal?.aborted ?? false;
 
-  scrollToTop(container);
-  await waitForDomSettle(options.signal);
-  const reachedTop = isAtTop(container);
-  duplicateCount += collectStepMessages(container, options.extractMessages, messages, dedupeState);
-
-  if (options.signal?.aborted) {
-    aborted = true;
-    warnings.push("Scan was cancelled.");
-  }
-
-  while (
-    !aborted &&
-    !isAtBottom(container) &&
-    scrollSteps < maxSteps &&
-    consecutiveStalls < maxStalls
-  ) {
-    const previousScrollTop = getScrollTop(container);
-    const scrollPixels = Math.max(1, Math.floor(getClientHeight(container) * scrollStepRatio));
-
-    scrollBy(container, scrollPixels);
-    scrollSteps += 1;
+  try {
+    scrollToTop(container);
     await waitForDomSettle(options.signal);
+    const reachedTop = isAtTop(container);
     duplicateCount += collectStepMessages(
       container,
       options.extractMessages,
@@ -94,49 +78,76 @@ export async function collectChatGptConversation(
     if (options.signal?.aborted) {
       aborted = true;
       warnings.push("Scan was cancelled.");
-      break;
     }
 
-    if (getScrollTop(container) <= previousScrollTop) {
-      consecutiveStalls += 1;
-      stalls += 1;
-    } else {
-      consecutiveStalls = 0;
+    while (
+      !aborted &&
+      !isAtBottom(container) &&
+      scrollSteps < maxSteps &&
+      consecutiveStalls < maxStalls
+    ) {
+      const previousScrollTop = getScrollTop(container);
+      const scrollPixels = Math.max(1, Math.floor(getClientHeight(container) * scrollStepRatio));
+
+      scrollBy(container, scrollPixels);
+      scrollSteps += 1;
+      await waitForDomSettle(options.signal);
+      duplicateCount += collectStepMessages(
+        container,
+        options.extractMessages,
+        messages,
+        dedupeState
+      );
+
+      if (options.signal?.aborted) {
+        aborted = true;
+        warnings.push("Scan was cancelled.");
+        break;
+      }
+
+      if (getScrollTop(container) <= previousScrollTop) {
+        consecutiveStalls += 1;
+        stalls += 1;
+      } else {
+        consecutiveStalls = 0;
+      }
     }
+
+    const reachedBottom = isAtBottom(container);
+
+    if (consecutiveStalls >= maxStalls && !reachedBottom) {
+      warnings.push("Scan stalled before reaching the bottom.");
+    }
+
+    if (scrollSteps >= maxSteps && !reachedBottom) {
+      warnings.push("Scan reached the maximum scroll step limit.");
+    }
+
+    const completeness = buildCompletenessReport({
+      duplicateCount,
+      messages,
+      platformWarnings: [],
+      reachedBottom,
+      reachedTop,
+      scanWarnings: warnings,
+      scrollSteps,
+      virtualized: false
+    });
+
+    return {
+      aborted,
+      completeness,
+      duplicateCount,
+      messages: messages.map((message, index) => ({ ...message, index })),
+      reachedBottom,
+      reachedTop,
+      scrollSteps,
+      stalls,
+      warnings
+    };
+  } finally {
+    setScrollTop(container, originalScrollTop);
   }
-
-  const reachedBottom = isAtBottom(container);
-
-  if (consecutiveStalls >= maxStalls && !reachedBottom) {
-    warnings.push("Scan stalled before reaching the bottom.");
-  }
-
-  if (scrollSteps >= maxSteps && !reachedBottom) {
-    warnings.push("Scan reached the maximum scroll step limit.");
-  }
-
-  const completeness = buildCompletenessReport({
-    duplicateCount,
-    messages,
-    platformWarnings: [],
-    reachedBottom,
-    reachedTop,
-    scanWarnings: warnings,
-    scrollSteps,
-    virtualized: false
-  });
-
-  return {
-    aborted,
-    completeness,
-    duplicateCount,
-    messages: messages.map((message, index) => ({ ...message, index })),
-    reachedBottom,
-    reachedTop,
-    scrollSteps,
-    stalls,
-    warnings
-  };
 }
 
 function collectStepMessages(

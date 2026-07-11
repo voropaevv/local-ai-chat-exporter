@@ -64,6 +64,18 @@ async function main() {
     ];
   }
 
+  for (const [archivePath, sourcePath] of [
+    ["LICENSE.txt", resolve(projectRoot, "LICENSE")],
+    ["THIRD_PARTY_NOTICES.txt", resolve(projectRoot, "THIRD_PARTY_NOTICES.md")]
+  ]) {
+    zipEntries[archivePath] = [
+      new Uint8Array(await readFile(sourcePath)),
+      {
+        mtime: zipEntryDate
+      }
+    ];
+  }
+
   await cleanReleaseArtifacts();
 
   const zipBytes = zipSync(zipEntries, { level: 9 });

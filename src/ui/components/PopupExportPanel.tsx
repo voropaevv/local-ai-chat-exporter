@@ -1,5 +1,6 @@
 import {
   Braces,
+  ChevronDown,
   Copy,
   Download,
   Eye,
@@ -8,16 +9,21 @@ import {
   FileText,
   FileType
 } from "lucide-preact";
+import { useState } from "preact/hooks";
 
 import type { ExportFormat } from "../../core/schema";
 import type { PopupFileFormat, PopupOptionsState, PopupOutputMode } from "../state/popup-state";
-import { InfoTip } from "./InfoTip";
 
 const QUICK_FORMATS = ["md", "pdf", "json", "txt"] as const satisfies readonly PopupFileFormat[];
+const MORE_FORMATS = ["html", "docx", "csv", "png"] as const satisfies readonly PopupFileFormat[];
 const FORMAT_ICONS = {
+  csv: Braces,
+  docx: FileText,
+  html: FileCode,
   json: Braces,
   md: FileCode,
   pdf: FileText,
+  png: FileType,
   txt: FileType
 } as const;
 
@@ -42,85 +48,111 @@ export function PopupExportPanel({
   onOutputModeChange,
   options
 }: PopupExportPanelProps) {
-  return (
-    <>
-      <section className="concept-panel export-panel" aria-labelledby="export-title">
-        <div className="concept-heading">
-          <h2 id="export-title">Export</h2>
-          <InfoTip label="Choose the local file formats to create from the scanned chat." />
-        </div>
-        <div className="format-rail" role="group" aria-label="Export formats">
-          {QUICK_FORMATS.map((format) => (
-            <FormatButton
-              active={isFormatActive(options, format)}
-              format={format}
-              key={format}
-              onClick={() =>
-                options.outputMode === "zip"
-                  ? onBundleFormatToggle(format)
-                  : onFormatToggle(format as ExportFormat)
-              }
-            />
-          ))}
-          <label className="zip-toggle">
-            <span className="format-button__icon" aria-hidden="true">
-              <FileArchive size={16} strokeWidth={2.2} />
-            </span>
-            <span>ZIP</span>
-            <input
-              checked={options.outputMode === "zip"}
-              onChange={(event) =>
-                onOutputModeChange(event.currentTarget.checked ? "zip" : "separate")
-              }
-              type="checkbox"
-            />
-            <span className="switch-track" aria-hidden="true" />
-          </label>
-        </div>
-      </section>
+  const [showMoreFormats, setShowMoreFormats] = useState(false);
+  const selectedMoreFormatCount = MORE_FORMATS.filter((format) =>
+    isFormatActive(options, format)
+  ).length;
 
-      <section className="concept-panel output-panel" aria-labelledby="output-title">
-        <div className="concept-heading">
-          <h2 id="output-title">Output</h2>
-          <InfoTip label="Download, copy Markdown, or open a local preview after scanning." />
-        </div>
-        <div className="output-action-grid">
-          <button
-            className="secondary-action concept-action"
-            disabled={disabled}
-            onClick={onDownload}
-            type="button"
-          >
-            <Download size={16} strokeWidth={2.2} />
-            <span>Download</span>
-          </button>
-          <button
-            className="secondary-action concept-action"
-            disabled={disabled}
-            onClick={onCopyMarkdown}
-            type="button"
-          >
-            <Copy size={16} strokeWidth={2.2} />
-            <span>Copy MD</span>
-          </button>
-          <button
-            className="secondary-action concept-action"
-            disabled={disabled}
-            onClick={onOpenFullPreview}
-            type="button"
-          >
-            <Eye size={16} strokeWidth={2.2} />
-            <span>Preview</span>
-          </button>
-        </div>
-      </section>
-    </>
+  return (
+    <section className="concept-panel export-panel" aria-labelledby="export-title">
+      <h2 className="sr-only" id="export-title">
+        Export
+      </h2>
+      <div className="format-rail" role="group" aria-label="Export formats">
+        {QUICK_FORMATS.map((format) => (
+          <FormatButton
+            active={isFormatActive(options, format)}
+            format={format}
+            key={format}
+            onClick={() =>
+              options.outputMode === "zip"
+                ? onBundleFormatToggle(format)
+                : onFormatToggle(format as ExportFormat)
+            }
+          />
+        ))}
+        {showMoreFormats
+          ? MORE_FORMATS.map((format) => (
+              <FormatButton
+                active={isFormatActive(options, format)}
+                format={format}
+                key={format}
+                onClick={() =>
+                  options.outputMode === "zip"
+                    ? onBundleFormatToggle(format)
+                    : onFormatToggle(format as ExportFormat)
+                }
+              />
+            ))
+          : null}
+      </div>
+      <div className="format-meta-row">
+        <button
+          aria-expanded={showMoreFormats}
+          className="more-formats-button"
+          onClick={() => setShowMoreFormats((visible) => !visible)}
+          type="button"
+        >
+          <ChevronDown
+            className={showMoreFormats ? "more-formats-button__icon--open" : undefined}
+            size={15}
+            strokeWidth={2.2}
+          />
+          {showMoreFormats
+            ? "Less"
+            : `More${selectedMoreFormatCount > 0 ? ` · ${selectedMoreFormatCount}` : ""}`}
+        </button>
+        <label className="zip-toggle">
+          <span className="format-button__icon" aria-hidden="true">
+            <FileArchive size={16} strokeWidth={2.2} />
+          </span>
+          <span>ZIP</span>
+          <input
+            checked={options.outputMode === "zip"}
+            onChange={(event) =>
+              onOutputModeChange(event.currentTarget.checked ? "zip" : "separate")
+            }
+            type="checkbox"
+          />
+          <span className="switch-track" aria-hidden="true" />
+        </label>
+      </div>
+      <button
+        className="primary-action export-primary-action"
+        disabled={disabled}
+        onClick={onDownload}
+        type="button"
+      >
+        <Download size={18} strokeWidth={2.3} />
+        <span>Export</span>
+      </button>
+      <div className="output-action-grid output-action-grid--secondary">
+        <button
+          className="secondary-action concept-action"
+          disabled={disabled}
+          onClick={onCopyMarkdown}
+          type="button"
+        >
+          <Copy size={16} strokeWidth={2.2} />
+          <span>Copy MD</span>
+        </button>
+        <button
+          className="secondary-action concept-action"
+          disabled={disabled}
+          onClick={onOpenFullPreview}
+          type="button"
+        >
+          <Eye size={16} strokeWidth={2.2} />
+          <span>Preview</span>
+        </button>
+      </div>
+    </section>
   );
 }
 
 interface FormatButtonProps {
   readonly active: boolean;
-  readonly format: (typeof QUICK_FORMATS)[number];
+  readonly format: PopupFileFormat;
   readonly onClick: () => void;
 }
 

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run static, unit, build, and site checks
+        run: pnpm check
+
+      - name: Validate Store assets
+        run: pnpm store-assets:build
+
+      - name: Install browser for end-to-end tests
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run end-to-end tests
+        run: pnpm test:e2e
+
+      - name: Build deterministic release archive
+        run: pnpm package
+
+      - name: Run release security checks
+        run: |
+          node scripts/check-no-remote-code.mjs
+          node scripts/check-manifest-permissions.mjs
+          node scripts/check-content-script-classic.mjs
+          node scripts/check-preview-build.mjs --release
+          node scripts/check-export-output-hygiene.mjs tests/fixtures/golden
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: jelluvi-release-candidate
+          path: |
+            release/*.zip
+            release/*.sha256
+          if-no-files-found: error

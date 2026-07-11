@@ -5,13 +5,13 @@ provider has automated fixtures and a current live QA pass.
 
 ## Support Status
 
-| Provider | Status | Current scope |
-| --- | --- | --- |
-| ChatGPT | Stable | Full scan path plus advanced rich-content extraction where fixtures cover it. |
-| Claude | Beta | Visible loaded messages only; unloaded or collapsed turns may be missing. |
-| Gemini | Beta | Visible loaded messages only; unloaded or collapsed turns may be missing. |
+| Provider   | Status       | Current scope                                                                    |
+| ---------- | ------------ | -------------------------------------------------------------------------------- |
+| ChatGPT    | Stable       | Full scan path plus advanced rich-content extraction where fixtures cover it.    |
+| Claude     | Beta         | Visible loaded messages only; unloaded or collapsed turns may be missing.        |
+| Gemini     | Beta         | Visible loaded messages only; unloaded or collapsed turns may be missing.        |
 | Perplexity | Experimental | Visible answer-page extraction only; layout changes may require adapter updates. |
-| NotebookLM | Experimental | Visible loaded messages only; layout changes may require adapter updates. |
+| NotebookLM | Experimental | Visible loaded messages only; layout changes may require adapter updates.        |
 
 ## Fixture Targets
 
@@ -28,7 +28,7 @@ Run this on a non-sensitive conversation for each provider before changing publi
 1. Load `dist/` as an unpacked extension in Brave or Chromium.
 2. Clear existing extension errors.
 3. Open one short conversation and one longer conversation with enough messages to scroll.
-4. Scan the page and confirm the first and last exported messages match the visible thread.
+4. Export the page and confirm the first and last exported messages match the visible thread.
 5. Export Markdown, JSON, HTML, PDF, and ZIP.
 6. Confirm selected-message and range exports do not include unselected messages.
 7. Confirm exported files do not include raw provider DOM classes or remote resources.

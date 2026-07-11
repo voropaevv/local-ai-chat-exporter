@@ -74,7 +74,7 @@ describe("preview rendering", () => {
 
   test("returns a clear missing-cache message", () => {
     expect(createPreviewRenderState(undefined).statusMessage).toBe(
-      "Scanned snapshot is no longer available. Return to the ChatGPT tab and scan again."
+      "This local snapshot is no longer available. Return to the source chat and export or preview it again."
     );
   });
 });

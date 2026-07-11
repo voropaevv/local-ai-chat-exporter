@@ -128,6 +128,7 @@ describe("collectChatGptConversation", () => {
     expect(result.completeness.status).toBe("complete");
     expect(result.completeness.firstMessagePreview).toBe("First user message");
     expect(result.completeness.lastMessagePreview).toBe("Final assistant message");
+    expect(container.scrollTop).toBe(1000);
   });
 
   test("supports cancellation with AbortSignal", async () => {
@@ -157,6 +158,7 @@ describe("collectChatGptConversation", () => {
     expect(result.aborted).toBe(true);
     expect(result.completeness.status).toBe("partial");
     expect(result.warnings).toContain("Scan was cancelled.");
+    expect(container.scrollTop).toBe(0);
   });
 
   test("marks a stalled scan as partial", async () => {
@@ -183,5 +185,26 @@ describe("collectChatGptConversation", () => {
     expect(result.stalls).toBe(2);
     expect(result.completeness.status).toBe("partial");
     expect(result.warnings).toContain("Scan stalled before reaching the bottom.");
+    expect(container.scrollTop).toBe(0);
+  });
+
+  test("restores the reader position when scanning throws", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 500, scrollHeight: 2000, scrollTop: 725 });
+
+    await expect(
+      collectChatGptConversation({
+        document,
+        scrollContainer: container,
+        waitForDomSettle: () => Promise.reject(new Error("layout failed"))
+      })
+    ).rejects.toThrow("layout failed");
+    expect(container.scrollTop).toBe(725);
   });
 });

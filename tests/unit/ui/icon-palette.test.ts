@@ -9,18 +9,20 @@ const expectedLightTokens = {
   "--color-accent": "var(--jelluvi-cyan)",
   "--color-accent-hover": "var(--jelluvi-cyan)",
   "--color-accent-soft": "var(--jelluvi-ice)",
+  "--color-action": "var(--jelluvi-deep-blue)",
+  "--color-action-hover": "#004fc9",
   "--color-background": "var(--color-bg)",
   "--color-bg": "var(--jelluvi-mist)",
   "--color-border": "var(--jelluvi-line)",
-  "--color-danger": "var(--jelluvi-coral)",
+  "--color-danger": "var(--jelluvi-accessible-coral)",
   "--color-danger-soft": "rgba(239, 68, 68, 0.14)",
   "--color-info": "var(--color-primary)",
   "--color-info-soft": "var(--color-primary-soft)",
-  "--color-primary": "var(--jelluvi-blue)",
-  "--color-primary-hover": "#0877e8",
+  "--color-primary": "var(--jelluvi-deep-blue)",
+  "--color-primary-hover": "#004fc9",
   "--color-primary-soft": "var(--jelluvi-ice)",
   "--color-shadow": "var(--jelluvi-pupil-navy)",
-  "--color-success": "var(--jelluvi-mint)",
+  "--color-success": "var(--jelluvi-accessible-mint)",
   "--color-success-soft": "rgba(24, 201, 146, 0.14)",
   "--color-surface": "var(--jelluvi-white)",
   "--color-surface-accent": "var(--color-surface-muted)",
@@ -28,13 +30,15 @@ const expectedLightTokens = {
   "--color-text": "var(--jelluvi-pupil-navy)",
   "--color-text-muted": "var(--jelluvi-slate)",
   "--color-text-on-accent": "#ffffff",
-  "--color-warning": "var(--jelluvi-amber)",
+  "--color-warning": "var(--jelluvi-accessible-amber)",
   "--color-warning-soft": "rgba(245, 158, 11, 0.16)"
 } as const;
 const expectedDarkTokens = {
   "--color-accent": "var(--jelluvi-cyan)",
   "--color-accent-hover": "var(--jelluvi-cyan)",
   "--color-accent-soft": "var(--color-primary-soft)",
+  "--color-action": "var(--jelluvi-deep-blue)",
+  "--color-action-hover": "#168bff",
   "--color-background": "var(--color-bg)",
   "--color-bg": "var(--jelluvi-night)",
   "--color-border": "var(--jelluvi-night-line)",
@@ -42,8 +46,8 @@ const expectedDarkTokens = {
   "--color-danger-soft": "rgba(248, 113, 113, 0.15)",
   "--color-info": "var(--jelluvi-cyan)",
   "--color-info-soft": "var(--color-primary-soft)",
-  "--color-primary": "var(--jelluvi-blue)",
-  "--color-primary-hover": "#39d9ff",
+  "--color-primary": "#39d9ff",
+  "--color-primary-hover": "#7fe9ff",
   "--color-primary-soft": "rgba(0, 198, 255, 0.14)",
   "--color-shadow": "#000000",
   "--color-success": "var(--jelluvi-mint-glow)",
@@ -128,7 +132,7 @@ describe("icon and product palette assets", () => {
 
     expect(styles).toContain("a {\n  color: var(--color-primary);");
     expect(styles).toContain("h2,\nlegend {\n  color: var(--color-primary);");
-    expect(styles).toContain(":focus-visible {\n  outline: 2px solid var(--color-accent);");
+    expect(styles).toContain(":focus-visible {\n  outline: 2px solid var(--color-primary);");
     expect(styles).not.toMatch(/--color-product-/u);
 
     const checkedFiles = [

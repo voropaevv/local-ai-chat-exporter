@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Jelluvi - Local AI chat exports</title>
+    <title>Jelluvi — Export AI chats locally</title>
     <meta
       name="description"
-      content="Jelluvi exports AI chats locally with no account, no upload, and no telemetry."
+      content="Export ChatGPT and other AI chats to clean local files. No account, no upload, no telemetry."
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -17,229 +17,239 @@
         <span>Jelluvi</span>
       </a>
       <nav aria-label="Primary">
+        <a href="#features">Features</a>
         <a href="#formats">Formats</a>
         <a href="#privacy-model">Privacy</a>
-        <a href="#comparison">Compare</a>
-        <a href="#faq">FAQ</a>
+        <a href="#install">Install</a>
       </nav>
     </header>
 
     <main id="top">
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Free, open-source browser extension</p>
-          <h1>Export AI chats locally. No account. No upload. Open source.</h1>
+          <p class="eyebrow">Free and open-source browser extension</p>
+          <h1>Your AI chats, in files you actually own.</h1>
           <p>
-            Jelluvi turns the chat you are viewing into clean Markdown, JSON, HTML, PDF, DOCX,
-            PNG, or ZIP files. Export starts only when you click.
+            Export the conversation you are viewing to clean Markdown, PDF, DOCX, JSON, HTML, CSV,
+            TXT, PNG, or ZIP. Jelluvi prepares the chat automatically and keeps processing on your
+            device.
           </p>
           <div class="hero-actions" aria-label="Project links">
-            <a class="button button-primary" href="#formats">See formats</a>
-            <a class="button" href="#github-sponsor">GitHub / Sponsor</a>
+            <a
+              class="button button-primary"
+              href="https&#58;//github.com/voropaevv/local-ai-chat-exporter"
+              >View source</a
+            >
+            <a class="button" href="#install">Install from source</a>
           </div>
+          <ul class="hero-proof" aria-label="Privacy highlights">
+            <li>No account</li>
+            <li>No chat upload</li>
+            <li>No telemetry</li>
+          </ul>
         </div>
+
         <div class="product-shot" aria-label="Jelluvi popup preview">
           <div class="shot-window">
             <div class="shot-top">
               <img src="assets/jelluvi.png" alt="" />
-              <strong>Jelluvi</strong>
-              <span>Simple</span>
+              <span>
+                <strong>Jelluvi</strong>
+                <small>Export AI chats locally</small>
+              </span>
+              <b>ChatGPT</b>
+            </div>
+            <div class="shot-status">
+              <span>Current page</span>
+              <strong>chatgpt.com</strong>
+              <b>Prepared</b>
             </div>
             <div class="shot-card">
-              <b>Scan</b>
-              <button>Scan conversation</button>
-              <p>Scanned 51 messages. Ready to export.</p>
-            </div>
-            <div class="shot-card muted-card">
               <b>Export</b>
-              <p>Markdown, HTML, PDF, DOCX, ZIP and local image snapshots.</p>
+              <div class="shot-formats" aria-label="Example selected formats">
+                <span class="active">MD</span><span>PDF</span><span>JSON</span><span>TXT</span>
+              </div>
+              <div class="shot-meta"><span>4 more formats</span><strong>ZIP off</strong></div>
+            </div>
+            <div class="shot-card">
+              <button>Export</button>
+              <div class="shot-secondary"><span>Copy MD</span><span>Preview</span></div>
+            </div>
+            <div class="shot-ready">
+              <span></span>
+              <p><strong>Snapshot ready</strong> · 51 messages · complete</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section id="features" class="section-grid">
+        <div>
+          <p class="eyebrow">Designed for the everyday path</p>
+          <h2>Choose a format. Click export. Done.</h2>
+        </div>
+        <div class="cards">
+          <article>
+            <strong>Automatic preparation</strong>
+            <p>No technical scan step. Jelluvi refreshes stale chats before creating a file.</p>
+          </article>
+          <article>
+            <strong>Honest completeness</strong>
+            <p>Message counts and warnings make partial captures visible instead of silent.</p>
+          </article>
+          <article>
+            <strong>Reader-friendly</strong>
+            <p>Long ChatGPT collection restores your previous scroll position when it finishes.</p>
+          </article>
         </div>
       </section>
 
       <section id="formats" class="section-grid">
         <div>
-          <p class="eyebrow">Formats</p>
-          <h2>Clean files for notes, audits, and research logs.</h2>
+          <p class="eyebrow">Nine outputs</p>
+          <h2>From quick notes to portable archives.</h2>
+        </div>
+        <div class="format-cloud" aria-label="Supported export formats">
+          <span>Markdown</span><span>PDF</span><span>DOCX</span><span>JSON</span><span>HTML</span>
+          <span>CSV</span><span>TXT</span><span>PNG</span><span>ZIP</span>
+        </div>
+      </section>
+
+      <section id="advanced" class="section-grid">
+        <div>
+          <p class="eyebrow">Advanced when you need it</p>
+          <h2>Precise exports without cluttering the main screen.</h2>
         </div>
         <div class="cards">
-          <article>Markdown and Obsidian profiles</article>
-          <article>TXT, JSON, CSV, and semantic HTML</article>
-          <article>Local PDF, DOCX, PNG, and ZIP bundles</article>
+          <article>
+            All messages, user-only, assistant-only, ranges, or selected ChatGPT messages
+          </article>
+          <article>
+            Markdown profiles, PDF layout controls, citations, metadata, and visible reasoning
+          </article>
+          <article>
+            Local redaction plus an opt-in searchable library with backup and delete controls
+          </article>
         </div>
       </section>
 
-      <section id="privacy-model" class="section-grid">
+      <section id="privacy-model" class="section-grid privacy-section">
         <div>
-          <p class="eyebrow">Privacy model</p>
-          <h2>No telemetry, no remote rendering, no export server.</h2>
+          <p class="eyebrow">Local-first by design</p>
+          <h2>Your transcript is not Jelluvi’s business.</h2>
         </div>
-        <p>
-          The extension processes the current tab locally after an explicit user action. Browser
-          storage is used for preferences and only stores conversation content if you opt into the
-          Local Library.
-        </p>
+        <div>
+          <p>
+            Export rendering runs inside the extension. There is no Jelluvi account, export server,
+            analytics SDK, remote renderer, or hosted transcript store. Conversation content is
+            stored only when you explicitly save it to the Local Library in your browser.
+          </p>
+          <a
+            class="inline-link"
+            href="https&#58;//github.com/voropaevv/local-ai-chat-exporter/blob/main/PRIVACY.md"
+            >Read the privacy policy</a
+          >
+        </div>
       </section>
 
-      <section id="long-chat-support" class="section-grid">
+      <section id="platforms" class="section-grid">
         <div>
-          <p class="eyebrow">Long chat support</p>
-          <h2>Scroll collection and completeness checks for long threads.</h2>
+          <p class="eyebrow">Platform support</p>
+          <h2>Clear confidence levels, not a logo wall.</h2>
         </div>
-        <p>
-          Jelluvi tracks first and last messages, duplicate counts, scan warnings, selected ranges,
-          and platform-specific limitations so exports do not silently overclaim coverage.
-        </p>
-      </section>
-
-      <section id="research-exports" class="section-grid">
-        <div>
-          <p class="eyebrow">Research exports</p>
-          <h2>Preserve citations, code, tables, reasoning settings, and metadata.</h2>
+        <div class="support-list">
+          <p><strong>Stable:</strong> ChatGPT</p>
+          <p><strong>Beta:</strong> Claude and Gemini visible-message exports</p>
+          <p><strong>Experimental:</strong> Perplexity and NotebookLM visible-message exports</p>
         </div>
-        <p>
-          Advanced ChatGPT extraction keeps rich content structured where fixtures support it, while
-          redaction settings help prepare safer files for review.
-        </p>
-      </section>
-
-      <section id="obsidian-markdown" class="section-grid">
-        <div>
-          <p class="eyebrow">Obsidian / Markdown</p>
-          <h2>Profiles for default archives, Obsidian, GitHub, GitBook, and research logs.</h2>
-        </div>
-        <p>
-          Filename templates and frontmatter options make exports predictable without turning the
-          popup into a cloud workspace.
-        </p>
-      </section>
-
-      <section id="batch-export" class="section-grid">
-        <div>
-          <p class="eyebrow">Batch export</p>
-          <h2>Export already-open AI chat tabs into one ZIP.</h2>
-        </div>
-        <p>
-          Batch export remains user-initiated, requests optional permissions only when needed, and
-          includes manifest warnings when a selected tab fails.
-        </p>
       </section>
 
       <section id="comparison" class="section-grid">
         <div>
-          <p class="eyebrow">Compare with paid exporters</p>
-          <h2>A local-first option when you do not need hosted sync.</h2>
+          <p class="eyebrow">Where Jelluvi fits</p>
+          <h2>Fast local exports between native backup and cloud workspaces.</h2>
         </div>
-        <div class="comparison-table" role="table" aria-label="Comparison with paid exporters">
+        <div class="comparison-table" role="table" aria-label="Export workflow comparison">
           <div role="row">
-            <span role="columnheader">Area</span>
-            <span role="columnheader">Jelluvi</span>
-            <span role="columnheader">Hosted exporters</span>
+            <span role="columnheader">Workflow</span>
+            <span role="columnheader">Speed</span>
+            <span role="columnheader">Data path</span>
           </div>
           <div role="row">
-            <span role="cell">Core exports</span>
-            <span role="cell">Free in v1</span>
-            <span role="cell">Often bundled with paid plans</span>
+            <span role="cell">Jelluvi current-chat export</span>
+            <span role="cell">Immediate</span>
+            <span role="cell">Local files</span>
           </div>
           <div role="row">
-            <span role="cell">Data path</span>
-            <span role="cell">Local extension files</span>
-            <span role="cell">May include hosted processing or sync</span>
+            <span role="cell">Provider account backup</span>
+            <span role="cell">May require email processing</span>
+            <span role="cell">Provider-generated archive</span>
           </div>
           <div role="row">
-            <span role="cell">Best fit</span>
-            <span role="cell">Personal archives and local research notes</span>
-            <span role="cell">Teams that need managed cloud workflows</span>
+            <span role="cell">Hosted export workspace</span>
+            <span role="cell">Varies</span>
+            <span role="cell">May include cloud processing or sync</span>
           </div>
+        </div>
+      </section>
+
+      <section id="install" class="section-grid install-section">
+        <div>
+          <p class="eyebrow">Install today</p>
+          <h2>Build and load the extension in a few minutes.</h2>
+        </div>
+        <div>
+          <ol>
+            <li>Clone the repository and run <code>pnpm install --frozen-lockfile</code>.</li>
+            <li>Run <code>pnpm build</code>.</li>
+            <li>
+              Open your browser’s extensions page and load the generated <code>dist</code> folder.
+            </li>
+          </ol>
+          <a
+            class="button button-primary"
+            href="https&#58;//github.com/voropaevv/local-ai-chat-exporter#install-from-source"
+            >Open installation guide</a
+          >
         </div>
       </section>
 
       <section id="faq" class="section-grid">
         <div>
           <p class="eyebrow">FAQ</p>
-          <h2>Common questions before installing.</h2>
+          <h2>Before you install.</h2>
         </div>
         <div class="faq-list">
           <details>
             <summary>Does Jelluvi upload chats?</summary>
-            <p>No. Export rendering runs locally in the extension.</p>
+            <p>No. Export rendering runs locally inside the extension.</p>
           </details>
           <details>
-            <summary>Is there a pricing wall?</summary>
-            <p>No pricing wall in v1. Donation and support links are optional.</p>
+            <summary>Why is there no Scan button?</summary>
+            <p>
+              Export, copy, preview, and library save actions prepare the current chat
+              automatically. Refresh remains available after preparation.
+            </p>
           </details>
           <details>
-            <summary>Does it export account history?</summary>
-            <p>No. It exports the current supported chat tab after you click.</p>
+            <summary>Does it export my full account history?</summary>
+            <p>No. Jelluvi exports supported chat tabs that you explicitly choose.</p>
           </details>
         </div>
-      </section>
-
-      <section id="github-sponsor" class="section-grid">
-        <div>
-          <p class="eyebrow">GitHub / Sponsor</p>
-          <h2>Open-source project with optional support.</h2>
-        </div>
-        <p>
-          Review the source, build locally, and sponsor ongoing maintenance if the tool saves you
-          time. Core export features stay free in v1.
-        </p>
-      </section>
-
-      <section id="business-model" class="section-grid">
-        <div>
-          <p class="eyebrow">Business model</p>
-          <h2>Donation-supported local tooling without a pricing wall.</h2>
-        </div>
-        <ul class="business-list">
-          <li>Core exports stay free and open-source.</li>
-          <li>Donations fund maintenance, docs, provider fixtures, and compatibility updates.</li>
-          <li>Paid support and custom enterprise builds are optional services.</li>
-          <li>Any future cloud companion must stay optional and separate from core local exports.</li>
-        </ul>
-      </section>
-
-      <section id="privacy" class="section-grid">
-        <div>
-          <p class="eyebrow">Privacy</p>
-          <h2>Local processing after explicit user action.</h2>
-        </div>
-        <p>
-          No account, telemetry, analytics, ads, trackers, session replay, remote logging, remote
-          code, or export server.
-        </p>
-      </section>
-
-      <section id="security" class="section-grid">
-        <div>
-          <p class="eyebrow">Security</p>
-          <h2>Minimal Manifest V3 permissions.</h2>
-        </div>
-        <p>
-          Jelluvi avoids broad hosts and sensitive permissions. Optional downloads, tabs, and host
-          access are requested only for user-facing workflows.
-        </p>
-      </section>
-
-      <section id="changelog" class="section-grid">
-        <div>
-          <p class="eyebrow">Changelog</p>
-          <h2>Current release: 0.1.0.</h2>
-        </div>
-        <p>
-          Rebrand to Jelluvi, local PDF/image/ZIP improvements, advanced ChatGPT content, provider
-          status hardening, and an opt-in Local Library.
-        </p>
       </section>
     </main>
+
     <footer class="site-footer">
       <div>
-        <strong>Support Jelluvi</strong>
-        <p>Core exports stay free and open-source.</p>
+        <strong>Jelluvi</strong>
+        <p>Core exports stay free, local-first, and open-source.</p>
       </div>
-      <nav aria-label="Support links">
-        <a href="https&#58;//github.com/sponsors/voropaevv">GitHub Sponsors</a>
+      <nav aria-label="Project links">
+        <a href="https&#58;//github.com/voropaevv/local-ai-chat-exporter">Source</a>
+        <a href="https&#58;//github.com/voropaevv/local-ai-chat-exporter/blob/main/PRIVACY.md"
+          >Privacy</a
+        >
+        <a href="https&#58;//github.com/sponsors/voropaevv">Sponsor</a>
       </nav>
     </footer>
   </body>

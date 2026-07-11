@@ -69,22 +69,17 @@ describe("filename template builder helpers", () => {
     ).toBe("Secrets-Research-Notes-conv-1-md");
   });
 
-  test("keeps raw template editing out of the default filename builder UI and lists tokens", () => {
+  test("keeps raw template editing out of the current Settings UI", () => {
     const source = readFileSync(
-      resolve(import.meta.dirname, "../../../src/ui/components/FilenameTemplateBuilder.tsx"),
+      resolve(import.meta.dirname, "../../../src/ui/OptionsApp.tsx"),
       "utf8"
     );
 
-    expect(source).toContain("Reset to default");
-    expect(source).toContain("+ Custom text");
-    expect(source).toContain("Click or drag tokens");
-    expect(source).toContain("{date}");
-    expect(source).toContain("{time}");
-    expect(source).toContain("{datetime}");
-    expect(source).toContain("{platform}");
-    expect(source).toContain("{title}");
-    expect(source).toContain("{conversationId}");
-    expect(source).toContain("{format}");
+    expect(source).toContain("FILENAME_PATTERN_PRESETS");
+    expect(source).toContain("Filename pattern preset");
+    expect(source).toContain("Filename pattern preview");
+    expect(source).not.toContain("Custom text or separator");
+    expect(source).not.toContain("Click or drag tokens");
     expect(source).not.toContain("Stored template string");
   });
 });

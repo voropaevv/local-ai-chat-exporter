@@ -6,7 +6,6 @@
   "description": "Export AI chats locally and privately.",
   "minimum_chrome_version": "114",
   "permissions": ["activeTab", "scripting", "storage"],
-  "optional_permissions": ["downloads", "tabs"],
   "optional_host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",

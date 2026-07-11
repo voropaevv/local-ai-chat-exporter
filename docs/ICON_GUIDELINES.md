@@ -8,8 +8,9 @@ Canonical source:
 
 Primary brand colors:
 
-- Jelluvi Blue `#168BFF` for primary actions.
-- Jelluvi Cyan `#00C6FF` for focus rings and active outlines.
+- Jelluvi Deep Blue `#005FEF` for light-theme primary actions, focus rings, and active outlines.
+- Jelluvi Blue `#168BFF` and Jelluvi Cyan `#00C6FF` remain brand colors for decorative use and
+  dark-theme accents where contrast is sufficient.
 
 Generated extension icons:
 
@@ -24,6 +25,7 @@ Chrome Web Store assets:
 - `site/store-assets/icons/icon-128.png`
 - `site/store-assets/icons/icon-512.png`
 - `site/store-assets/icons/store-icon-128.png`
+- `site/store-assets/small-promo-440x280.png`
 
 Rules:
 

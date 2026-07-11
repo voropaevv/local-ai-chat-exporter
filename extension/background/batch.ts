@@ -3,6 +3,7 @@ import {
   createBatchRootDirectory,
   getBatchRequiredOrigins,
   getBatchCandidateTabs,
+  SUPPORTED_CHAT_ORIGINS,
   type BatchCandidateTab
 } from "../../src/core/batch";
 import {
@@ -31,9 +32,7 @@ import { ensureContentScript } from "../../src/utils/content-script";
 import type { RenderedBytes, RenderedFile } from "../../src/renderers";
 
 export async function handlePopupBatchListRequest(): Promise<BatchListSuccess> {
-  await requireTabsPermission();
-
-  const tabs = await chrome.tabs.query({});
+  const tabs = await chrome.tabs.query({ url: [...SUPPORTED_CHAT_ORIGINS] });
   return {
     tabs: getBatchCandidateTabs(tabs)
   };
@@ -42,10 +41,10 @@ export async function handlePopupBatchListRequest(): Promise<BatchListSuccess> {
 export async function handlePopupBatchExportRequest(
   request: PopupBatchExportRequest
 ): Promise<BatchExportSuccess> {
-  await requireTabsPermission();
-
   const exportedAt = new Date().toISOString();
-  const candidates = getBatchCandidateTabs(await chrome.tabs.query({}));
+  const candidates = getBatchCandidateTabs(
+    await chrome.tabs.query({ url: [...SUPPORTED_CHAT_ORIGINS] })
+  );
   const selectedTabs = candidates.filter((tab) => request.tabIds.includes(tab.id));
   const results: BatchZipResult[] = [];
 
@@ -130,17 +129,6 @@ async function sendContentMessage<T>(
   request: ContentExportRequest | ContentScanRequest
 ): Promise<RuntimeResponse<T>> {
   return chrome.tabs.sendMessage(tabId, request);
-}
-
-async function requireTabsPermission(): Promise<void> {
-  const granted = await containsPermission({ permissions: ["tabs"] });
-
-  if (!granted) {
-    throw new ExportPipelineError(
-      "unsupported_platform",
-      "Tabs permission is required for batch export. Click Find open tabs again and approve the permission prompt."
-    );
-  }
 }
 
 async function requireTabHostPermission(tab: BatchCandidateTab): Promise<void> {

@@ -64,19 +64,19 @@ describe("popup state", () => {
     expect(scanned.platformLabel).toBe("ChatGPT");
     expect(scanned.completeness?.warnings).toEqual(["Top was not reached"]);
     expect(scanned.previewMessages).toHaveLength(3);
-    expect(scanned.progressLabel).toBe("Scanned 3 messages. Ready to export.");
+    expect(scanned.progressLabel).toBe("3 messages ready");
     expect(scanned.partialWarning).toBe("This export may be partial.");
 
     const exporting = popupReducer(scanned, { type: "export_started" });
 
     expect(exporting.scanStatus).toBe("exporting");
-    expect(exporting.progressLabel).toBe("Exporting from scanned snapshot...");
+    expect(exporting.progressLabel).toBe("Creating local files...");
 
     const cancelled = popupReducer(scanning, { type: "scan_cancelled" });
 
     expect(cancelled.scanStatus).toBe("idle");
     expect(cancelled.canCancelScan).toBe(false);
-    expect(cancelled.progressLabel).toBe("Scan cancelled.");
+    expect(cancelled.progressLabel).toBe("Preparation cancelled.");
   });
 
   test("toggles export formats without allowing an empty format set", () => {
@@ -177,11 +177,13 @@ describe("popup state", () => {
   test("stores active tab host before scan results are available", () => {
     const state = popupReducer(createInitialPopupState(), {
       sourceUrl: "https://chatgpt.com/c/example",
+      supported: true,
       title: "Example chat",
       type: "set_active_tab_info"
     });
 
     expect(state.sourceUrl).toBe("https://chatgpt.com/c/example");
+    expect(state.sourceSupported).toBe(true);
     expect(state.title).toBe("Example chat");
   });
 
@@ -297,7 +299,7 @@ describe("popup state", () => {
     });
     const selectedState = popupReducer(scanned, { scope: "selected", type: "set_scope" });
     const finished = popupReducer(selectedState, {
-      message: "Exported 1 message from scanned snapshot to 1 file.",
+      message: "Exported 1 message to 1 file.",
       type: "export_finished"
     });
 
@@ -337,22 +339,20 @@ describe("popup state", () => {
         downloaded: ["chat.md"],
         exportedMessageCount: 41
       })
-    ).toBe("Exported 41 messages from scanned snapshot to 1 file.");
+    ).toBe("Exported 41 messages to 1 file.");
     expect(
       buildExportStatusMessage({
         clipboardError: { message: "Clipboard unavailable." },
         downloaded: [],
         exportedMessageCount: 3
       })
-    ).toBe(
-      "Exported 3 messages from scanned snapshot. Prepared local output. Clipboard: Clipboard unavailable."
-    );
+    ).toBe("Exported 3 messages. Prepared local output. Clipboard: Clipboard unavailable.");
     expect(
       buildCopyMarkdownStatusMessage({
         downloaded: [],
         exportedMessageCount: 3
       })
-    ).toBe("Copied 3 messages from scanned snapshot to clipboard.");
+    ).toBe("Copied 3 messages to clipboard.");
   });
 
   test("clamps custom range UI values to one-based positive integers", () => {

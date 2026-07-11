@@ -10,10 +10,12 @@ const forbiddenPermissions = new Set([
   "all_urls",
   "<all_urls>",
   "cookies",
+  "downloads",
   "history",
-  "webRequest",
   "debugger",
-  "management"
+  "management",
+  "tabs",
+  "webRequest"
 ]);
 
 function asStringArray(value) {

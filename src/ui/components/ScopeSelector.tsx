@@ -1,6 +1,7 @@
 import type { ExportOptions } from "../../core/export-options";
 
 interface ScopeSelectorProps {
+  readonly canSelectMessages?: boolean;
   readonly onClearSelection: () => void;
   readonly onRangeEndChange: (value: number) => void;
   readonly onRangeStartChange: (value: number) => void;
@@ -14,6 +15,7 @@ interface ScopeSelectorProps {
 }
 
 export function ScopeSelector({
+  canSelectMessages = true,
   onClearSelection,
   onRangeEndChange,
   onRangeStartChange,
@@ -28,13 +30,13 @@ export function ScopeSelector({
   return (
     <div className="scope-panel">
       <label className="field-row">
-        <span>Scope</span>
+        <span>Messages</span>
         <select
           onChange={(event) => onScopeChange(event.currentTarget.value as ExportOptions["scope"])}
           value={scope}
         >
           <option value="all">All messages</option>
-          <option value="selected">Selected messages</option>
+          {canSelectMessages ? <option value="selected">Selected messages</option> : null}
           <option value="user_only">User only</option>
           <option value="assistant_only">Assistant only</option>
           <option value="range">Custom range</option>
@@ -59,7 +61,6 @@ export function ScopeSelector({
 
       {scope === "range" ? (
         <>
-          <p className="muted">{messageCount === undefined ? "From 1 to N" : `From 1 to ${messageCount}`}</p>
           <div className="range-grid">
             <label className="field-row">
               <span>Start message</span>

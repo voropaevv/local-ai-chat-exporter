@@ -19,7 +19,7 @@ release ZIPs from this checklist.
 1. Build the extension locally and load `dist` as an unpacked extension in Brave.
 2. Clear extension errors before starting.
 3. Open a non-sensitive ChatGPT conversation with a visible Deep Research report.
-4. Scan and export Markdown, JSON, PDF, and DOCX.
+4. Export Markdown, JSON, PDF, and DOCX; preparation starts automatically.
 5. Confirm citations and source links appear in local output files.
 6. Toggle visible thinking/reasoning off, export, and confirm thinking text is absent.
 7. Toggle visible thinking/reasoning on, export, and confirm only DOM-visible thinking text appears.

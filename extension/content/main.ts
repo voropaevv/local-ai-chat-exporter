@@ -1,10 +1,8 @@
-import {
-  renderConversationFiles,
-  serializeExportError
-} from "../../src/core/export-options";
+import { renderConversationFiles, serializeExportError } from "../../src/core/export-options";
 import { scanCurrentConversationExport } from "../../src/content/scan";
 import { copyRenderedFileToClipboard } from "../../src/utils/clipboard";
 import { downloadRenderedFiles } from "../../src/utils/download";
+import { observeConversationChanges } from "./conversation-change-observer";
 import { createSelectionOverlay } from "./selection-overlay";
 import { createContentRequestHandler, isContentRequest } from "./request-handler";
 
@@ -19,6 +17,7 @@ const handleContentRequest = createContentRequestHandler({
   createSelectionOverlay,
   downloadRenderedFiles,
   getCurrentUrl: () => globalThis.location.href,
+  observeConversationChanges,
   renderConversationFiles,
   scanCurrentConversationExport
 });

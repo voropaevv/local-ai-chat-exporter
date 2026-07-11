@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 
 import {
   PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
+  PREVIEW_RETURN_TO_SOURCE_MESSAGE,
   type CachedConversationResult,
   type RuntimeResponse
 } from "../core/messages";
@@ -24,7 +25,7 @@ type PreviewLoadState =
 export function PreviewApp() {
   const query = useMemo(() => parsePreviewQuery(globalThis.location.search), []);
   const [loadState, setLoadState] = useState<PreviewLoadState>({ status: "loading" });
-  const [actionStatus, setActionStatus] = useState("Preview actions are idle.");
+  const [actionStatus, setActionStatus] = useState("");
 
   useEffect(() => {
     applyThemePreference(readThemePreference());
@@ -92,7 +93,7 @@ export function PreviewApp() {
     }
 
     await copyRenderedFileToClipboard([renderState.markdown]);
-    setActionStatus("Copied Markdown from scanned snapshot.");
+    setActionStatus("Copied Markdown from the local snapshot.");
   }
 
   function handleOpenPdf() {
@@ -103,13 +104,27 @@ export function PreviewApp() {
     openRenderedFile(renderState.pdf);
     setActionStatus(
       renderState.pdf.mimeType === "application/pdf"
-        ? "Opened PDF from scanned snapshot."
+        ? "Opened PDF from the local snapshot."
         : "PDF generation fell back to PDF-ready HTML. No conversation content was uploaded."
     );
   }
 
-  function handleClose() {
-    window.close();
+  async function handleReturnToSource() {
+    if (query.sourceTabId === undefined) {
+      return;
+    }
+
+    const response = await sendRuntimeMessage({
+      sourceTabId: query.sourceTabId,
+      type: PREVIEW_RETURN_TO_SOURCE_MESSAGE
+    });
+
+    if (response.ok) {
+      window.close();
+      return;
+    }
+
+    setActionStatus(response.error.message);
   }
 
   return (
@@ -122,8 +137,10 @@ export function PreviewApp() {
             <h1>{renderPreviewTitle(renderState)}</h1>
             <p className="muted">
               {loadState.status === "loading"
-                ? "Loading scanned snapshot..."
-                : renderState.statusMessage}
+                ? "Loading local snapshot..."
+                : renderState.status === "ready"
+                  ? renderState.statusMessage
+                  : "Preview unavailable."}
             </p>
           </div>
         </div>
@@ -152,26 +169,44 @@ export function PreviewApp() {
           >
             Open PDF
           </button>
-          <button className="secondary-action" onClick={handleClose} type="button">
-            Close
+          <button
+            className="secondary-action"
+            disabled={query.sourceTabId === undefined}
+            onClick={handleReturnToSource}
+            type="button"
+          >
+            Return to chat
           </button>
         </div>
       </header>
-      <p className="status-text">{actionStatus}</p>
+      {actionStatus ? (
+        <p className="status-text" role="status">
+          {actionStatus}
+        </p>
+      ) : null}
       {loadState.status === "loading" ? (
         <section className="panel">
-          <p className="muted">Loading scanned snapshot...</p>
+          <p className="muted">Loading local snapshot...</p>
         </section>
       ) : renderState.status === "ready" ? (
         <iframe
           className="preview-frame"
           sandbox=""
           srcDoc={renderState.html.bytes}
-          title="Full scanned conversation preview"
+          title="Full local conversation preview"
         />
       ) : (
         <section className="panel">
-          <p className="error-text">{PREVIEW_MISSING_CACHE_MESSAGE}</p>
+          <h2>Snapshot unavailable</h2>
+          <p className="muted">{PREVIEW_MISSING_CACHE_MESSAGE}</p>
+          <button
+            className="primary-action"
+            disabled={query.sourceTabId === undefined}
+            onClick={handleReturnToSource}
+            type="button"
+          >
+            Return to source chat
+          </button>
         </section>
       )}
     </main>

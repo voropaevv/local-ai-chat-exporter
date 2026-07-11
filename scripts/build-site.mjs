@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const siteRoot = resolve(projectRoot, "site");
 const distRoot = resolve(siteRoot, "dist");
-const sourceIcon = resolve(projectRoot, "assets/brand/jelluvi.png");
+const sourceIcon = resolve(projectRoot, "extension/icons/icon-512.png");
 const siteAssetsRoot = resolve(siteRoot, "assets");
 
 async function main() {

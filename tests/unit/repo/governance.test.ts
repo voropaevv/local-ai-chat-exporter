@@ -38,4 +38,14 @@ describe("open-source governance docs", () => {
     expect(security).toContain("security reports");
     expect(security).toContain("GitHub Security Advisories");
   });
+
+  test("ships project and runtime dependency notices with release archives", () => {
+    const noticesPath = resolve(projectRoot, "THIRD_PARTY_NOTICES.md");
+    const packageScript = readProjectFile("scripts/package-extension.mjs");
+
+    expect(existsSync(noticesPath)).toBe(true);
+    expect(readProjectFile("THIRD_PARTY_NOTICES.md")).toContain("Lucide Preact");
+    expect(packageScript).toContain('"LICENSE.txt"');
+    expect(packageScript).toContain('"THIRD_PARTY_NOTICES.txt"');
+  });
 });

@@ -32,7 +32,6 @@ export function PopupHeader() {
       <BrandIcon />
       <div className="popup-title-group">
         <h1>Jelluvi</h1>
-        <p>Export AI chats locally</p>
       </div>
       <div className="popup-header-actions">
         <button

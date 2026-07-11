@@ -20,10 +20,6 @@ test("preview page is built and no UI points at nested popup preview path", asyn
     resolve(projectRoot, "src/ui/components/PopupHeader.tsx"),
     "utf8"
   );
-  const popupFooter = await readFile(
-    resolve(projectRoot, "src/ui/components/PopupFooter.tsx"),
-    "utf8"
-  );
 
   expect(`${distPopup}\n${distPreview}`).not.toContain("popup/popup/index.html");
   expect(sourceCss).toContain(".app-shell--preview");
@@ -34,6 +30,5 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   expect(sourceCss).toContain("position: sticky");
   expect(popupHeader).toContain("options/index.html#filename-settings");
   expect(popupHeader).toContain('className="settings-button"');
-  expect(popupFooter).toContain("JELLUVI_PRIVACY_URL");
-  expect(popupFooter).not.toContain("options/index.html#privacy");
+  expect(sourceCss).not.toContain(".popup-footer");
 });

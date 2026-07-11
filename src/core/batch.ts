@@ -84,6 +84,11 @@ interface BatchPlatformConfig {
   readonly platform: BatchPlatform;
 }
 
+export interface SupportedChatPageInfo {
+  readonly label: string;
+  readonly platform: BatchPlatform;
+}
+
 const BATCH_PLATFORM_CONFIGS: readonly BatchPlatformConfig[] = [
   {
     hostnames: ["chatgpt.com", "chat.openai.com"],
@@ -129,6 +134,10 @@ const BATCH_PLATFORM_CONFIGS: readonly BatchPlatformConfig[] = [
   }
 ];
 
+export const SUPPORTED_CHAT_ORIGINS: readonly string[] = [
+  ...new Set(BATCH_PLATFORM_CONFIGS.flatMap((config) => Object.values(config.origins)))
+];
+
 export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly BatchCandidateTab[] {
   return tabs.flatMap((tab) => {
     if (tab.id === undefined || tab.url === undefined) {
@@ -151,6 +160,12 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
       }
     ];
   });
+}
+
+export function getSupportedChatPageInfo(url: string): SupportedChatPageInfo | undefined {
+  const config = detectBatchPlatform(url);
+
+  return config === undefined ? undefined : { label: config.label, platform: config.platform };
 }
 
 export function createBatchRootDirectory(exportedAt: string): string {

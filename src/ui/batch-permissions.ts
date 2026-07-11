@@ -1,4 +1,8 @@
-import { getBatchRequiredOriginsForTabs, type BatchCandidateTab } from "../core/batch";
+import {
+  getBatchRequiredOriginsForTabs,
+  SUPPORTED_CHAT_ORIGINS,
+  type BatchCandidateTab
+} from "../core/batch";
 
 export interface BatchPermissionResult {
   readonly granted: boolean;
@@ -9,12 +13,17 @@ export interface BatchPermissionsApi {
   request(permissions: chrome.permissions.Permissions, callback: (granted: boolean) => void): void;
 }
 
-export async function requestBatchTabsPermission(
+export async function requestBatchDiscoveryPermission(
   permissions: BatchPermissionsApi | undefined = getCurrentPermissionsApi()
 ): Promise<BatchPermissionResult> {
-  return requestPermission(permissions, { permissions: ["tabs"] }, {
-    deniedMessage: "Tabs permission is needed to find already-open AI chat tabs."
-  });
+  return requestPermission(
+    permissions,
+    { origins: [...SUPPORTED_CHAT_ORIGINS] },
+    {
+      deniedMessage:
+        "Site access is needed to find already-open chats on the supported AI services."
+    }
+  );
 }
 
 export async function requestBatchHostPermissions(
@@ -30,9 +39,13 @@ export async function requestBatchHostPermissions(
     };
   }
 
-  return requestPermission(permissions, { origins: [...origins] }, {
-    deniedMessage: `Approve site access for selected AI chat tabs: ${formatOriginList(origins)}.`
-  });
+  return requestPermission(
+    permissions,
+    { origins: [...origins] },
+    {
+      deniedMessage: `Approve site access for selected AI chat tabs: ${formatOriginList(origins)}.`
+    }
+  );
 }
 
 async function requestPermission(

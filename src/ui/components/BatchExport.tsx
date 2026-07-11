@@ -38,15 +38,6 @@ export function BatchExport({
           Find open tabs
         </button>
       </div>
-      <p className="muted">Export already-open AI chat tabs.</p>
-      <details className="inline-details">
-        <summary>Permission details</summary>
-        <p className="muted">
-          Approve tabs permission to list open chats, then approve site access for selected chats.
-          Content is processed locally. Successful exports download as one ZIP; failed tabs are
-          listed in the manifest.
-        </p>
-      </details>
       {candidates.length > 0 ? (
         <div className="button-row">
           <button
@@ -82,10 +73,6 @@ export function BatchExport({
                 <span>
                   <strong>{tab.title}</strong>
                   <span className="muted"> - {formatBatchTabContext(tab, candidates)}</span>
-                  <details className="inline-details">
-                    <summary>Advanced details</summary>
-                    <span className="muted">{formatBatchTabDetail(tab)}</span>
-                  </details>
                 </span>
               </label>
             </li>
@@ -102,9 +89,11 @@ export function BatchExport({
           Export selected to ZIP
         </button>
       </div>
-      <p className="status-text" role="status">
-        {status}
-      </p>
+      {status ? (
+        <p className="status-text" role="status">
+          {status}
+        </p>
+      ) : null}
       {results.length > 0 ? (
         <ul className="batch-result-list" aria-label="Batch export results">
           {results.map((result) => (
@@ -119,10 +108,6 @@ export function BatchExport({
       ) : null}
     </section>
   );
-}
-
-export function formatBatchTabDetail(tab: BatchCandidateTab): string {
-  return `Full URL: ${tab.url || "unknown URL"}; Tab ID: ${tab.id}`;
 }
 
 export function formatBatchTabContext(

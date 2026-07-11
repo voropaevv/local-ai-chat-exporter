@@ -12,7 +12,6 @@ import {
 import {
   formatBatchExportSummary,
   formatBatchTabContext,
-  formatBatchTabDetail,
   formatBatchTabSummary
 } from "../../../src/ui/components/BatchExport";
 
@@ -109,7 +108,7 @@ describe("batch export core helpers", () => {
     ).toBe("chatgpt-api-auth-plan-3");
   });
 
-  test("formats batch tab summary with host only and keeps URL details collapsible", () => {
+  test("formats batch tab summary with host only", () => {
     const tab = {
       id: 9,
       platform: "chatgpt" as const,
@@ -119,9 +118,6 @@ describe("batch export core helpers", () => {
     };
 
     expect(formatBatchTabSummary(tab)).toBe("chatgpt.com");
-    expect(formatBatchTabDetail(tab)).toBe(
-      "Full URL: https://chatgpt.com/c/abc123?model=test; Tab ID: 9"
-    );
   });
 
   test("adds short host and path context only for duplicate titles", () => {

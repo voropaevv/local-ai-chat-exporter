@@ -12,7 +12,10 @@ Export AI chat threads locally. No account, no telemetry, no server upload.
 
 Jelluvi is a free, open-source, local-first browser extension for exporting AI chat conversations to local files.
 
-Supported outputs include Markdown, TXT, JSON, CSV, HTML, PDF, DOCX, local semantic PNG snapshots for moderate selected or range exports, and ZIP bundles with manifests. ChatGPT is the primary supported platform. Secondary provider support is not claimed in Store copy until tests and live QA support it.
+Supported outputs include Markdown, TXT, JSON, CSV, HTML, PDF, DOCX, local semantic PNG snapshots
+for moderate selected or range exports, and ZIP bundles with manifests. ChatGPT support is stable.
+Claude and Gemini are beta visible-message adapters. Perplexity and NotebookLM are experimental,
+and the UI reports capture completeness and provider limitations.
 
 Jelluvi does not include telemetry, analytics, ads, trackers, remote logging, remote rendering, or external export servers. Export actions are initiated by the user and run locally in the browser extension.
 
@@ -20,8 +23,8 @@ Jelluvi does not include telemetry, analytics, ads, trackers, remote logging, re
 
 - Product name: Jelluvi.
 - Icon source: `assets/brand/jelluvi.png`.
-- Primary action color: `#168BFF`.
-- Focus/accent color: `#00C6FF`.
+- Primary action and focus color: accessible deep blue `#005FEF` in light mode.
+- Brand accent color: `#00C6FF`.
 - Light theme uses a white background.
 - Dark theme uses a dark navy or near-black background.
 
@@ -32,6 +35,8 @@ Jelluvi does not include telemetry, analytics, ads, trackers, remote logging, re
 - No telemetry or analytics.
 - No account required.
 - Minimal Manifest V3 permissions.
+- No browsing-history (`tabs`) or downloads permission.
+- Chrome Web Store Limited Use statement in `PRIVACY.md`.
 
 ## Do Not Claim
 

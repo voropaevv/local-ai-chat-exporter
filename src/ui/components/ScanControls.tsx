@@ -1,8 +1,6 @@
-import { ScanLine } from "lucide-preact";
+import { RefreshCw, X } from "lucide-preact";
 
 import type { PopupScanStatus } from "../state/popup-state";
-import { InfoTip } from "./InfoTip";
-
 interface ScanControlsProps {
   readonly canCancelScan: boolean;
   readonly onCancelScan: () => void;
@@ -18,54 +16,62 @@ export function ScanControls({
   progressLabel,
   scanStatus
 }: ScanControlsProps) {
+  if (scanStatus === "idle") {
+    return null;
+  }
+
   const scanning = scanStatus === "scanning";
+  const canRefresh = scanStatus === "scanned" || scanStatus === "error";
 
   return (
-    <section className="concept-panel scan-panel" aria-labelledby="scan-title">
-      <div className="concept-heading">
-        <h2 id="scan-title">Scan conversation</h2>
-        <InfoTip label="Reads the currently open supported chat locally before export." />
+    <section className="snapshot-card" aria-label="Conversation preparation status">
+      <div className="snapshot-card__status">
+        <span
+          aria-hidden="true"
+          className={`snapshot-card__dot snapshot-card__dot--${scanStatus}`}
+        />
+        <strong>{getStatusLabel(scanStatus, progressLabel)}</strong>
       </div>
-      <div className="scan-action-row">
-        <button
-          className="primary-action scan-action"
-          type="button"
-          disabled={scanning}
-          onClick={onScan}
-        >
-          <ScanLine size={22} strokeWidth={2.3} />
-          Scan
-        </button>
+      <div className="snapshot-card__actions">
+        {canRefresh ? (
+          <button className="snapshot-action" type="button" onClick={onScan}>
+            <RefreshCw size={14} strokeWidth={2.3} />
+            {scanStatus === "error" ? "Try again" : "Refresh"}
+          </button>
+        ) : null}
         {canCancelScan ? (
-          <button className="secondary-action" type="button" onClick={onCancelScan}>
+          <button className="snapshot-action" type="button" onClick={onCancelScan}>
+            <X size={14} strokeWidth={2.3} />
             Cancel
           </button>
         ) : null}
       </div>
-      <div
-        aria-busy={scanning}
-        aria-label={progressLabel}
-        className={scanning ? "progress-bar progress-bar--active" : "progress-bar"}
-        role="progressbar"
-      >
-        <span />
-      </div>
-      <p className="scan-status-line">
-        <span aria-hidden="true" />
-        <span>{scanning ? "Scanning" : formatStatus(scanStatus, progressLabel)}</span>
-      </p>
+      {scanning ? (
+        <div
+          aria-busy="true"
+          aria-label={progressLabel}
+          className="progress-bar progress-bar--active"
+          role="progressbar"
+        >
+          <span />
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function formatStatus(scanStatus: PopupScanStatus, progressLabel: string): string {
-  if (scanStatus === "idle") {
-    return "Idle";
+function getStatusLabel(scanStatus: PopupScanStatus, progressLabel: string): string {
+  if (scanStatus === "scanning") {
+    return "Preparing…";
+  }
+
+  if (scanStatus === "exporting") {
+    return "Exporting…";
   }
 
   if (scanStatus === "scanned") {
-    return progressLabel.replace("Ready for Markdown export.", "Ready to export.");
+    return progressLabel;
   }
 
-  return progressLabel;
+  return "Retry";
 }

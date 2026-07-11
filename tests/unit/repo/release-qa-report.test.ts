@@ -13,18 +13,17 @@ describe("release QA report", () => {
     const report = readFileSync(reportPath, "utf8");
 
     for (const expected of [
-      "Release QA - Jelluvi 0.1.0",
-      "No P0/P1 bugs open",
-      "Static checks",
-      "Brave manual QA",
-      "Temporary Brave profile",
-      "Live provider manual QA not completed",
-      "Forbidden raw data export search",
+      "Release QA — Jelluvi 0.1.0",
+      "No known P0/P1 failures",
+      "Verified checks",
+      "Live provider toolbar matrix",
+      "Manual release matrix",
       "scripts/check-export-output-hygiene.mjs",
-      "Release ZIP production-file proof",
-      "Chrome Web Store submission checklist",
-      "Product claims match implemented functionality",
-      "Bug list"
+      "Release package",
+      "Chrome Web Store checklist",
+      "Product and Store package",
+      "real UI screenshots",
+      "Go/no-go"
     ]) {
       expect(report).toContain(expected);
     }

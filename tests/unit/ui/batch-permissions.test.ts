@@ -2,10 +2,11 @@ import { describe, expect, test, vi } from "vitest";
 
 import { getBatchCandidateTabs } from "../../../src/core/batch";
 import {
+  requestBatchDiscoveryPermission,
   requestBatchHostPermissions,
-  requestBatchTabsPermission,
   type BatchPermissionsApi
 } from "../../../src/ui/batch-permissions";
+import { SUPPORTED_CHAT_ORIGINS } from "../../../src/core/batch";
 
 function makePermissionsApi(granted: boolean): BatchPermissionsApi & {
   readonly request: ReturnType<typeof vi.fn>;
@@ -18,22 +19,22 @@ function makePermissionsApi(granted: boolean): BatchPermissionsApi & {
 }
 
 describe("batch permission prompts", () => {
-  test("requests tabs permission from the popup user gesture flow", async () => {
+  test("requests supported-site access from the user gesture flow", async () => {
     const permissions = makePermissionsApi(true);
 
-    await expect(requestBatchTabsPermission(permissions)).resolves.toEqual({ granted: true });
+    await expect(requestBatchDiscoveryPermission(permissions)).resolves.toEqual({ granted: true });
     expect(permissions.request).toHaveBeenCalledWith(
-      { permissions: ["tabs"] },
+      { origins: [...SUPPORTED_CHAT_ORIGINS] },
       expect.any(Function)
     );
   });
 
-  test("explains tabs permission denial without implying broad access", async () => {
+  test("explains supported-site access denial without asking for browsing history", async () => {
     const permissions = makePermissionsApi(false);
 
-    await expect(requestBatchTabsPermission(permissions)).resolves.toEqual({
+    await expect(requestBatchDiscoveryPermission(permissions)).resolves.toEqual({
       granted: false,
-      message: "Tabs permission is needed to find already-open AI chat tabs."
+      message: "Site access is needed to find already-open chats on the supported AI services."
     });
   });
 
@@ -56,9 +57,7 @@ describe("batch permission prompts", () => {
 
   test("returns a user-readable denial message when host access is rejected", async () => {
     const permissions = makePermissionsApi(false);
-    const tabs = getBatchCandidateTabs([
-      { id: 1, title: "One", url: "https://chatgpt.com/c/one" }
-    ]);
+    const tabs = getBatchCandidateTabs([{ id: 1, title: "One", url: "https://chatgpt.com/c/one" }]);
 
     await expect(requestBatchHostPermissions(tabs, permissions)).resolves.toEqual({
       granted: false,

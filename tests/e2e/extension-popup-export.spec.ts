@@ -5,34 +5,37 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import { readFixture } from "../helpers/fixtures";
-import { startFixtureServer } from "../helpers/local-server";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 const extensionPath = resolve(projectRoot, "dist");
 
-test("extension popup scans a ChatGPT fixture and downloads markdown", async () => {
+test("extension popup automatically prepares a ChatGPT fixture and downloads markdown", async () => {
   test.skip(
     !existsSync(resolve(extensionPath, "manifest.json")),
     "Run pnpm build before extension e2e."
   );
 
-  const server = await startFixtureServer({
-    "/chatgpt": readFixture("chatgpt", "simple-conversation.html")
-  });
   const userDataDir = await mkdtemp(resolve(tmpdir(), "jelluvi-"));
   let context: BrowserContext | undefined;
 
   try {
     context = await launchExtensionContext(userDataDir);
     const fixturePage = await context.newPage();
-    await fixturePage.goto(server.url("/chatgpt"));
+    await fixturePage.route("https://chatgpt.com/**", async (route) => {
+      await route.fulfill({
+        body: readFixture("chatgpt", "simple-conversation.html"),
+        contentType: "text/html",
+        status: 200
+      });
+    });
+    await fixturePage.goto("https://chatgpt.com/c/jelluvi-e2e");
 
     const popup = await openExtensionPopup(context, fixturePage);
-    await popup.getByRole("button", { name: "Scan" }).click();
-    await expect(popup.getByText("Scanned 2 messages. Ready for Markdown export.")).toBeVisible();
+    await expect(popup.getByText("ChatGPT", { exact: true })).toBeVisible();
+    await expect(popup.getByRole("button", { name: "Scan" })).toHaveCount(0);
 
     const downloadPromise = fixturePage.waitForEvent("download");
-    await popup.getByRole("button", { name: "Download Markdown" }).click();
+    await popup.getByRole("button", { name: "Export", exact: true }).click();
     const download = await downloadPromise;
     const downloadedPath = await download.path();
 
@@ -42,6 +45,7 @@ test("extension popup scans a ChatGPT fixture and downloads markdown", async () 
     const markdown = await readFile(downloadedPath ?? "", "utf8");
     expect(markdown).toContain("Hello, can you summarize this?");
     expect(markdown).toContain("Sure. Here is a concise summary.");
+    await expect(popup.getByText(/2 messages/u)).toBeVisible();
   } catch (error) {
     if (isLocalBrowserUnavailable(error)) {
       test.skip(true, `Chromium extension e2e unavailable in this environment: ${String(error)}`);
@@ -50,7 +54,6 @@ test("extension popup scans a ChatGPT fixture and downloads markdown", async () 
     throw error;
   } finally {
     await context?.close();
-    await server.close();
     await rm(userDataDir, { force: true, recursive: true });
   }
 });

@@ -63,6 +63,7 @@ export interface ContentRequestHandlerDependencies {
     files: readonly RenderedFile<RenderedBytes>[]
   ) => Promise<DownloadResult>;
   readonly getCurrentUrl: () => string;
+  readonly observeConversationChanges?: (onChange: () => void) => () => void;
   readonly renderConversationFiles: (
     conversation: ConversationExport,
     options?: Partial<ExportOptions>
@@ -79,6 +80,8 @@ export function createContentRequestHandler(
   let cachedConversation: ConversationExport | undefined;
   let cachedSourceUrl: string | undefined;
   let cachedScanId: string | undefined;
+  let cachedConversationDirty = false;
+  let stopObservingConversationChanges: (() => void) | undefined;
   let scanSequence = 0;
   let selectionOverlay: SelectionOverlayController | undefined;
   let activeSelection: MessageSelection = { fingerprints: [], ids: [] };
@@ -107,7 +110,7 @@ export function createContentRequestHandler(
       return { reason: "missing", status: "missing" };
     }
 
-    if (cachedSourceUrl !== dependencies.getCurrentUrl()) {
+    if (cachedConversationDirty || cachedSourceUrl !== dependencies.getCurrentUrl()) {
       return { reason: "stale", status: "missing" };
     }
 
@@ -120,6 +123,9 @@ export function createContentRequestHandler(
 
   async function handleContentScanRequest(): Promise<ScanSummary> {
     activeScanController?.abort();
+    stopObservingConversationChanges?.();
+    stopObservingConversationChanges = undefined;
+    cachedConversationDirty = true;
     activeScanController = new AbortController();
 
     try {
@@ -131,7 +137,11 @@ export function createContentRequestHandler(
       cachedConversation = conversation;
       cachedSourceUrl = conversation.sourceUrl;
       cachedScanId = scanId;
+      cachedConversationDirty = false;
       scanSequence += 1;
+      stopObservingConversationChanges = dependencies.observeConversationChanges?.(() => {
+        cachedConversationDirty = true;
+      });
 
       return summarizeConversation(applyActiveSelection(conversation), scanId);
     } finally {
@@ -143,9 +153,7 @@ export function createContentRequestHandler(
     const cached = getValidCachedConversation();
 
     if (cached.status !== "ready") {
-      return cached.reason === "stale"
-        ? { hasCache: false, reason: "stale" }
-        : { hasCache: false };
+      return cached.reason === "stale" ? { hasCache: false, reason: "stale" } : { hasCache: false };
     }
 
     return {
@@ -180,18 +188,20 @@ export function createContentRequestHandler(
   async function handleContentExportRequest(
     request: ContentExportRequest
   ): Promise<ContentExportSuccess> {
-    if (cachedConversation === undefined || cachedSourceUrl === undefined) {
-      throw new ExportPipelineError("scan_required", "Scan the conversation before exporting.");
+    const cached = getValidCachedConversation();
+
+    if (cached.status !== "ready") {
+      if (cached.reason === "stale") {
+        throw new ExportPipelineError(
+          "scan_stale",
+          "The conversation changed. Refresh it before exporting."
+        );
+      }
+
+      throw new ExportPipelineError("scan_required", "Prepare the conversation before exporting.");
     }
 
-    if (cachedSourceUrl !== dependencies.getCurrentUrl()) {
-      throw new ExportPipelineError(
-        "scan_stale",
-        "The conversation changed. Rescan before exporting."
-      );
-    }
-
-    const selectedConversation = applyActiveSelection(cachedConversation);
+    const selectedConversation = applyActiveSelection(cached.conversation);
     const exportedMessageCount = getExportedMessageCount(selectedConversation, request.options);
 
     if (request.options.scope === "selected" && exportedMessageCount === 0) {
@@ -228,14 +238,16 @@ export function createContentRequestHandler(
       ...(request.delivery === "return_files" ? { files } : {}),
       messageCount: exportedMessageCount,
       warnings: [
-        ...cachedConversation.completeness.warnings,
-        ...cachedConversation.completeness.platformWarnings,
+        ...cached.conversation.completeness.warnings,
+        ...cached.conversation.completeness.platformWarnings,
         ...(clipboardError !== undefined ? [clipboardError.message] : [])
       ]
     };
   }
 
-  return async function handleContentRequest(request: ContentRequest): Promise<ContentRequestResult> {
+  return async function handleContentRequest(
+    request: ContentRequest
+  ): Promise<ContentRequestResult> {
     if (request.type === CONTENT_SCAN_MESSAGE) {
       return handleContentScanRequest();
     }

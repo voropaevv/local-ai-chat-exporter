@@ -23,20 +23,22 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
     "utf8"
   );
 
-  expect(manifest.optional_permissions).toContain("tabs");
+  expect(manifest.optional_permissions).toBeUndefined();
   expect(manifest.permissions).not.toContain("tabs");
+  expect(manifest.permissions).not.toContain("downloads");
   expect(JSON.stringify(manifest)).not.toContain("all_urls");
   expect(batchSource).not.toContain("chrome.permissions.request");
   expect(permissionSource).toContain("return chrome.permissions");
   expect(permissionSource).toContain("permissions.request(request, resolve)");
-  expect(permissionSource).toContain('permissions: ["tabs"]');
+  expect(permissionSource).toContain("SUPPORTED_CHAT_ORIGINS");
+  expect(permissionSource).not.toContain('permissions: ["tabs"]');
   expect(batchSource).not.toContain('permissions: ["downloads"]');
   expect(batchSource).not.toContain("Downloads permission is required");
   expect(batchSource).not.toContain("setInterval");
   expect(batchSource).not.toContain("chrome.history");
-  expect(popupSource).not.toContain("requestBatchTabsPermission");
+  expect(popupSource).not.toContain("requestBatchDiscoveryPermission");
   expect(popupSource).not.toContain("requestBatchHostPermissions");
-  expect(optionsSource).toContain("requestBatchTabsPermission");
+  expect(optionsSource).toContain("requestBatchDiscoveryPermission");
   expect(optionsSource).toContain("requestBatchHostPermissions");
   expect(batchUiSource).toContain("Find open tabs");
   expect(batchUiSource).toContain("Select all");

@@ -23,6 +23,7 @@ import {
   POPUP_SCAN_MESSAGE,
   POPUP_START_SELECTION_MESSAGE,
   PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
+  PREVIEW_RETURN_TO_SOURCE_MESSAGE,
   type ActiveTabInfoResult,
   type CachedConversationResult,
   type ContentClearSelectionRequest,
@@ -47,13 +48,14 @@ import {
   type PopupScanRequest,
   type PopupStartSelectionRequest,
   type PreviewGetCachedConversationRequest,
+  type PreviewReturnToSourceRequest,
   type PreviewOpenSuccess,
   type RuntimeResponse,
   type ScanCacheSummaryResult,
   type ScanSummary
 } from "../../src/core/messages";
+import { getSupportedChatPageInfo } from "../../src/core/batch";
 import { buildPreviewPageUrl } from "../../src/ui/preview-url";
-import { downloadRenderedFiles } from "../../src/utils/download";
 import { ensureContentScript } from "../../src/utils/content-script";
 import { handlePopupBatchExportRequest, handlePopupBatchListRequest } from "./batch";
 
@@ -87,6 +89,7 @@ async function handlePopupRequest(
     | PopupGetCachedConversationRequest
     | PopupOpenPreviewRequest
     | PreviewGetCachedConversationRequest
+    | PreviewReturnToSourceRequest
 ): Promise<
   | ScanSummary
   | ActiveTabInfoResult
@@ -134,6 +137,11 @@ async function handlePopupRequest(
     return handlePreviewGetCachedConversationRequest(request);
   }
 
+  if (request.type === PREVIEW_RETURN_TO_SOURCE_MESSAGE) {
+    await chrome.tabs.update(request.sourceTabId, { active: true });
+    return { cancelled: true };
+  }
+
   if (request.type === POPUP_BATCH_LIST_MESSAGE) {
     return handlePopupBatchListRequest();
   }
@@ -147,9 +155,13 @@ async function handlePopupRequest(
 
 async function handlePopupGetActiveTabInfoRequest(): Promise<ActiveTabInfoResult> {
   const tab = await getActiveTab();
+  const sourceUrl = typeof tab.url === "string" && tab.url.length > 0 ? tab.url : undefined;
+  const supportedPage = sourceUrl === undefined ? undefined : getSupportedChatPageInfo(sourceUrl);
 
   return {
-    ...(typeof tab.url === "string" && tab.url.length > 0 ? { sourceUrl: tab.url } : {}),
+    ...(supportedPage !== undefined ? { platformLabel: supportedPage.label } : {}),
+    ...(sourceUrl !== undefined ? { sourceUrl } : {}),
+    supported: supportedPage !== undefined,
     ...(typeof tab.title === "string" && tab.title.length > 0 ? { title: tab.title } : {})
   };
 }
@@ -220,7 +232,7 @@ async function handlePopupOpenPreviewRequest(): Promise<PreviewOpenSuccess> {
   } satisfies ContentGetScanCacheSummaryRequest);
 
   if (!response.ok) {
-    throw new ExportPipelineError("scan_required", "Scan the conversation before exporting.");
+    throw new ExportPipelineError("scan_required", "Prepare the conversation before exporting.");
   }
 
   const cacheSummary = response.value;
@@ -229,8 +241,8 @@ async function handlePopupOpenPreviewRequest(): Promise<PreviewOpenSuccess> {
     throw new ExportPipelineError(
       cacheSummary.reason === "stale" ? "scan_stale" : "scan_required",
       cacheSummary.reason === "stale"
-        ? "The conversation changed. Rescan before exporting."
-        : "Scan the conversation before exporting."
+        ? "The conversation changed. Refresh it before previewing."
+        : "Prepare the conversation before previewing."
     );
   }
 
@@ -292,10 +304,9 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
   await ensureContentScript(tabId);
 
   const shouldDownload = request.download ?? true;
-  const useDownloadsApi = await canUseDownloadsPermission();
   const contentResponse = await sendContentMessage<ContentExportSuccess>(tabId, {
     copyToClipboard: request.copyToClipboard ?? true,
-    delivery: useDownloadsApi || request.returnFiles ? "return_files" : "anchor",
+    delivery: request.returnFiles ? "return_files" : "anchor",
     download: shouldDownload,
     options: request.options ?? DEFAULT_EXPORT_OPTIONS,
     type: CONTENT_EXPORT_MESSAGE
@@ -305,26 +316,9 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
     throw new ExportPipelineError(contentResponse.error.code, contentResponse.error.message);
   }
 
-  if (!useDownloadsApi || !shouldDownload) {
-    return {
-      clipboardError: contentResponse.value.clipboardError,
-      downloaded: contentResponse.value.downloaded,
-      exportedMessageCount: contentResponse.value.exportedMessageCount,
-      ...(request.returnFiles ? { files: contentResponse.value.files } : {}),
-      messageCount: contentResponse.value.messageCount,
-      warnings: contentResponse.value.warnings
-    };
-  }
-
-  const files = contentResponse.value.files ?? [];
-  const downloadResult = await downloadRenderedFiles(files, {
-    chrome,
-    preferChromeDownloads: true
-  });
-
   return {
     clipboardError: contentResponse.value.clipboardError,
-    downloaded: downloadResult.downloaded,
+    downloaded: contentResponse.value.downloaded,
     exportedMessageCount: contentResponse.value.exportedMessageCount,
     ...(request.returnFiles ? { files: contentResponse.value.files } : {}),
     messageCount: contentResponse.value.messageCount,
@@ -349,16 +343,6 @@ function requireTabId(tab: chrome.tabs.Tab): number {
   }
 
   return tab.id;
-}
-
-async function canUseDownloadsPermission(): Promise<boolean> {
-  return new Promise((resolve) => {
-    try {
-      chrome.permissions.contains({ permissions: ["downloads"] }, resolve);
-    } catch {
-      resolve(false);
-    }
-  });
 }
 
 async function sendContentMessage<T>(
@@ -397,7 +381,8 @@ function isPopupRequest(
   | PopupGetScanCacheSummaryRequest
   | PopupGetCachedConversationRequest
   | PopupOpenPreviewRequest
-  | PreviewGetCachedConversationRequest {
+  | PreviewGetCachedConversationRequest
+  | PreviewReturnToSourceRequest {
   return (
     isRecord(message) &&
     (message.type === POPUP_SCAN_MESSAGE ||
@@ -408,6 +393,7 @@ function isPopupRequest(
       message.type === POPUP_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === POPUP_OPEN_PREVIEW_MESSAGE ||
       message.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE ||
+      message.type === PREVIEW_RETURN_TO_SOURCE_MESSAGE ||
       message.type === POPUP_BATCH_LIST_MESSAGE ||
       message.type === POPUP_BATCH_EXPORT_MESSAGE ||
       message.type === POPUP_START_SELECTION_MESSAGE ||

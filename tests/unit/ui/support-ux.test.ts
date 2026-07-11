@@ -9,35 +9,24 @@ function readSource(path: string): string {
 }
 
 describe("support UX source", () => {
-  test("keeps donation links visible without ads, telemetry, lockouts, or nags", () => {
+  test("keeps support links available without interrupting successful exports", () => {
     const supportSource = readSource("src/ui/support-links.ts");
-    const promptSource = readSource("src/ui/components/SupportPrompt.tsx");
     const popupSource = readSource("src/ui/PopupApp.tsx");
     const optionsSource = readSource("src/ui/OptionsApp.tsx");
-    const footerSource = readSource("src/ui/components/PopupFooter.tsx");
 
     expect(supportSource).toContain("GitHub Sponsors");
     expect(supportSource).toContain("https://github.com/voropaevv/local-ai-chat-exporter");
     expect(supportSource).toContain("blob/main/PRIVACY.md");
-    expect(supportSource).toContain("Jelluvi keeps exports local");
-    expect(supportSource).toContain("No server uploads");
     expect(supportSource).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|analytics/u);
 
-    expect(promptSource).toContain("Support Jelluvi");
-    expect(promptSource).toContain("SUPPORT_TAGLINE");
-    expect(promptSource).toContain("Dismiss support prompt");
-    expect(promptSource).not.toMatch(/localStorage|chrome\.storage|setInterval|setTimeout/u);
-
-    expect(popupSource).toContain("showSupportPrompt");
-    expect(popupSource).toContain("supportPromptDismissed");
-    expect(popupSource).toContain("<SupportPrompt");
-    expect(popupSource).toContain("setShowSupportPrompt(true)");
+    expect(popupSource).not.toContain("SupportPrompt");
+    expect(popupSource).not.toContain("maybeShowSupportPrompt");
     expect(popupSource).not.toMatch(/paywall|lockout|nag|advertisement/u);
 
     expect(optionsSource).toContain("Support");
     expect(optionsSource).toContain("GitHub Sponsors");
     expect(optionsSource).toContain("Privacy Policy");
     expect(optionsSource).toContain("Send Feedback");
-    expect(footerSource).toContain("Sponsors");
+    expect(popupSource).not.toContain("Sponsors");
   });
 });

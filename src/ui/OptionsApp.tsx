@@ -1,14 +1,12 @@
 import {
-  ArrowLeft,
-  Database,
-  Download,
+  Braces,
   FileArchive,
+  FileCode,
   FileJson,
   FileText,
-  Globe2,
+  FileType,
   Heart,
   HelpCircle,
-  LockKeyhole,
   Mail,
   Moon,
   Monitor,
@@ -37,10 +35,9 @@ import {
 import type { ExportFormat } from "../core/schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 import { downloadRenderedFiles } from "../utils/download";
-import { requestBatchHostPermissions, requestBatchTabsPermission } from "./batch-permissions";
+import { requestBatchDiscoveryPermission, requestBatchHostPermissions } from "./batch-permissions";
 import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
 import { BrandIcon } from "./components/BrandIcon";
-import { InfoTip } from "./components/InfoTip";
 import {
   DEFAULT_EXPORT_SETTINGS,
   normalizeExportSettings,
@@ -67,16 +64,24 @@ import {
   type ThemePreference
 } from "./theme-preference";
 
-const QUICK_FORMATS = [
+const DEFAULT_FORMATS = [
   "md",
   "pdf",
   "json",
-  "txt"
+  "txt",
+  "html",
+  "docx",
+  "csv",
+  "png"
 ] as const satisfies readonly StoredPopupFileFormat[];
 const FORMAT_ICONS = {
+  csv: Braces,
+  docx: FileText,
+  html: FileCode,
   json: FileJson,
   md: FileText,
   pdf: FileText,
+  png: FileType,
   txt: FileText
 } as const;
 const FILENAME_PATTERN_PRESETS = [
@@ -108,10 +113,10 @@ export function OptionsApp() {
   const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
   const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
-  const [batchStatus, setBatchStatus] = useState("Batch export is idle.");
-  const [filenameSaveStatus, setFilenameSaveStatus] = useState("Saved locally.");
+  const [batchStatus, setBatchStatus] = useState("");
+  const [filenameSaveStatus, setFilenameSaveStatus] = useState("");
   const [redaction, setRedaction] = useState<RedactionSettings>(DEFAULT_REDACTION_SETTINGS);
-  const [redactionSaveStatus, setRedactionSaveStatus] = useState("Saved locally.");
+  const [redactionSaveStatus, setRedactionSaveStatus] = useState("");
   const [themePreference, setThemePreference] = useState<ThemePreference>(readThemePreference);
 
   useEffect(() => {
@@ -144,20 +149,20 @@ export function OptionsApp() {
   function updateExportSettings(next: Partial<ExportSettings>) {
     const normalized = normalizeExportSettings({ ...exportSettings, ...next });
     setExportSettings(normalized);
-    setFilenameSaveStatus("Saving locally...");
+    setFilenameSaveStatus("");
 
     writeStoredExportSettings(normalized)
-      .then(() => setFilenameSaveStatus("Saved locally."))
+      .then(() => setFilenameSaveStatus(""))
       .catch(() => setFilenameSaveStatus("Could not save settings in this context."));
   }
 
   function updateRedaction(next: RedactionSettings) {
     const normalized = normalizeRedactionSettings(next);
     setRedaction(normalized);
-    setRedactionSaveStatus("Saving locally...");
+    setRedactionSaveStatus("");
 
     writeStoredRedactionSettings(normalized)
-      .then(() => setRedactionSaveStatus("Saved locally."))
+      .then(() => setRedactionSaveStatus(""))
       .catch(() => setRedactionSaveStatus("Could not save settings in this context."));
   }
 
@@ -183,12 +188,12 @@ export function OptionsApp() {
   }
 
   async function handleLoadBatchCandidates() {
-    const permission = await requestBatchTabsPermission();
+    const permission = await requestBatchDiscoveryPermission();
 
     setBatchResults([]);
 
     if (!permission.granted) {
-      setBatchStatus(permission.message ?? "Tabs permission was not granted.");
+      setBatchStatus(permission.message ?? "Site access was not granted.");
       return;
     }
 
@@ -321,9 +326,6 @@ export function OptionsApp() {
   return (
     <main className="app-shell app-shell--options">
       <header className="settings-header">
-        <button className="icon-button" onClick={closeSettings} type="button" aria-label="Back">
-          <ArrowLeft size={22} strokeWidth={2.2} />
-        </button>
         <BrandIcon />
         <h1>Settings</h1>
         <button className="icon-button" onClick={closeSettings} type="button" aria-label="Close">
@@ -345,7 +347,7 @@ export function OptionsApp() {
 
       <SettingsCard icon={FileText} title="Default export formats">
         <div className="settings-format-row" role="group" aria-label="Default export formats">
-          {QUICK_FORMATS.map((format) => (
+          {DEFAULT_FORMATS.map((format) => (
             <FormatSettingButton
               active={isFormatActive(exportSettings, format)}
               format={format}
@@ -422,24 +424,11 @@ export function OptionsApp() {
             />
           </label>
         ) : null}
-        <p className="status-text" role="status">
-          {redactionSaveStatus}
-        </p>
-      </SettingsCard>
-
-      <SettingsCard icon={Database} title="Local library">
-        <div className="settings-inline-copy">
-          <p>Save exports to your device for quick access.</p>
-          <span className="ready-pill">Opt-in</span>
-        </div>
-      </SettingsCard>
-
-      <SettingsCard icon={LockKeyhole} title="Permissions">
-        <div className="permission-chip-row">
-          <PermissionChip icon={Globe2} label="Read pages" />
-          <PermissionChip icon={Database} label="Storage" />
-          <PermissionChip icon={Download} label="Downloads" />
-        </div>
+        {redactionSaveStatus ? (
+          <p className="status-text" role="status">
+            {redactionSaveStatus}
+          </p>
+        ) : null}
       </SettingsCard>
 
       <SettingsCard icon={Heart} title="Support">
@@ -458,11 +447,6 @@ export function OptionsApp() {
           </a>
         </div>
       </SettingsCard>
-
-      <footer className="settings-version">
-        <span>Jelluvi</span>
-        <span>v0.1.0</span>
-      </footer>
     </main>
   );
 }
@@ -481,7 +465,6 @@ function SettingsCard({ children, icon: Icon, title }: SettingsCardProps) {
           <Icon size={21} strokeWidth={2.2} />
         </span>
         <h2 id={`${slugify(title)}-title`}>{title}</h2>
-        <InfoTip label={getSettingsTooltip(title)} />
       </div>
       <div className="settings-card__control">{children}</div>
     </section>
@@ -544,9 +527,11 @@ function FilenamePatternControl({ onChange, saveStatus, value }: FilenamePattern
       <p className="status-text" role="status">
         <strong>Preview:</strong> {preview}
       </p>
-      <p className="status-text" role="status">
-        {saveStatus}
-      </p>
+      {saveStatus ? (
+        <p className="status-text" role="status">
+          {saveStatus}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -590,7 +575,7 @@ function SegmentedButtons<T extends string>({ items, onChange, value }: Segmente
 
 interface FormatSettingButtonProps {
   readonly active: boolean;
-  readonly format: (typeof QUICK_FORMATS)[number];
+  readonly format: (typeof DEFAULT_FORMATS)[number];
   readonly onClick: () => void;
 }
 
@@ -609,21 +594,6 @@ function FormatSettingButton({ active, format, onClick }: FormatSettingButtonPro
       <Icon size={18} strokeWidth={2.2} />
       <span>{format.toUpperCase()}</span>
     </button>
-  );
-}
-
-interface PermissionChipProps {
-  readonly icon: LucideIcon;
-  readonly label: string;
-}
-
-function PermissionChip({ icon: Icon, label }: PermissionChipProps) {
-  return (
-    <div className="permission-chip">
-      <Icon size={18} strokeWidth={2.2} />
-      <span>{label}</span>
-      <strong>Allowed</strong>
-    </div>
   );
 }
 
@@ -695,25 +665,4 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function getSettingsTooltip(title: string): string {
-  switch (title) {
-    case "Theme":
-      return "Use system colors or force light or dark mode.";
-    case "Default export formats":
-      return "Choose which formats are selected by default.";
-    case "Filename pattern":
-      return "Choose how downloaded files are named.";
-    case "Privacy / redaction preset":
-      return "Control local redaction before export.";
-    case "Local library":
-      return "Save exports on this device only.";
-    case "Permissions":
-      return "Shows the local browser permissions used by the extension.";
-    case "Support":
-      return "Project links and support options.";
-    default:
-      return title;
-  }
 }

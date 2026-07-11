@@ -9,26 +9,26 @@ function readSource(path: string): string {
 }
 
 describe("popup simple and advanced UX source", () => {
-  test("keeps the primary popup simple and removes heavy advanced controls", () => {
+  test("keeps the primary popup simple while restoring advanced controls progressively", () => {
     const source = readSource("src/ui/PopupApp.tsx");
 
     expect(source).toContain("<PageStatusCard");
     expect(source).toContain("<PopupExportPanel");
-    expect(source).toContain("<PrivacyTrustStrip");
-    expect(source).not.toContain('<details className="advanced-drawer">');
-    expect(source).not.toContain("<summary>Advanced options</summary>");
-    expect(source).not.toContain("showAdvancedDetails");
-    expect(source).not.toContain("<ExportOptionsForm");
+    expect(source).toContain('className="advanced-drawer"');
+    expect(source).toContain("Options");
+    expect(source).toContain("<AdvancedExportOptions");
     expect(source).not.toContain("<BatchExport");
-    expect(source).not.toContain("<LocalLibraryPanel");
+    expect(source).toContain("<LocalLibraryPanel");
     expect(source).not.toContain("<PreviewPanel");
     expect(source).not.toContain("PopupMode");
+    expect(source).not.toContain("PrivacyTrustStrip");
+    expect(source).not.toContain("PopupFooter");
+    expect(source).not.toContain("CompletenessReport");
     expect(source).not.toContain('aria-label="Popup mode"');
   });
 
-  test("primary popup exposes quick export actions without PDF, batch, or advanced controls", () => {
+  test("primary popup exposes one-click actions and all supported local formats", () => {
     const quickActionSource = readSource("src/ui/components/PopupExportPanel.tsx");
-    const actionSource = readSource("src/ui/components/ActionBar.tsx");
     const popupSource = readSource("src/ui/PopupApp.tsx");
     const previewSource = readSource("src/ui/PreviewApp.tsx");
 
@@ -36,12 +36,15 @@ describe("popup simple and advanced UX source", () => {
     expect(quickActionSource).toContain("Copy MD");
     expect(quickActionSource).toContain("Preview");
     expect(quickActionSource).toContain("ZIP");
+    expect(quickActionSource).toContain("<span>Export</span>");
+    expect(quickActionSource).toContain('["html", "docx", "csv", "png"]');
     expect(quickActionSource).not.toContain("Open PDF");
     expect(quickActionSource).not.toContain("<BatchExport");
-    expect(actionSource).toContain("Open PDF");
     expect(popupSource).not.toContain("PDF generation fell back to PDF-ready HTML");
-    expect(popupSource).not.toContain("buildGetCachedConversationRequest");
-    expect(popupSource).not.toContain("Advanced options");
+    expect(popupSource).toContain("buildGetCachedConversationRequest");
+    expect(popupSource).toContain("ensureFreshConversation");
+    expect(popupSource).toContain("Options");
+    expect(previewSource).toContain("Open PDF");
     expect(previewSource).toContain("PDF generation fell back to PDF-ready HTML");
   });
 
@@ -56,31 +59,26 @@ describe("popup simple and advanced UX source", () => {
     expect(styles).toContain("grid-template-columns: 32px minmax(0, 1fr) auto;");
     expect(styles).toContain("width: 32px;");
     expect(styles).toContain("height: 32px;");
-    expect(styles).toContain("grid-column: span 2;");
     expect(styles).not.toContain(
       ".app-shell--popup :is(.concept-panel, .page-status-card, .trust-strip)"
     );
-    expect(styles).toContain(".app-shell--popup .scan-action");
+    expect(styles).toContain(".snapshot-card");
+    expect(styles).toContain(".export-primary-action");
     expect(styles).toContain("min-height: 46px;");
     expect(styles).toContain(".app-shell--popup .format-button");
-    expect(styles).toContain("min-height: 32px;");
+    expect(styles).toContain("min-height: 36px;");
     expect(styles).toContain(".app-shell--popup .concept-action");
     expect(styles).toContain("min-height: 40px;");
-    expect(styles).toContain(".app-shell--popup .info-dot");
-    expect(styles).toContain("width: 12px;");
-    expect(styles).toContain("font-size: 7px;");
-    expect(styles).toContain("aspect-ratio: 1;");
-    expect(styles).toContain("flex: 0 0 auto;");
-    expect(styles).toContain(".trust-strip__item span");
+    expect(styles).not.toContain(".app-shell--popup .info-dot");
+    expect(styles).not.toContain(".trust-strip__item");
+    expect(styles).not.toContain(".popup-footer");
     expect(styles).toContain("text-overflow: ellipsis;");
-    expect(styles).toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
-    expect(styles).not.toContain(".trust-strip__item--private");
-    expect(styles).not.toContain(".advanced-drawer");
+    expect(styles).toContain(".advanced-drawer");
+    expect(styles).toContain(".advanced-options-stack");
     expect(styles).toContain(".format-rail");
     expect(styles).toContain(".output-action-grid");
     expect(styles).toContain(".concept-action span");
     expect(styles).toContain("white-space: nowrap;");
-    expect(styles).toContain("-webkit-line-clamp: 2;");
     expect(styles).toContain("min-width: 0;");
     expect(styles).not.toContain(".popup-mode-toggle");
     expect(styles).not.toContain(".simple-action-grid");

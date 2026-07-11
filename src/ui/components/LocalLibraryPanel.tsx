@@ -28,9 +28,11 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
     Readonly<Record<string, LocalLibraryExportFormat>>
   >({});
   const [projectLabel, setProjectLabel] = useState("");
+  const [pendingDeleteAll, setPendingDeleteAll] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<readonly LocalLibraryRecord[]>([]);
-  const [status, setStatus] = useState("Library mode is off until you save a scanned chat.");
+  const [status, setStatus] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const visibleRecords = useMemo(
     () => filterLocalLibraryRecords(records, { query }),
@@ -51,13 +53,13 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
 
   async function handleSave() {
     setBusy(true);
-    setStatus("Saving scanned chat to local library...");
+    setStatus("Saving prepared chat to local library...");
 
     try {
       const conversation = await loadCurrentConversation();
 
       if (conversation === undefined) {
-        setStatus("Scan a conversation before saving it to the local library.");
+        setStatus("Prepare a conversation before saving it to the local library.");
         return;
       }
 
@@ -81,6 +83,7 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
     try {
       await deleteLocalLibraryRecord(recordId);
       await refreshRecords();
+      setPendingDeleteId(undefined);
       setStatus("Deleted local library record.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Delete failed.");
@@ -95,6 +98,7 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
     try {
       await clearLocalLibraryRecords();
       await refreshRecords();
+      setPendingDeleteAll(false);
       setStatus("Deleted all local library records.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Delete all failed.");
@@ -134,19 +138,13 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
     <section className="panel" aria-labelledby="local-library-title">
       <div className="section-heading">
         <h2 id="local-library-title">Local Library</h2>
-        <span className="status-chip">opt-in</span>
       </div>
-      <p className="muted">
-        Save full conversation content locally in this browser's IndexedDB only when you click Save
-        to local library. No cloud sync is used. Large archives count against browser storage
-        limits; export a backup before clearing records.
-      </p>
       <div className="stacked-fields">
         <label className="field-row">
           Project/folder
           <input
             onInput={(event) => setProjectLabel((event.currentTarget as HTMLInputElement).value)}
-            placeholder="Research, work, personal..."
+            placeholder="Optional"
             type="text"
             value={projectLabel}
           />
@@ -155,20 +153,20 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
           Tags
           <input
             onInput={(event) => setTagsInput((event.currentTarget as HTMLInputElement).value)}
-            placeholder="tag1, tag2"
+            placeholder="Comma-separated"
             type="text"
             value={tagsInput}
           />
         </label>
       </div>
-      <div className="button-row">
+      <div className="button-row library-primary-actions">
         <button
           className="secondary-action"
           disabled={busy || !canSave}
           onClick={handleSave}
           type="button"
         >
-          Save to local library
+          Save
         </button>
         <button
           className="secondary-action compact-action"
@@ -178,27 +176,57 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
         >
           Export all
         </button>
-        <button
-          className="secondary-action compact-action"
-          disabled={busy || records.length === 0}
-          onClick={handleDeleteAll}
-          type="button"
-        >
-          Delete all
-        </button>
+        {!pendingDeleteAll ? (
+          <button
+            className="secondary-action compact-action"
+            disabled={busy || records.length === 0}
+            onClick={() => setPendingDeleteAll(true)}
+            type="button"
+          >
+            Delete all
+          </button>
+        ) : null}
       </div>
-      <label className="field-row">
-        Search library
-        <input
-          onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
-          placeholder="Search title, tags, project, platform, hash"
-          type="search"
-          value={query}
-        />
-      </label>
-      <p className="status-text" role="status">
-        {status}
-      </p>
+      {pendingDeleteAll ? (
+        <div
+          className="button-row library-confirmation-row"
+          role="group"
+          aria-label="Confirm deleting all local library records"
+        >
+          <button
+            className="secondary-action compact-action danger-action"
+            disabled={busy || records.length === 0}
+            onClick={handleDeleteAll}
+            type="button"
+          >
+            Confirm delete all
+          </button>
+          <button
+            className="secondary-action compact-action"
+            disabled={busy}
+            onClick={() => setPendingDeleteAll(false)}
+            type="button"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
+      {records.length > 0 ? (
+        <label className="field-row">
+          Search
+          <input
+            onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
+            placeholder="Saved chats"
+            type="search"
+            value={query}
+          />
+        </label>
+      ) : null}
+      {status ? (
+        <p className="status-text" role="status">
+          {status}
+        </p>
+      ) : null}
       {visibleRecords.length > 0 ? (
         <ul className="library-record-list" aria-label="Local library records">
           {visibleRecords.map((record) => (
@@ -214,7 +242,7 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
                   {[record.projectLabel, ...record.tags].filter(Boolean).join(" / ")}
                 </p>
               ) : null}
-              <div className="button-row">
+              <div className="button-row library-record-actions">
                 <select
                   aria-label={`Re-export format for ${record.title}`}
                   disabled={busy}
@@ -241,15 +269,41 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
                 >
                   Re-export
                 </button>
-                <button
-                  className="secondary-action compact-action"
-                  disabled={busy}
-                  onClick={() => handleDelete(record.id)}
-                  type="button"
-                >
-                  Delete
-                </button>
+                {pendingDeleteId !== record.id ? (
+                  <button
+                    className="secondary-action compact-action"
+                    disabled={busy}
+                    onClick={() => setPendingDeleteId(record.id)}
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                ) : null}
               </div>
+              {pendingDeleteId === record.id ? (
+                <div
+                  className="button-row library-confirmation-row"
+                  role="group"
+                  aria-label={`Confirm deleting ${record.title}`}
+                >
+                  <button
+                    className="secondary-action compact-action danger-action"
+                    disabled={busy}
+                    onClick={() => handleDelete(record.id)}
+                    type="button"
+                  >
+                    Confirm delete
+                  </button>
+                  <button
+                    className="secondary-action compact-action"
+                    disabled={busy}
+                    onClick={() => setPendingDeleteId(undefined)}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
