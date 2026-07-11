@@ -14,15 +14,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.6.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -40,7 +40,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run end-to-end tests
-        run: pnpm test:e2e
+        run: xvfb-run --auto-servernum pnpm test:e2e
 
       - name: Build deterministic release archive
         run: pnpm package
