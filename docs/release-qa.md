@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 
-Last verified: 2026-07-11 17:14:32 +04
+Last verified: 2026-07-11 17:58:51 +04
 
 ## Release status
 
@@ -10,20 +10,21 @@ Last verified: 2026-07-11 17:14:32 +04
 - No known P0/P1 failures in automated checks.
 - Chrome Web Store submission: not completed.
 - Live provider toolbar matrix: not completed in this pass; it requires non-sensitive live chats.
-- Headed toolbar-popup E2E: not rerun in the final pass and remains a release gate.
+- Headed CI E2E: six checks passed; one toolbar-popup case skipped and remains a release gate.
 
 ## Verified checks
 
-| Check                                                               | Result                                                                                                                   |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm check`                                                        | Pass — lint, typecheck, 58 test files / 243 tests, palette, brand, build, content-script and preview guards, site build. |
-| `pnpm store-assets:build`                                           | Pass — three icons, five real UI screenshots and one promo validated.                                                    |
-| `node scripts/check-no-remote-code.mjs`                             | Pass.                                                                                                                    |
-| `node scripts/check-manifest-permissions.mjs`                       | Pass — no `tabs` or `downloads`; optional access is limited to supported sites.                                          |
-| `node scripts/check-export-output-hygiene.mjs qa-artifacts/exports` | Pass — nine newly generated formats.                                                                                     |
-| `pnpm audit --prod`                                                 | No known vulnerabilities.                                                                                                |
-| Gitleaks current tree and full history                              | No leaks across 73 commits.                                                                                              |
-| `pnpm package` twice                                                | Pass; byte-for-byte deterministic.                                                                                       |
+| Check                                                                                                         | Result                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm check`                                                                                                  | Pass — lint, typecheck, 58 test files / 243 tests, palette, brand, build, content-script and preview guards, site build. |
+| [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain) | Pass — clean Linux build, six E2E checks passed, one toolbar-popup case skipped, release candidate uploaded.             |
+| `pnpm store-assets:build`                                                                                     | Pass — three icons, five real UI screenshots and one promo validated.                                                    |
+| `node scripts/check-no-remote-code.mjs`                                                                       | Pass.                                                                                                                    |
+| `node scripts/check-manifest-permissions.mjs`                                                                 | Pass — no `tabs` or `downloads`; optional access is limited to supported sites.                                          |
+| `node scripts/check-export-output-hygiene.mjs qa-artifacts/exports`                                           | Pass — nine newly generated formats.                                                                                     |
+| `pnpm audit --prod`                                                                                           | No known vulnerabilities.                                                                                                |
+| Gitleaks current tree and full history                                                                        | No leaks across 78 commits.                                                                                              |
+| `pnpm package` twice                                                                                          | Pass; byte-for-byte deterministic.                                                                                       |
 
 Release package:
 

@@ -74,7 +74,7 @@ Store listing, and website.
 | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
 | [ChatGPT Exporter](https://chromewebstore.google.com/detail/chatgpt-exporter-chatgpt/ilmdofdhpnhffldihboadndccenlnfll)                | Mature listing, selection, PDF controls, rich content, localization.              | Open source, local rendering, no account, no paywall.                                | Localization and long-term live compatibility proof.                |
 | [VMSTE ChatGPT Exporter](https://chromewebstore.google.com/detail/chatgpt-exporter-%E2%80%94-export/kagppdkdkbbddehcgonlnlblclcihpcg) | Free/open-source one-click export, selection, Projects, Canvas and Deep Research. | Broader renderer engine and multi-provider architecture.                             | In-page convenience and ChatGPT-specific feature depth.             |
-| [AI Tech Studio exporter](https://chromewebstore.google.com/detail/ai-chat-exporter/dfkonbknfdohjkabbajhghecgjpbmphc)                         | ChatGPT, Gemini and Claude; selection, media, statistics.                         | Wider output set, reproducible archive model, local library and open implementation. | Live multi-provider validation must remain current.                 |
+| [AI Tech Studio exporter](https://chromewebstore.google.com/detail/ai-chat-exporter/dfkonbknfdohjkabbajhghecgjpbmphc)                 | ChatGPT, Gemini and Claude; selection, media, statistics.                         | Wider output set, reproducible archive model, local library and open implementation. | Live multi-provider validation must remain current.                 |
 | [ChatGPT Export](https://chromewebstore.google.com/detail/chatgpt-export/afchalppkffgaonbepgeiofpoeicnpgi)                            | Export actions next to the provider's native Share control.                       | Provider-neutral popup, structured outputs, completeness and archive tooling.        | In-page actions can be faster for single-provider users.            |
 | [ChatSave](https://chromewebstore.google.com/detail/chatsave/eiofpfocgkiajmeaojldkldbbeoknice)                                        | Simple five-platform, local-only MD/PDF proposition.                              | More formats, validation, redaction, batch, preview and library.                     | Jelluvi must keep the first screen as simple as ChatSave.           |
 | [Native ChatGPT export](https://help.openai.com/en/articles/7260999-how-do-i-export-my-chatgpt-history-and-data)                      | Official account-level archive.                                                   | Immediate current-chat export in clean formats without an account dump.              | Native exports remain the source of truth for full account history. |
@@ -85,6 +85,8 @@ provider-aware archive engine with a one-action surface and unusually broad loca
 ## Release proof
 
 - `pnpm check`: pass — 58 test files, 243 tests.
+- [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain): pass —
+  clean Linux build, six E2E checks passed, one toolbar-popup case skipped, release candidate uploaded.
 - Store asset build and dimensions: pass — five 1280×800 real UI screenshots and one 440×280
   promo.
 - Current renderer output hygiene: pass — nine generated formats.
@@ -101,7 +103,8 @@ provider-aware archive engine with a one-action surface and unusually broad loca
 1. Run short, long, rich-content, stale-cache, cancel, preview, and batch flows through the real
    toolbar popup on non-sensitive live chats.
 2. Verify ChatGPT first; then refresh the documented beta/experimental provider matrix.
-3. Rerun the headed extension E2E suite where `chrome.action.openPopup()` exposes the popup page.
+3. Complete the one skipped toolbar-popup E2E case where `chrome.action.openPopup()` exposes the
+   popup page.
 4. Submit the package and privacy disclosures to Chrome Web Store review.
 5. Create the public release tag and GitHub Release only after live QA is signed off.
 

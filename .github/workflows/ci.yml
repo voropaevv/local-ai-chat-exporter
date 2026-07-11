@@ -54,7 +54,7 @@ jobs:
           node scripts/check-export-output-hygiene.mjs tests/fixtures/golden
 
       - name: Upload release candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jelluvi-release-candidate
           path: |
