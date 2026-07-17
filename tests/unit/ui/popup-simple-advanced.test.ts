@@ -8,17 +8,16 @@ function readSource(path: string): string {
   return readFileSync(resolve(projectRoot, path), "utf8");
 }
 
-describe("popup simple and advanced UX source", () => {
-  test("keeps the primary popup simple while restoring advanced controls progressively", () => {
+describe("popup and settings UX source", () => {
+  test("keeps the primary popup focused and routes options through Settings", () => {
     const source = readSource("src/ui/PopupApp.tsx");
 
     expect(source).toContain("<PageStatusCard");
     expect(source).toContain("<PopupExportPanel");
-    expect(source).toContain('className="advanced-drawer"');
-    expect(source).toContain("Options");
-    expect(source).toContain("<AdvancedExportOptions");
+    expect(source).not.toContain('className="advanced-drawer"');
+    expect(source).not.toContain("AdvancedExportOptions");
     expect(source).not.toContain("<BatchExport");
-    expect(source).toContain("<LocalLibraryPanel");
+    expect(source).not.toContain("<LocalLibraryPanel");
     expect(source).not.toContain("<PreviewPanel");
     expect(source).not.toContain("PopupMode");
     expect(source).not.toContain("PrivacyTrustStrip");
@@ -41,11 +40,11 @@ describe("popup simple and advanced UX source", () => {
     expect(quickActionSource).not.toContain("Open PDF");
     expect(quickActionSource).not.toContain("<BatchExport");
     expect(popupSource).not.toContain("PDF generation fell back to PDF-ready HTML");
-    expect(popupSource).toContain("buildGetCachedConversationRequest");
     expect(popupSource).toContain("ensureFreshConversation");
-    expect(popupSource).toContain("Options");
-    expect(previewSource).toContain("Open PDF");
-    expect(previewSource).toContain("PDF generation fell back to PDF-ready HTML");
+    expect(popupSource).not.toContain("AdvancedExportOptions");
+    expect(previewSource).toContain("handleOpenPdf");
+    expect(previewSource).toContain("MessageSelector");
+    expect(previewSource).toContain("saveLocalLibraryRecord");
   });
 
   test("popup CSS sets a compact popup with clamped text and no horizontal scroll", () => {
@@ -73,8 +72,8 @@ describe("popup simple and advanced UX source", () => {
     expect(styles).not.toContain(".trust-strip__item");
     expect(styles).not.toContain(".popup-footer");
     expect(styles).toContain("text-overflow: ellipsis;");
-    expect(styles).toContain(".advanced-drawer");
-    expect(styles).toContain(".advanced-options-stack");
+    expect(styles).not.toContain(".advanced-drawer");
+    expect(styles).not.toContain(".advanced-options-stack");
     expect(styles).toContain(".format-rail");
     expect(styles).toContain(".output-action-grid");
     expect(styles).toContain(".concept-action span");

@@ -37,10 +37,8 @@ describe("export settings storage", () => {
     });
 
     await expect(readStoredExportSettings(storage)).resolves.toEqual({
-      bundleFormats: ["md", "json", "html"],
-      filenameTemplate: "{title}.{format}",
-      formats: ["md"],
-      outputMode: "separate"
+      ...DEFAULT_EXPORT_SETTINGS,
+      filenameTemplate: "{title}.{format}"
     });
   });
 
@@ -55,6 +53,7 @@ describe("export settings storage", () => {
     });
 
     await expect(readStoredExportSettings(storage)).resolves.toEqual({
+      ...DEFAULT_EXPORT_SETTINGS,
       bundleFormats: ["md", "pdf"],
       filenameTemplate: "{title}.{format}",
       formats: ["json", "txt"],
@@ -70,13 +69,33 @@ describe("export settings storage", () => {
     expect(storage.set).toHaveBeenCalledWith(
       {
         [EXPORT_SETTINGS_STORAGE_KEY]: {
-          bundleFormats: ["md", "json", "html"],
-          filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
-          formats: ["md"],
-          outputMode: "separate"
+          ...DEFAULT_EXPORT_SETTINGS,
+          filenameTemplate: DEFAULT_FILENAME_TEMPLATE
         }
       },
       expect.any(Function)
     );
+  });
+
+  test("migrates old settings and preserves advanced export preferences", async () => {
+    const storage = makeStorage({
+      [EXPORT_SETTINGS_STORAGE_KEY]: {
+        formats: ["pdf"],
+        includeMetadata: false,
+        includeReasoning: true,
+        markdownProfile: "github",
+        pdfSettings: { fontSizePt: 11, orientation: "landscape" },
+        schemaVersion: 1
+      }
+    });
+
+    await expect(readStoredExportSettings(storage)).resolves.toMatchObject({
+      formats: ["pdf"],
+      includeMetadata: false,
+      includeReasoning: true,
+      markdownProfile: "github",
+      pdfSettings: { fontSizePt: 11, orientation: "landscape" },
+      schemaVersion: 2
+    });
   });
 });

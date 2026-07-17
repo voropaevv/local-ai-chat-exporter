@@ -1,10 +1,15 @@
+import {
+  getProviderDefinition,
+  getProviderHostnames,
+  getProviderWarnings
+} from "../../core/provider-catalog";
 import type { PlatformAdapter } from "../types";
-import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleAdapterContract } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
 } from "../shared/extract-visible";
-import { CLAUDE_HOSTNAMES, detectClaude } from "./detect";
+import { detectClaude } from "./detect";
 import { claudeSelectors } from "./selectors";
 
 const CLAUDE_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
@@ -30,21 +35,20 @@ const CLAUDE_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
-const CLAUDE_LIMITATIONS = [
-  "Visible-message extraction only; unloaded or collapsed turns may be missing."
-] as const;
-const CLAUDE_SUPPORT_WARNING =
-  "Claude support is beta. Verify first and last messages before relying on export.";
+const CLAUDE_PROVIDER = getProviderDefinition("claude");
 
 export const claudeAdapter: PlatformAdapter = {
-  id: "claude",
-  label: "Claude",
-  hostnames: CLAUDE_HOSTNAMES,
-  supportStatus: "beta",
+  capabilities: CLAUDE_PROVIDER.capabilities,
+  id: CLAUDE_PROVIDER.id,
+  label: CLAUDE_PROVIDER.label,
+  hostnames: getProviderHostnames(CLAUDE_PROVIDER.id),
+  supportStatus: CLAUDE_PROVIDER.supportStatus,
   selectors: claudeSelectors,
-  limitations: CLAUDE_LIMITATIONS,
-  experimentalWarning: CLAUDE_SUPPORT_WARNING,
-  providerWarnings: createProviderWarnings(CLAUDE_SUPPORT_WARNING, CLAUDE_LIMITATIONS),
+  limitations: CLAUDE_PROVIDER.limitations,
+  ...(CLAUDE_PROVIDER.supportWarning !== undefined
+    ? { supportWarning: CLAUDE_PROVIDER.supportWarning }
+    : {}),
+  providerWarnings: getProviderWarnings(CLAUDE_PROVIDER.id),
   detect: detectClaude,
   ...createVisibleAdapterContract(extractVisibleClaudeMessages)
 };

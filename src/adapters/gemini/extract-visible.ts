@@ -1,10 +1,15 @@
+import {
+  getProviderDefinition,
+  getProviderHostnames,
+  getProviderWarnings
+} from "../../core/provider-catalog";
 import type { PlatformAdapter } from "../types";
-import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleAdapterContract } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
 } from "../shared/extract-visible";
-import { GEMINI_HOSTNAMES, detectGemini } from "./detect";
+import { detectGemini } from "./detect";
 import { geminiSelectors } from "./selectors";
 
 const GEMINI_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
@@ -21,21 +26,20 @@ const GEMINI_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
-const GEMINI_LIMITATIONS = [
-  "Visible-message extraction only; unloaded or collapsed turns may be missing."
-] as const;
-const GEMINI_SUPPORT_WARNING =
-  "Gemini support is beta. Verify first and last messages before relying on export.";
+const GEMINI_PROVIDER = getProviderDefinition("gemini");
 
 export const geminiAdapter: PlatformAdapter = {
-  id: "gemini",
-  label: "Gemini",
-  hostnames: GEMINI_HOSTNAMES,
-  supportStatus: "beta",
+  capabilities: GEMINI_PROVIDER.capabilities,
+  id: GEMINI_PROVIDER.id,
+  label: GEMINI_PROVIDER.label,
+  hostnames: getProviderHostnames(GEMINI_PROVIDER.id),
+  supportStatus: GEMINI_PROVIDER.supportStatus,
   selectors: geminiSelectors,
-  limitations: GEMINI_LIMITATIONS,
-  experimentalWarning: GEMINI_SUPPORT_WARNING,
-  providerWarnings: createProviderWarnings(GEMINI_SUPPORT_WARNING, GEMINI_LIMITATIONS),
+  limitations: GEMINI_PROVIDER.limitations,
+  ...(GEMINI_PROVIDER.supportWarning !== undefined
+    ? { supportWarning: GEMINI_PROVIDER.supportWarning }
+    : {}),
+  providerWarnings: getProviderWarnings(GEMINI_PROVIDER.id),
   detect: detectGemini,
   ...createVisibleAdapterContract(extractVisibleGeminiMessages)
 };

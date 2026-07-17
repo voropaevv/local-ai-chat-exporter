@@ -4,26 +4,23 @@ import { describe, expect, test } from "vitest";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
 
-describe("advanced export options source", () => {
+describe("settings export controls source", () => {
   test("exposes precise controls without explanatory copy", () => {
-    const source = readFileSync(
-      resolve(projectRoot, "src/ui/components/AdvancedExportOptions.tsx"),
-      "utf8"
-    );
+    const source = [
+      readFileSync(resolve(projectRoot, "src/ui/components/ContentSettingsControls.tsx"), "utf8"),
+      readFileSync(resolve(projectRoot, "src/ui/components/PdfSettingsControls.tsx"), "utf8")
+    ].join("\n");
 
     for (const expected of [
-      "Messages",
       "Metadata",
-      "Citations & Canvas",
+      "Citations &amp; Canvas",
       "Visible reasoning",
-      "Redaction",
       "MarkdownProfileSelector",
-      "PDF layout",
       "Page size",
       "Orientation",
       "Template",
       "Font size",
-      "Margins (pt)",
+      "Margins",
       "Table of contents"
     ]) {
       expect(source).toContain(expected);
@@ -33,5 +30,6 @@ describe("advanced export options source", () => {
     expect(source).not.toContain("Redaction happens locally");
     expect(source).not.toContain("only when already visible");
     expect(source).not.toContain("FilenameTemplateBuilder");
+    expect(source).not.toContain("This setting");
   });
 });

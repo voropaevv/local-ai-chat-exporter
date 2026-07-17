@@ -1,8 +1,5 @@
 import { getBestAdapter } from "../../src/adapters/registry";
 
-const JELLUVI_NODE_SELECTOR =
-  "[data-local-export-selection-control], [data-local-export-selection-toolbar]";
-
 export type StopConversationChangeObserver = () => void;
 
 export function observeConversationChanges(
@@ -57,16 +54,12 @@ function mutationChangesConversation(record: MutationRecord, messageSelector: st
 
   const targetElement = closestElement(record.target);
 
-  if (targetElement?.closest(JELLUVI_NODE_SELECTOR) !== null) {
-    return false;
-  }
-
   if (targetElement?.closest(messageSelector) !== null) {
-    return [...record.addedNodes, ...record.removedNodes].some((node) => !isJelluviNode(node));
+    return record.addedNodes.length > 0 || record.removedNodes.length > 0;
   }
 
-  return [...record.addedNodes, ...record.removedNodes].some(
-    (node) => containsMessageNode(node, messageSelector) && !isJelluviNode(node)
+  return [...record.addedNodes, ...record.removedNodes].some((node) =>
+    containsMessageNode(node, messageSelector)
   );
 }
 
@@ -80,11 +73,4 @@ function containsMessageNode(node: Node, messageSelector: string): boolean {
   }
 
   return node.matches(messageSelector) || node.querySelector(messageSelector) !== null;
-}
-
-function isJelluviNode(node: Node): boolean {
-  return (
-    node instanceof Element &&
-    (node.matches(JELLUVI_NODE_SELECTOR) || node.closest(JELLUVI_NODE_SELECTOR) !== null)
-  );
 }

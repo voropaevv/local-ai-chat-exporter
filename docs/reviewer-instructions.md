@@ -4,8 +4,8 @@ Jelluvi is a local-first Manifest V3 extension.
 
 ## Review Focus
 
-- The extension prepares the active supported chat tab only after the user clicks export, copy,
-  preview, save, or the explicit Refresh action.
+- The extension prepares the active supported chat tab only after the user clicks export, copy, or
+  preview; stale snapshots refresh automatically on the next action.
 - It does not upload conversation content.
 - It does not execute remote code.
 - It does not use telemetry, analytics, ads, trackers, or remote logging.

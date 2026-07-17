@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 const projectRoot = resolve(import.meta.dirname, "../../..");
 
 describe("concept-inspired popup and settings layout", () => {
-  test("popup source exposes a one-click export flow with progressive disclosure", () => {
+  test("popup source exposes a one-click export flow without an options drawer", () => {
     const popupSource = readFileSync(resolve(projectRoot, "src/ui/PopupApp.tsx"), "utf8");
     const exportPanelPath = resolve(projectRoot, "src/ui/components/PopupExportPanel.tsx");
     const pageStatusPath = resolve(projectRoot, "src/ui/components/PageStatusCard.tsx");
@@ -19,10 +19,9 @@ describe("concept-inspired popup and settings layout", () => {
     expect(popupSource).toContain("waitForActiveTabInfo");
     expect(popupSource).toContain("active_tab_info_failed");
     expect(popupSource).toContain("ensureFreshConversation");
-    expect(popupSource).toContain("Options");
-    expect(popupSource).toContain("advanced-drawer");
-    expect(popupSource).toContain("AdvancedExportOptions");
-    expect(popupSource).toContain("LocalLibraryPanel");
+    expect(popupSource).not.toContain("advanced-drawer");
+    expect(popupSource).not.toContain("AdvancedExportOptions");
+    expect(popupSource).not.toContain("LocalLibraryPanel");
     expect(popupSource).not.toContain("PrivacyTrustStrip");
     expect(popupSource).not.toContain("PopupFooter");
     expect(popupSource).not.toContain("PopupModeToggle");
@@ -41,7 +40,7 @@ describe("concept-inspired popup and settings layout", () => {
     expect(exportPanelSource).not.toContain(">Output<");
   });
 
-  test("settings keeps controls and routes details to project links", () => {
+  test("settings keeps only functional extension controls", () => {
     const optionsSource = readFileSync(resolve(projectRoot, "src/ui/OptionsApp.tsx"), "utf8");
 
     expect(optionsSource).toContain("<h1>Settings</h1>");
@@ -50,11 +49,14 @@ describe("concept-inspired popup and settings layout", () => {
     expect(optionsSource).toContain("System");
     expect(optionsSource).toContain("Light");
     expect(optionsSource).toContain("Dark");
-    expect(optionsSource).toContain("Default export formats");
+    expect(optionsSource).toContain('title="Export"');
     expect(optionsSource).toContain("Filename pattern");
-    expect(optionsSource).toContain("Privacy / redaction preset");
-    expect(optionsSource).toContain("Support");
-    expect(optionsSource).not.toContain('title="Local library"');
+    expect(optionsSource).toContain('title="Content"');
+    expect(optionsSource).toContain('title="PDF"');
+    expect(optionsSource).toContain('title="Privacy"');
+    expect(optionsSource).toContain('title="Library"');
+    expect(optionsSource).toContain('title="Batch"');
+    expect(optionsSource).not.toContain("Support");
     expect(optionsSource).not.toContain('title="Permissions"');
     expect(optionsSource).not.toContain("InfoTip");
     expect(optionsSource).not.toContain("<PrivacyPanel");

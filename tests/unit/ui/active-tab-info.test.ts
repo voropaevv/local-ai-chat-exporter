@@ -15,14 +15,12 @@ describe("active tab info", () => {
   test("recovers support details from the URL when an older worker omits them", () => {
     expect(
       normalizeActiveTabInfo({
-        sourceUrl: "https://chatgpt.com/c/example",
-        title: "Example chat"
+        sourceUrl: "https://chatgpt.com/c/example"
       })
     ).toEqual({
       platformLabel: "ChatGPT",
       sourceUrl: "https://chatgpt.com/c/example",
-      supported: true,
-      title: "Example chat"
+      supported: true
     });
   });
 
@@ -57,9 +55,23 @@ describe("active tab info", () => {
   });
 
   test("shows an error instead of checking after active tab detection fails", () => {
-    expect(getPageStatus("error", false, "Current tab")).toEqual({
-      label: "Unavailable",
+    expect(getPageStatus("idle", undefined, "Current tab", "failed")).toEqual({
+      label: "Retry",
+      retry: true,
       tone: "error"
+    });
+  });
+
+  test("keeps the checking label accessible but out of the successful status", () => {
+    expect(getPageStatus("idle", undefined, "Current tab", "checking")).toEqual({
+      label: "Checking",
+      retry: false,
+      tone: "neutral"
+    });
+    expect(getPageStatus("idle", true, "ChatGPT", "ready")).toEqual({
+      label: "ChatGPT",
+      retry: false,
+      tone: "success"
     });
   });
 });

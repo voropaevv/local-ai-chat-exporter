@@ -79,7 +79,7 @@ describe("scanCurrentConversationExport", () => {
     expect(conversation.completeness.duplicateCount).toBe(1);
   });
 
-  test("treats extracted Perplexity answer pages as complete without partial warnings", async () => {
+  test("keeps visible-only Perplexity exports honest about completeness", async () => {
     const conversation = await scanCurrentConversationExport({
       document: loadPerplexityFixture(),
       exportedAt: "2026-06-06T18:20:30.000Z",
@@ -92,13 +92,14 @@ describe("scanCurrentConversationExport", () => {
     expect(conversation.messageCount).toBe(2);
     expect(conversation.completeness).toMatchObject({
       duplicateCount: 0,
-      reachedBottom: true,
-      reachedTop: true,
+      reachedBottom: false,
+      reachedTop: false,
       scrollSteps: 0,
-      status: "complete",
-      warnings: [],
-      platformWarnings: []
+      status: "partial"
     });
+    expect(conversation.completeness.platformWarnings).toContain(
+      "Perplexity support is experimental. Verify first and last messages before relying on export."
+    );
   });
 
   test("throws a precise Perplexity adapter error when the layout is detected but no messages extract", async () => {

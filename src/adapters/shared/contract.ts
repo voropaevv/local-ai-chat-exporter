@@ -1,12 +1,10 @@
-import type {
-  AdapterMetadata,
-  AdapterMetadataContext,
-  PlatformAdapter
-} from "../types";
+import type { AdapterMetadata, AdapterMetadataContext, PlatformAdapter } from "../types";
 
 type VisibleExtractor = PlatformAdapter["extractVisibleMessages"];
 
-export function createVisibleAdapterContract(extractVisibleMessages: VisibleExtractor): Pick<
+export function createVisibleAdapterContract(
+  extractVisibleMessages: VisibleExtractor
+): Pick<
   PlatformAdapter,
   "extractMetadata" | "extractRichContent" | "extractVisibleMessages" | "fullScan" | "scanVisible"
 > {
@@ -17,13 +15,6 @@ export function createVisibleAdapterContract(extractVisibleMessages: VisibleExtr
     fullScan: extractVisibleMessages,
     scanVisible: extractVisibleMessages
   };
-}
-
-export function createProviderWarnings(
-  supportWarning: string | undefined,
-  limitations: readonly string[]
-): readonly string[] {
-  return [...(supportWarning !== undefined ? [supportWarning] : []), ...limitations];
 }
 
 function extractDefaultMetadata(context: AdapterMetadataContext = {}): AdapterMetadata {

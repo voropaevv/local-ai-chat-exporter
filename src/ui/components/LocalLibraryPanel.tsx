@@ -1,39 +1,29 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 
-import type { ConversationExport } from "../../core/schema";
 import {
   clearLocalLibraryRecords,
   createLocalLibraryBackupFile,
-  createLocalLibraryRecord,
   deleteLocalLibraryRecord,
   filterLocalLibraryRecords,
   listLocalLibraryRecords,
   LOCAL_LIBRARY_EXPORT_FORMATS,
   renderLocalLibraryRecord,
-  saveLocalLibraryRecord,
   type LocalLibraryExportFormat,
   type LocalLibraryRecord
 } from "../../library/local-library";
 import { downloadRenderedFiles } from "../../utils/download";
 import { formatCount } from "../pluralize";
 
-interface LocalLibraryPanelProps {
-  readonly canSave: boolean;
-  readonly loadCurrentConversation: () => Promise<ConversationExport | undefined>;
-}
-
-export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLibraryPanelProps) {
+export function LocalLibraryPanel() {
   const [busy, setBusy] = useState(false);
   const [formatByRecordId, setFormatByRecordId] = useState<
     Readonly<Record<string, LocalLibraryExportFormat>>
   >({});
-  const [projectLabel, setProjectLabel] = useState("");
   const [pendingDeleteAll, setPendingDeleteAll] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<readonly LocalLibraryRecord[]>([]);
   const [status, setStatus] = useState("");
-  const [tagsInput, setTagsInput] = useState("");
   const visibleRecords = useMemo(
     () => filterLocalLibraryRecords(records, { query }),
     [query, records]
@@ -48,32 +38,6 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
       setRecords(await listLocalLibraryRecords());
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Local library is unavailable.");
-    }
-  }
-
-  async function handleSave() {
-    setBusy(true);
-    setStatus("Saving prepared chat to local library...");
-
-    try {
-      const conversation = await loadCurrentConversation();
-
-      if (conversation === undefined) {
-        setStatus("Prepare a conversation before saving it to the local library.");
-        return;
-      }
-
-      const record = createLocalLibraryRecord(conversation, {
-        projectLabel,
-        tags: parseTags(tagsInput)
-      });
-      await saveLocalLibraryRecord(record);
-      await refreshRecords();
-      setStatus(`Saved to local library: ${record.title}.`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Local library save failed.");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -135,58 +99,29 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
   }
 
   return (
-    <section className="panel" aria-labelledby="local-library-title">
-      <div className="section-heading">
-        <h2 id="local-library-title">Local Library</h2>
-      </div>
-      <div className="stacked-fields">
-        <label className="field-row">
-          Project/folder
-          <input
-            onInput={(event) => setProjectLabel((event.currentTarget as HTMLInputElement).value)}
-            placeholder="Optional"
-            type="text"
-            value={projectLabel}
-          />
-        </label>
-        <label className="field-row">
-          Tags
-          <input
-            onInput={(event) => setTagsInput((event.currentTarget as HTMLInputElement).value)}
-            placeholder="Comma-separated"
-            type="text"
-            value={tagsInput}
-          />
-        </label>
-      </div>
-      <div className="button-row library-primary-actions">
-        <button
-          className="secondary-action"
-          disabled={busy || !canSave}
-          onClick={handleSave}
-          type="button"
-        >
-          Save
-        </button>
-        <button
-          className="secondary-action compact-action"
-          disabled={busy || records.length === 0}
-          onClick={handleExportAll}
-          type="button"
-        >
-          Export all
-        </button>
-        {!pendingDeleteAll ? (
+    <div className="settings-control-stack">
+      {records.length > 0 ? (
+        <div className="button-row library-primary-actions">
           <button
             className="secondary-action compact-action"
-            disabled={busy || records.length === 0}
-            onClick={() => setPendingDeleteAll(true)}
+            disabled={busy}
+            onClick={handleExportAll}
             type="button"
           >
-            Delete all
+            Export all
           </button>
-        ) : null}
-      </div>
+          {!pendingDeleteAll ? (
+            <button
+              className="secondary-action compact-action"
+              disabled={busy}
+              onClick={() => setPendingDeleteAll(true)}
+              type="button"
+            >
+              Delete all
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {pendingDeleteAll ? (
         <div
           className="button-row library-confirmation-row"
@@ -307,14 +242,11 @@ export function LocalLibraryPanel({ canSave, loadCurrentConversation }: LocalLib
             </li>
           ))}
         </ul>
-      ) : null}
-    </section>
+      ) : records.length === 0 ? (
+        <p className="status-text">No saved chats.</p>
+      ) : (
+        <p className="status-text">No matches.</p>
+      )}
+    </div>
   );
-}
-
-function parseTags(value: string): readonly string[] {
-  return value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
 }

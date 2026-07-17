@@ -1,10 +1,10 @@
-import { RefreshCw, X } from "lucide-preact";
+import { X } from "lucide-preact";
 
 import type { PopupScanStatus } from "../state/popup-state";
 interface ScanControlsProps {
   readonly canCancelScan: boolean;
   readonly onCancelScan: () => void;
-  readonly onScan: () => void;
+  readonly partial?: boolean;
   readonly progressLabel: string;
   readonly scanStatus: PopupScanStatus;
 }
@@ -12,16 +12,15 @@ interface ScanControlsProps {
 export function ScanControls({
   canCancelScan,
   onCancelScan,
-  onScan,
+  partial = false,
   progressLabel,
   scanStatus
 }: ScanControlsProps) {
-  if (scanStatus === "idle") {
+  if (scanStatus === "idle" || scanStatus === "error" || (scanStatus === "scanned" && !partial)) {
     return null;
   }
 
   const scanning = scanStatus === "scanning";
-  const canRefresh = scanStatus === "scanned" || scanStatus === "error";
 
   return (
     <section className="snapshot-card" aria-label="Conversation preparation status">
@@ -30,15 +29,9 @@ export function ScanControls({
           aria-hidden="true"
           className={`snapshot-card__dot snapshot-card__dot--${scanStatus}`}
         />
-        <strong>{getStatusLabel(scanStatus, progressLabel)}</strong>
+        <strong>{getStatusLabel(scanStatus, progressLabel, partial)}</strong>
       </div>
       <div className="snapshot-card__actions">
-        {canRefresh ? (
-          <button className="snapshot-action" type="button" onClick={onScan}>
-            <RefreshCw size={14} strokeWidth={2.3} />
-            {scanStatus === "error" ? "Try again" : "Refresh"}
-          </button>
-        ) : null}
         {canCancelScan ? (
           <button className="snapshot-action" type="button" onClick={onCancelScan}>
             <X size={14} strokeWidth={2.3} />
@@ -60,7 +53,11 @@ export function ScanControls({
   );
 }
 
-function getStatusLabel(scanStatus: PopupScanStatus, progressLabel: string): string {
+function getStatusLabel(
+  scanStatus: PopupScanStatus,
+  progressLabel: string,
+  partial: boolean
+): string {
   if (scanStatus === "scanning") {
     return "Preparing…";
   }
@@ -70,7 +67,7 @@ function getStatusLabel(scanStatus: PopupScanStatus, progressLabel: string): str
   }
 
   if (scanStatus === "scanned") {
-    return progressLabel;
+    return partial ? "Partial" : progressLabel;
   }
 
   return "Retry";

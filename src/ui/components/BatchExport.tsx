@@ -26,9 +26,8 @@ export function BatchExport({
   status
 }: BatchExportProps) {
   return (
-    <section className="panel" aria-labelledby="batch-export-title">
+    <div className="settings-control-stack">
       <div className="section-heading">
-        <h2 id="batch-export-title">Batch Export</h2>
         <button
           className="secondary-action compact-action"
           disabled={busy}
@@ -79,16 +78,18 @@ export function BatchExport({
           ))}
         </ul>
       ) : null}
-      <div className="button-row">
-        <button
-          className="secondary-action"
-          disabled={busy || selectedTabIds.length === 0}
-          onClick={onExportSelected}
-          type="button"
-        >
-          Export selected to ZIP
-        </button>
-      </div>
+      {candidates.length > 0 ? (
+        <div className="button-row">
+          <button
+            className="secondary-action"
+            disabled={busy || selectedTabIds.length === 0}
+            onClick={onExportSelected}
+            type="button"
+          >
+            Export selected to ZIP
+          </button>
+        </div>
+      ) : null}
       {status ? (
         <p className="status-text" role="status">
           {status}
@@ -106,7 +107,7 @@ export function BatchExport({
           ))}
         </ul>
       ) : null}
-    </section>
+    </div>
   );
 }
 

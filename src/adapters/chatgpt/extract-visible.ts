@@ -1,26 +1,32 @@
 import type { ExportedMessage } from "../../core/schema";
+import {
+  getProviderDefinition,
+  getProviderHostnames,
+  getProviderWarnings
+} from "../../core/provider-catalog";
 import { normalizeRole } from "../../core/normalize";
 import { stableHash } from "../../utils/hash";
 import type { PlatformAdapter } from "../types";
-import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleAdapterContract } from "../shared/contract";
 import { cleanChatGptNode } from "./clean-chatgpt-node";
-import { CHAT_GPT_HOSTNAMES, detectChatGpt } from "./detect";
+import { detectChatGpt } from "./detect";
 import { extractChatGptAdvancedContent } from "./extract-advanced";
 import { chatGptSelectors } from "./selectors";
 
-const CHATGPT_LIMITATIONS: readonly string[] = [];
+const CHATGPT_PROVIDER = getProviderDefinition("chatgpt");
 
 export const chatGptAdapter: PlatformAdapter = {
-  id: "chatgpt",
-  label: "ChatGPT",
-  hostnames: CHAT_GPT_HOSTNAMES,
-  supportStatus: "stable",
+  capabilities: CHATGPT_PROVIDER.capabilities,
+  id: CHATGPT_PROVIDER.id,
+  label: CHATGPT_PROVIDER.label,
+  hostnames: getProviderHostnames(CHATGPT_PROVIDER.id),
+  supportStatus: CHATGPT_PROVIDER.supportStatus,
   selectors: {
     content: chatGptSelectors.markdownBody,
     message: chatGptSelectors.messageByRole
   },
-  limitations: CHATGPT_LIMITATIONS,
-  providerWarnings: createProviderWarnings(undefined, CHATGPT_LIMITATIONS),
+  limitations: CHATGPT_PROVIDER.limitations,
+  providerWarnings: getProviderWarnings(CHATGPT_PROVIDER.id),
   detect: detectChatGpt,
   ...createVisibleAdapterContract(extractVisibleChatGptMessages)
 };
@@ -51,7 +57,9 @@ export function extractVisibleChatGptMessages(
       index: messages.length,
       role,
       authorLabel:
-        role === "assistant" ? "ChatGPT" : advancedContent.participant ?? defaultAuthorLabel(role),
+        role === "assistant"
+          ? "ChatGPT"
+          : (advancedContent.participant ?? defaultAuthorLabel(role)),
       ...(advancedContent.participant !== undefined
         ? { participant: advancedContent.participant }
         : {}),

@@ -1,5 +1,10 @@
 # Jelluvi Product Audit — 2026-07-11
 
+> Implementation update — 2026-07-16: the popup Options drawer was removed. Persistent advanced
+> controls now live in Settings; provider-neutral message scope and Local Library save live in
+> Preview; active-tab failure now becomes an explicit Retry state; provider definitions now derive
+> from one canonical catalog. Store screenshots still need to be recaptured before release.
+
 ## Conclusion
 
 Jelluvi is now a strong release candidate: the main flow is fast, local-first, and concise; the
@@ -30,9 +35,9 @@ builds completeness data, and creates a stable snapshot. A primary `Scan` button
 The shipped flow is now:
 
 1. Choose one or more formats.
-2. Select `Export`, `Copy MD`, `Preview`, or `Save`.
+2. Select `Export`, `Copy MD`, or `Preview`.
 3. Jelluvi prepares the conversation automatically when the snapshot is missing or stale.
-4. `Cancel` is available during preparation and `Refresh` is available afterward.
+4. `Cancel` is available during preparation; later actions refresh stale snapshots automatically.
 5. Same-URL conversation changes invalidate the cached snapshot automatically.
 
 This removes a technical step from the user's path without weakening capture correctness.
@@ -54,10 +59,12 @@ Store listing, and website.
 - Same-URL cache invalidation through a conversation mutation observer.
 - Original ChatGPT scroll position restored after collection, cancellation, and errors.
 - All eight standalone formats plus ZIP available in the popup and Settings.
-- Message scope, selection, range, metadata, citations, reasoning, redaction, Markdown profiles, and
-  PDF layout restored behind one `Options` disclosure.
-- Local Library connected to the popup with opt-in save, search, backup, re-export, and confirmed
-  deletion.
+- Message scope, selection, and range are provider-neutral controls in Preview; metadata, citations,
+  reasoning, redaction, Markdown profiles, and PDF layout persist in Settings.
+- Local Library save is available from Preview; search, backup, re-export, and confirmed deletion
+  remain in Settings.
+- Provider ids, origins, support levels, warnings, and capabilities now derive from one catalog with
+  adapter and Manifest consistency tests.
 - Optional `tabs` and `downloads` permissions removed; batch discovery requests only supported-site
   host access when used.
 - Preview recovery is source-neutral and includes `Return to chat`.
@@ -88,7 +95,10 @@ provider-aware archive engine with a one-action surface and unusually broad loca
 
 ## Release proof
 
-- `pnpm check`: pass — 59 test files, 251 tests.
+- Current 2026-07-16 implementation: `pnpm check` passed — 61 test files, 250 tests, including lint,
+  typecheck, palette, brand, production builds, content-script and Preview guards, and site build.
+- Current component visual QA passed in Brave; unpacked-extension and live-provider QA remain release
+  gates.
 - [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain): pass —
   clean Linux build, six E2E checks passed, one toolbar-popup case skipped, release candidate uploaded.
 - Store asset build and dimensions: pass — five 1280×800 real UI screenshots and one 440×280
@@ -112,5 +122,6 @@ provider-aware archive engine with a one-action surface and unusually broad loca
 4. Submit the package and privacy disclosures to Chrome Web Store review.
 5. Create the public release tag and GitHub Release only after live QA is signed off.
 
-No additional feature or visual expansion is recommended before these gates. The best next
-investment is reliability evidence, provider monitoring, and measured onboarding/conversion data.
+No additional feature expansion is recommended before these gates. Recapture the changed popup,
+Preview, and Settings surfaces, then invest in reliability evidence, provider monitoring, and
+measured onboarding/conversion data.

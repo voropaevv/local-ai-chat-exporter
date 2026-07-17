@@ -18,9 +18,7 @@ const cachedSummary: ScanCacheSummaryResult = {
     },
     messageCount: 2,
     platformLabel: "ChatGPT",
-    previewMessages: [],
     scanId: "scan-1",
-    selectedMessageCount: 0,
     sourceUrl: "https://chatgpt.com/c/cached"
   },
   scanId: "scan-1"

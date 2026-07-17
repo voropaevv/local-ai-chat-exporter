@@ -131,7 +131,7 @@ function buildAdapterWarnings(adapter: PlatformAdapter): readonly string[] {
 }
 
 function shouldTreatVisibleScanAsComplete(adapter: PlatformAdapter): boolean {
-  return adapter.id === "perplexity";
+  return adapter.capabilities.captureMode === "full";
 }
 
 function getCurrentDocument(): Document {

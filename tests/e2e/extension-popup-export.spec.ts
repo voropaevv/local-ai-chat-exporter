@@ -45,7 +45,7 @@ test("extension popup automatically prepares a ChatGPT fixture and downloads mar
     const markdown = await readFile(downloadedPath ?? "", "utf8");
     expect(markdown).toContain("Hello, can you summarize this?");
     expect(markdown).toContain("Sure. Here is a concise summary.");
-    await expect(popup.getByText(/2 messages/u)).toBeVisible();
+    await expect(popup.getByRole("button", { name: "Export", exact: true })).toBeEnabled();
   } catch (error) {
     if (isLocalBrowserUnavailable(error)) {
       test.skip(true, `Chromium extension e2e unavailable in this environment: ${String(error)}`);

@@ -12,7 +12,8 @@ describe("popup header source", () => {
     );
     const stylesSource = readFileSync(resolve(projectRoot, "src/ui/styles.css"), "utf8");
 
-    expect(headerSource).toContain("options/index.html#filename-settings");
+    expect(headerSource).toContain('SETTINGS_PAGE_PATH = "options/index.html"');
+    expect(headerSource).not.toContain("#filename-settings");
     expect(headerSource).toContain('className="settings-button"');
     expect(headerSource).toContain("popup-theme-button");
     expect(headerSource).toContain("handleThemeToggle");

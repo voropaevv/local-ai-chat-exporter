@@ -10,7 +10,7 @@ import {
   type ThemePreference
 } from "../theme-preference";
 
-const SETTINGS_PAGE_PATH = "options/index.html#filename-settings";
+const SETTINGS_PAGE_PATH = "options/index.html";
 
 export function PopupHeader() {
   const [themePreference, setThemePreference] = useState<ThemePreference>(readThemePreference);

@@ -38,7 +38,7 @@ describe("adapter registry", () => {
       expect(adapter.limitations).toBeDefined();
       expect(["stable", "beta", "experimental"]).toContain(adapter.supportStatus);
       expect(adapter.providerWarnings).toEqual([
-        ...(adapter.experimentalWarning !== undefined ? [adapter.experimentalWarning] : []),
+        ...(adapter.supportWarning !== undefined ? [adapter.supportWarning] : []),
         ...adapter.limitations
       ]);
       expect(adapter.detect).toEqual(expect.any(Function));
@@ -51,13 +51,11 @@ describe("adapter registry", () => {
     expect(getBestAdapter({ hostname: "chatgpt.com" })?.supportStatus).toBe("stable");
     expect(getBestAdapter({ hostname: "claude.ai" })?.supportStatus).toBe("beta");
     expect(getBestAdapter({ hostname: "gemini.google.com" })?.supportStatus).toBe("beta");
-    expect(getBestAdapter({ hostname: "www.perplexity.ai" })?.supportStatus).toBe(
-      "experimental"
-    );
+    expect(getBestAdapter({ hostname: "www.perplexity.ai" })?.supportStatus).toBe("experimental");
     expect(getBestAdapter({ hostname: "notebooklm.google.com" })?.supportStatus).toBe(
       "experimental"
     );
-    expect(getBestAdapter({ hostname: "claude.ai" })?.experimentalWarning).toBe(
+    expect(getBestAdapter({ hostname: "claude.ai" })?.supportWarning).toBe(
       "Claude support is beta. Verify first and last messages before relying on export."
     );
   });
