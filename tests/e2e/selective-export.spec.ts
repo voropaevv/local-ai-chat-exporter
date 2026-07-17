@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { prepareConversationForExport } from "../../src/core/export-options";
 import type { ConversationExport } from "../../src/core/schema";
+import { filterMessagesByScope } from "../../src/core/selection";
 import {
   applyPreviewMessageSelection,
   buildPreviewSelectionOptions,
@@ -35,10 +35,10 @@ const conversation: ConversationExport = {
 
 test("Preview selection filters normalized messages for every provider", () => {
   const selectedConversation = applyPreviewMessageSelection(conversation, ["assistant-1"]);
-  const prepared = prepareConversationForExport(selectedConversation, { scope: "selected" });
+  const messages = filterMessagesByScope(selectedConversation.messages, { scope: "selected" });
 
-  expect(prepared.platform).toBe("claude");
-  expect(prepared.messages.map((message) => message.text)).toEqual(["First answer"]);
+  expect(selectedConversation.platform).toBe("claude");
+  expect(messages.map((message) => message.text)).toEqual(["First answer"]);
 });
 
 test("Preview selection supports toggles and one-based ranges", () => {
