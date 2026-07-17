@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 
 import type { ConversationExport } from "../../../src/core/schema";
 import { createPreviewRenderState } from "../../../src/ui/preview-rendering";
-import { extractPdfText } from "../../helpers/pdf";
 
 function makeConversation(): ConversationExport {
   const messages = [
@@ -64,16 +63,26 @@ describe("preview rendering", () => {
     expect(rendered.markdown.bytes).toContain("Cached answer");
     expect(rendered.html.bytes).toContain("Cached preview");
     expect(rendered.html.bytes).toContain("Cached answer");
-    expect(rendered.pdf.filename).toBe("2026-06-01T08-00-00Z_chatgpt_Cached-preview.pdf");
-    expect(rendered.pdf.mimeType).toBe("application/pdf");
-    expect(rendered.pdf.encoding).toBe("binary");
-    expect(rendered.pdf.bytes).toBeInstanceOf(Uint8Array);
-    expect(extractPdfText(rendered.pdf.bytes as Uint8Array)).toContain("Cached answer");
+    expect(rendered.conversation.messageCount).toBe(2);
+    expect(rendered.statusMessage).toBe("2 messages");
   });
 
   test("returns a clear missing-cache message", () => {
     expect(createPreviewRenderState(undefined).statusMessage).toBe(
-      "This local snapshot is no longer available. Return to the source chat and export or preview it again."
+      "This local snapshot is no longer available. Return to the source chat and preview it again."
     );
+  });
+
+  test("renders only the requested provider-neutral scope", () => {
+    const rendered = createPreviewRenderState(makeConversation(), { scope: "assistant_only" });
+
+    expect(rendered.status).toBe("ready");
+    if (rendered.status !== "ready") {
+      throw new Error("expected ready preview state");
+    }
+
+    expect(rendered.conversation.messageCount).toBe(1);
+    expect(rendered.markdown.bytes).not.toContain("Hello from cached prompt");
+    expect(rendered.markdown.bytes).toContain("Cached answer");
   });
 });

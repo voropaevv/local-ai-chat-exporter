@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { getTask00PopupState } from "../../src/core/task00";
+import { SUPPORTED_CHAT_ORIGINS } from "../../src/core/provider-catalog";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 
@@ -23,15 +24,7 @@ describe("Task 00 scaffold", () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.permissions).toEqual(["activeTab", "scripting", "storage"]);
     expect(manifest.optional_permissions).toBeUndefined();
-    expect(manifest.optional_host_permissions).toEqual([
-      "https://chatgpt.com/*",
-      "https://chat.openai.com/*",
-      "https://claude.ai/*",
-      "https://gemini.google.com/*",
-      "https://perplexity.ai/*",
-      "https://www.perplexity.ai/*",
-      "https://notebooklm.google.com/*"
-    ]);
+    expect(manifest.optional_host_permissions).toEqual(SUPPORTED_CHAT_ORIGINS);
     expect(manifest.host_permissions).toBeUndefined();
   });
 

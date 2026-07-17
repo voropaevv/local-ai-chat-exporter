@@ -7,20 +7,14 @@ import {
   buildExportStatusMessage,
   buildCopyMarkdownRequest,
   buildBatchExportRequest,
-  buildDownloadMarkdownRequest,
   buildDownloadRequest,
   buildGetActiveTabInfoRequest,
-  buildGetCachedConversationRequest,
   buildGetScanCacheSummaryRequest,
-  buildOpenPdfRequest,
   buildOpenPreviewRequest,
   createInitialPopupState,
-  getScopedPreviewMessages,
-  getSelectionStatusText,
   popupReducer,
   toggleFormat
 } from "../../../src/ui/state/popup-state";
-import { DEFAULT_PDF_SETTINGS } from "../../../src/renderers/pdf-settings";
 
 const completeness: CompletenessReport = {
   status: "partial",
@@ -48,14 +42,7 @@ describe("popup state", () => {
         completeness,
         messageCount: 3,
         platformLabel: "ChatGPT",
-        previewMessages: [
-          { authorLabel: "User", index: 0, role: "user", text: "First prompt" },
-          { authorLabel: "ChatGPT", index: 1, role: "assistant", text: "Middle answer" },
-          { authorLabel: "ChatGPT", index: 2, role: "assistant", text: "Last answer" }
-        ],
-        selectedMessageCount: 0,
-        sourceUrl: "https://chatgpt.com/c/example",
-        title: "Example"
+        sourceUrl: "https://chatgpt.com/c/example"
       },
       type: "scan_succeeded"
     });
@@ -63,7 +50,6 @@ describe("popup state", () => {
     expect(scanned.scanStatus).toBe("scanned");
     expect(scanned.platformLabel).toBe("ChatGPT");
     expect(scanned.completeness?.warnings).toEqual(["Top was not reached"]);
-    expect(scanned.previewMessages).toHaveLength(3);
     expect(scanned.progressLabel).toBe("3 messages ready");
     expect(scanned.partialWarning).toBe("This export may be partial.");
 
@@ -100,8 +86,7 @@ describe("popup state", () => {
         includeAdvancedContent: false,
         includeReasoning: true,
         markdownProfile: "github",
-        redact: true,
-        scope: "assistant_only"
+        redact: true
       }
     };
 
@@ -115,7 +100,7 @@ describe("popup state", () => {
         includeReasoning: true,
         markdownProfile: "github",
         redact: true,
-        scope: "assistant_only"
+        scope: "all"
       },
       returnFiles: false,
       type: "jelluvi/export-current-tab"
@@ -126,27 +111,14 @@ describe("popup state", () => {
       options: { formats: ["md"] },
       returnFiles: true
     });
-    expect(buildDownloadMarkdownRequest(state)).toMatchObject({
-      copyToClipboard: false,
-      download: true,
-      options: { formats: ["md"] }
-    });
-    expect(buildOpenPdfRequest(state)).toMatchObject({
-      copyToClipboard: false,
-      download: false,
-      options: { formats: ["pdf"], pdfSettings: DEFAULT_PDF_SETTINGS },
-      returnFiles: true
-    });
     expect(buildGetScanCacheSummaryRequest()).toEqual({
       type: "jelluvi/get-scan-cache-summary"
     });
     expect(buildGetActiveTabInfoRequest()).toEqual({
       type: "jelluvi/get-active-tab-info"
     });
-    expect(buildGetCachedConversationRequest()).toEqual({
-      type: "jelluvi/get-cached-conversation"
-    });
-    expect(buildOpenPreviewRequest()).toEqual({
+    expect(buildOpenPreviewRequest(state)).toEqual({
+      formats: ["md", "html"],
       type: "jelluvi/open-preview"
     });
   });
@@ -178,13 +150,12 @@ describe("popup state", () => {
     const state = popupReducer(createInitialPopupState(), {
       sourceUrl: "https://chatgpt.com/c/example",
       supported: true,
-      title: "Example chat",
       type: "set_active_tab_info"
     });
 
     expect(state.sourceUrl).toBe("https://chatgpt.com/c/example");
+    expect(state.activeTabStatus).toBe("ready");
     expect(state.sourceSupported).toBe(true);
-    expect(state.title).toBe("Example chat");
   });
 
   test("leaves checking with an actionable error when active tab detection fails", () => {
@@ -193,8 +164,9 @@ describe("popup state", () => {
       type: "active_tab_info_failed"
     });
 
-    expect(state.sourceSupported).toBe(false);
-    expect(state.scanStatus).toBe("error");
+    expect(state.activeTabStatus).toBe("failed");
+    expect(state.sourceSupported).toBeUndefined();
+    expect(state.scanStatus).toBe("idle");
     expect(state.errorMessage).toBe("Reload Jelluvi and this tab.");
   });
 
@@ -246,104 +218,6 @@ describe("popup state", () => {
     expect(buildBatchExportRequest(htmlTxtState, [7]).tabIds).toEqual([7]);
   });
 
-  test("builds range requests and reflects scoped preview messages", () => {
-    const scanned = popupReducer(createInitialPopupState(), {
-      scan: {
-        completeness,
-        messageCount: 3,
-        platformLabel: "ChatGPT",
-        previewMessages: [
-          { authorLabel: "User", index: 0, role: "user", selected: true, text: "First prompt" },
-          { authorLabel: "ChatGPT", index: 1, role: "assistant", text: "Middle answer" },
-          {
-            authorLabel: "ChatGPT",
-            index: 2,
-            role: "assistant",
-            selected: true,
-            text: "Last answer"
-          }
-        ],
-        selectedMessageCount: 2,
-        sourceUrl: "https://chatgpt.com/c/example",
-        title: "Example"
-      },
-      type: "scan_succeeded"
-    });
-    const rangeState = popupReducer(
-      popupReducer(popupReducer(scanned, { scope: "range", type: "set_scope" }), {
-        rangeStartIndex: 2,
-        type: "set_range_start"
-      }),
-      { rangeEndIndex: 3, type: "set_range_end" }
-    );
-    const selectedState = popupReducer(scanned, { scope: "selected", type: "set_scope" });
-
-    expect(buildDownloadRequest(rangeState).options?.range).toEqual({
-      endIndex: 2,
-      startIndex: 1
-    });
-    expect(getScopedPreviewMessages(rangeState).map((message) => message.text)).toEqual([
-      "Middle answer",
-      "Last answer"
-    ]);
-    expect(getScopedPreviewMessages(selectedState).map((message) => message.text)).toEqual([
-      "First prompt",
-      "Last answer"
-    ]);
-    expect(getSelectionStatusText(selectedState)).toBe("Selected messages: 2");
-  });
-
-  test("selected scope reports lost selection and resets after selected export", () => {
-    const scanned = popupReducer(createInitialPopupState(), {
-      scan: {
-        completeness,
-        messageCount: 2,
-        platformLabel: "ChatGPT",
-        previewMessages: [
-          { authorLabel: "User", index: 0, role: "user", selected: true, text: "First prompt" },
-          { authorLabel: "ChatGPT", index: 1, role: "assistant", text: "Answer" }
-        ],
-        selectedMessageCount: 1,
-        sourceUrl: "https://chatgpt.com/c/example"
-      },
-      type: "scan_succeeded"
-    });
-    const selectedState = popupReducer(scanned, { scope: "selected", type: "set_scope" });
-    const finished = popupReducer(selectedState, {
-      message: "Exported 1 message to 1 file.",
-      type: "export_finished"
-    });
-
-    expect(finished.selectedMessageCount).toBe(0);
-    expect(getSelectionStatusText(finished)).toBe("No selected messages. Select messages again.");
-    expect(getScopedPreviewMessages(finished)).toEqual([]);
-  });
-
-  test("never reports selected messages when the content script count is zero", () => {
-    const selectedState = popupReducer(createInitialPopupState(), {
-      scope: "selected",
-      type: "set_scope"
-    });
-
-    expect(getSelectionStatusText(selectedState)).toBe(
-      "No selected messages. Select messages again."
-    );
-
-    const reset = popupReducer(
-      {
-        ...selectedState,
-        previewMessages: [
-          { authorLabel: "User", index: 0, role: "user", selected: true, text: "First prompt" }
-        ],
-        selectedMessageCount: 1
-      },
-      { selectedMessageCount: 0, type: "selection_count_changed" }
-    );
-
-    expect(reset.previewMessages[0].selected).toBe(false);
-    expect(getSelectionStatusText(reset)).toBe("No selected messages. Select messages again.");
-  });
-
   test("builds export status with exported scope count", () => {
     expect(
       buildExportStatusMessage({
@@ -364,72 +238,5 @@ describe("popup state", () => {
         exportedMessageCount: 3
       })
     ).toBe("Copied 3 messages to clipboard.");
-  });
-
-  test("clamps custom range UI values to one-based positive integers", () => {
-    const state = popupReducer(
-      popupReducer(createInitialPopupState(), {
-        rangeStartIndex: 0,
-        type: "set_range_start"
-      }),
-      {
-        rangeEndIndex: Number.NaN,
-        type: "set_range_end"
-      }
-    );
-
-    expect(state.options.rangeStartIndex).toBe(1);
-    expect(state.options.rangeEndIndex).toBe(1);
-    expect(
-      buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options
-        ?.range
-    ).toEqual({
-      endIndex: 0,
-      startIndex: 0
-    });
-  });
-
-  test("keeps range start and end valid when users enter reversed values", () => {
-    const state = popupReducer(
-      popupReducer(createInitialPopupState(), {
-        rangeStartIndex: 4,
-        type: "set_range_start"
-      }),
-      {
-        rangeEndIndex: 2,
-        type: "set_range_end"
-      }
-    );
-
-    expect(state.options.rangeStartIndex).toBe(2);
-    expect(state.options.rangeEndIndex).toBe(2);
-  });
-
-  test("clamps custom range values to the scanned one-based message count", () => {
-    const scanned = popupReducer(createInitialPopupState(), {
-      scan: {
-        completeness,
-        messageCount: 3,
-        platformLabel: "ChatGPT",
-        previewMessages: [],
-        selectedMessageCount: 0,
-        sourceUrl: "https://chatgpt.com/c/example"
-      },
-      type: "scan_succeeded"
-    });
-    const state = popupReducer(
-      popupReducer(scanned, { rangeStartIndex: 20, type: "set_range_start" }),
-      { rangeEndIndex: 99, type: "set_range_end" }
-    );
-
-    expect(state.options.rangeStartIndex).toBe(3);
-    expect(state.options.rangeEndIndex).toBe(3);
-    expect(
-      buildDownloadRequest({ ...state, options: { ...state.options, scope: "range" } }).options
-        ?.range
-    ).toEqual({
-      endIndex: 2,
-      startIndex: 2
-    });
   });
 });

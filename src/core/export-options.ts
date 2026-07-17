@@ -108,7 +108,7 @@ export function renderConversationFiles(
   options: Partial<ExportOptions> = {}
 ): readonly RenderedFile<RenderedBytes>[] {
   const normalizedOptions = normalizeExportOptions(options);
-  const preparedConversation = prepareConversationForExport(conversation, normalizedOptions);
+  const preparedConversation = prepareConversation(conversation, normalizedOptions);
 
   if (preparedConversation.messages.length === 0) {
     throw new ExportPipelineError(
@@ -135,6 +135,13 @@ export function renderConversationFiles(
       zipFormats
     });
   });
+}
+
+export function prepareConversationForExport(
+  conversation: ConversationExport,
+  options: Partial<ExportOptions> = {}
+): ConversationExport {
+  return prepareConversation(conversation, normalizeExportOptions(options));
 }
 
 export function getExportedMessageCount(
@@ -167,7 +174,7 @@ export function serializeExportError(error: unknown): SerializedExportError {
   };
 }
 
-function prepareConversationForExport(
+function prepareConversation(
   conversation: ConversationExport,
   options: ExportOptions
 ): ConversationExport {

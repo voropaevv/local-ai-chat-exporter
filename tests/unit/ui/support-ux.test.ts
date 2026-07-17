@@ -9,7 +9,7 @@ function readSource(path: string): string {
 }
 
 describe("support UX source", () => {
-  test("keeps support links available without interrupting successful exports", () => {
+  test("keeps support links in project surfaces, not the extension UI", () => {
     const supportSource = readSource("src/ui/support-links.ts");
     const popupSource = readSource("src/ui/PopupApp.tsx");
     const optionsSource = readSource("src/ui/OptionsApp.tsx");
@@ -23,10 +23,10 @@ describe("support UX source", () => {
     expect(popupSource).not.toContain("maybeShowSupportPrompt");
     expect(popupSource).not.toMatch(/paywall|lockout|nag|advertisement/u);
 
-    expect(optionsSource).toContain("Support");
-    expect(optionsSource).toContain("GitHub Sponsors");
-    expect(optionsSource).toContain("Privacy Policy");
-    expect(optionsSource).toContain("Send Feedback");
+    expect(optionsSource).not.toContain("Support");
+    expect(optionsSource).not.toContain("GitHub Sponsors");
+    expect(optionsSource).not.toContain("Privacy Policy");
+    expect(optionsSource).not.toContain("Send Feedback");
     expect(popupSource).not.toContain("Sponsors");
   });
 });

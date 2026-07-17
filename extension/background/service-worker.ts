@@ -7,46 +7,36 @@ import {
   POPUP_BATCH_EXPORT_MESSAGE,
   POPUP_BATCH_LIST_MESSAGE,
   CONTENT_CANCEL_SCAN_MESSAGE,
-  CONTENT_CLEAR_SELECTION_MESSAGE,
   CONTENT_EXPORT_MESSAGE,
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
-  CONTENT_START_SELECTION_MESSAGE,
   POPUP_GET_ACTIVE_TAB_INFO_MESSAGE,
-  POPUP_GET_CACHED_CONVERSATION_MESSAGE,
   POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   POPUP_OPEN_PREVIEW_MESSAGE,
   POPUP_CANCEL_SCAN_MESSAGE,
-  POPUP_CLEAR_SELECTION_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
-  POPUP_START_SELECTION_MESSAGE,
   PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
   PREVIEW_RETURN_TO_SOURCE_MESSAGE,
   type ActiveTabInfoResult,
   type CachedConversationResult,
-  type ContentClearSelectionRequest,
   type ContentExportRequest,
   type ContentExportSuccess,
   type ContentGetCachedConversationRequest,
   type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
-  type ContentStartSelectionRequest,
   type BatchExportSuccess,
   type BatchListSuccess,
   type PopupBatchExportRequest,
   type PopupBatchListRequest,
-  type PopupClearSelectionRequest,
   type PopupCancelScanRequest,
   type PopupExportRequest,
-  type PopupGetCachedConversationRequest,
   type PopupExportSuccess,
   type PopupGetActiveTabInfoRequest,
   type PopupGetScanCacheSummaryRequest,
   type PopupOpenPreviewRequest,
   type PopupScanRequest,
-  type PopupStartSelectionRequest,
   type PreviewGetCachedConversationRequest,
   type PreviewReturnToSourceRequest,
   type PreviewOpenSuccess,
@@ -82,11 +72,8 @@ async function handlePopupRequest(
     | PopupExportRequest
     | PopupBatchListRequest
     | PopupBatchExportRequest
-    | PopupStartSelectionRequest
-    | PopupClearSelectionRequest
     | PopupGetActiveTabInfoRequest
     | PopupGetScanCacheSummaryRequest
-    | PopupGetCachedConversationRequest
     | PopupOpenPreviewRequest
     | PreviewGetCachedConversationRequest
     | PreviewReturnToSourceRequest
@@ -109,14 +96,6 @@ async function handlePopupRequest(
     return handlePopupCancelScanRequest();
   }
 
-  if (request.type === POPUP_START_SELECTION_MESSAGE) {
-    return handlePopupSelectionMessage({ type: CONTENT_START_SELECTION_MESSAGE });
-  }
-
-  if (request.type === POPUP_CLEAR_SELECTION_MESSAGE) {
-    return handlePopupSelectionMessage({ type: CONTENT_CLEAR_SELECTION_MESSAGE });
-  }
-
   if (request.type === POPUP_GET_ACTIVE_TAB_INFO_MESSAGE) {
     return handlePopupGetActiveTabInfoRequest();
   }
@@ -125,12 +104,8 @@ async function handlePopupRequest(
     return handlePopupGetScanCacheSummaryRequest();
   }
 
-  if (request.type === POPUP_GET_CACHED_CONVERSATION_MESSAGE) {
-    return handlePopupGetCachedConversationRequest();
-  }
-
   if (request.type === POPUP_OPEN_PREVIEW_MESSAGE) {
-    return handlePopupOpenPreviewRequest();
+    return handlePopupOpenPreviewRequest(request);
   }
 
   if (request.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE) {
@@ -161,8 +136,7 @@ async function handlePopupGetActiveTabInfoRequest(): Promise<ActiveTabInfoResult
   return {
     ...(supportedPage !== undefined ? { platformLabel: supportedPage.label } : {}),
     ...(sourceUrl !== undefined ? { sourceUrl } : {}),
-    supported: supportedPage !== undefined,
-    ...(typeof tab.title === "string" && tab.title.length > 0 ? { title: tab.title } : {})
+    supported: supportedPage !== undefined
   };
 }
 
@@ -204,24 +178,9 @@ async function handlePopupGetScanCacheSummaryRequest(): Promise<ScanCacheSummary
   }
 }
 
-async function handlePopupGetCachedConversationRequest(): Promise<CachedConversationResult> {
-  try {
-    const tab = await getActiveTab();
-    const tabId = requireTabId(tab);
-
-    await ensureContentScript(tabId);
-
-    const response = await sendContentMessage<CachedConversationResult>(tabId, {
-      type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
-    } satisfies ContentGetCachedConversationRequest);
-
-    return response.ok ? response.value : { hasConversation: false };
-  } catch {
-    return { hasConversation: false };
-  }
-}
-
-async function handlePopupOpenPreviewRequest(): Promise<PreviewOpenSuccess> {
+async function handlePopupOpenPreviewRequest(
+  request: PopupOpenPreviewRequest
+): Promise<PreviewOpenSuccess> {
   const tab = await getActiveTab();
   const tabId = requireTabId(tab);
 
@@ -247,9 +206,11 @@ async function handlePopupOpenPreviewRequest(): Promise<PreviewOpenSuccess> {
   }
 
   const url = buildPreviewPageUrl({
+    formats: request.formats,
     getURL: (path) => chrome.runtime.getURL(path),
     scanId: cacheSummary.scanId,
-    sourceTabId: tabId
+    sourceTabId: tabId,
+    ...(request.zipFormats !== undefined ? { zipFormats: request.zipFormats } : {})
   });
 
   await chrome.tabs.create({ active: true, url });
@@ -281,18 +242,6 @@ async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: tru
   await sendContentMessage<{ readonly cancelled: true }>(tabId, {
     type: CONTENT_CANCEL_SCAN_MESSAGE
   });
-
-  return { cancelled: true };
-}
-
-async function handlePopupSelectionMessage(
-  request: ContentStartSelectionRequest | ContentClearSelectionRequest
-): Promise<{ readonly cancelled: true }> {
-  const tab = await getActiveTab();
-  const tabId = requireTabId(tab);
-
-  await ensureContentScript(tabId);
-  await sendContentMessage<{ readonly cancelled: boolean }>(tabId, request);
 
   return { cancelled: true };
 }
@@ -352,8 +301,6 @@ async function sendContentMessage<T>(
     | ContentExportRequest
     | ContentGetCachedConversationRequest
     | ContentGetScanCacheSummaryRequest
-    | ContentStartSelectionRequest
-    | ContentClearSelectionRequest
     | { readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE }
 ): Promise<RuntimeResponse<T>> {
   try {
@@ -375,11 +322,8 @@ function isPopupRequest(
   | PopupExportRequest
   | PopupBatchListRequest
   | PopupBatchExportRequest
-  | PopupStartSelectionRequest
-  | PopupClearSelectionRequest
   | PopupGetActiveTabInfoRequest
   | PopupGetScanCacheSummaryRequest
-  | PopupGetCachedConversationRequest
   | PopupOpenPreviewRequest
   | PreviewGetCachedConversationRequest
   | PreviewReturnToSourceRequest {
@@ -390,14 +334,11 @@ function isPopupRequest(
       message.type === POPUP_EXPORT_MESSAGE ||
       message.type === POPUP_GET_ACTIVE_TAB_INFO_MESSAGE ||
       message.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE ||
-      message.type === POPUP_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === POPUP_OPEN_PREVIEW_MESSAGE ||
       message.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === PREVIEW_RETURN_TO_SOURCE_MESSAGE ||
       message.type === POPUP_BATCH_LIST_MESSAGE ||
-      message.type === POPUP_BATCH_EXPORT_MESSAGE ||
-      message.type === POPUP_START_SELECTION_MESSAGE ||
-      message.type === POPUP_CLEAR_SELECTION_MESSAGE)
+      message.type === POPUP_BATCH_EXPORT_MESSAGE)
   );
 }
 

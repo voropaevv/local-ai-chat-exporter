@@ -28,19 +28,18 @@ describe("conversation change observer", () => {
     stop();
   });
 
-  test("ignores selection controls inserted into a message", async () => {
-    document.body.innerHTML = `
-      <article data-message-author-role="assistant"><p>Answer</p></article>
-    `;
+  test("invalidates when a new message is added", async () => {
+    document.body.innerHTML = "<main></main>";
     const onChange = vi.fn();
     const stop = observeConversationChanges(onChange, document, MESSAGE_SELECTOR);
-    const control = document.createElement("button");
-    control.dataset.localExportSelectionControl = "true";
-    document.querySelector("article")?.append(control);
+    const message = document.createElement("article");
+    message.setAttribute("data-message-author-role", "assistant");
+    message.textContent = "New answer";
+    document.querySelector("main")?.append(message);
 
     await flushMutations();
 
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledTimes(1);
     stop();
   });
 

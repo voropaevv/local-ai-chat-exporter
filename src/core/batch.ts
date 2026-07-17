@@ -1,5 +1,5 @@
 import type { LocalRendererFormat } from "../renderers/types";
-import type { ChatPlatform } from "./schema";
+import { getProviderByUrl, getProviderOriginForUrl, type ProviderId } from "./provider-catalog";
 
 export interface BatchTabLike {
   readonly id?: number;
@@ -7,7 +7,7 @@ export interface BatchTabLike {
   readonly url?: string;
 }
 
-type BatchPlatform = Exclude<ChatPlatform, "unknown">;
+type BatchPlatform = ProviderId;
 
 export interface BatchCandidateTab {
   readonly id: number;
@@ -77,66 +77,12 @@ export type BatchManifestResult =
       readonly warnings: readonly string[];
     };
 
-interface BatchPlatformConfig {
-  readonly hostnames: readonly string[];
-  readonly label: string;
-  readonly origins: Readonly<Record<string, string>>;
-  readonly platform: BatchPlatform;
-}
-
 export interface SupportedChatPageInfo {
   readonly label: string;
   readonly platform: BatchPlatform;
 }
 
-const BATCH_PLATFORM_CONFIGS: readonly BatchPlatformConfig[] = [
-  {
-    hostnames: ["chatgpt.com", "chat.openai.com"],
-    label: "ChatGPT",
-    origins: {
-      "chatgpt.com": "https://chatgpt.com/*",
-      "chat.openai.com": "https://chat.openai.com/*"
-    },
-    platform: "chatgpt"
-  },
-  {
-    hostnames: ["claude.ai"],
-    label: "Claude",
-    origins: {
-      "claude.ai": "https://claude.ai/*"
-    },
-    platform: "claude"
-  },
-  {
-    hostnames: ["gemini.google.com"],
-    label: "Gemini",
-    origins: {
-      "gemini.google.com": "https://gemini.google.com/*"
-    },
-    platform: "gemini"
-  },
-  {
-    hostnames: ["www.perplexity.ai", "perplexity.ai"],
-    label: "Perplexity",
-    origins: {
-      "perplexity.ai": "https://perplexity.ai/*",
-      "www.perplexity.ai": "https://www.perplexity.ai/*"
-    },
-    platform: "perplexity"
-  },
-  {
-    hostnames: ["notebooklm.google.com"],
-    label: "NotebookLM",
-    origins: {
-      "notebooklm.google.com": "https://notebooklm.google.com/*"
-    },
-    platform: "notebooklm"
-  }
-];
-
-export const SUPPORTED_CHAT_ORIGINS: readonly string[] = [
-  ...new Set(BATCH_PLATFORM_CONFIGS.flatMap((config) => Object.values(config.origins)))
-];
+export { SUPPORTED_CHAT_ORIGINS } from "./provider-catalog";
 
 export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly BatchCandidateTab[] {
   return tabs.flatMap((tab) => {
@@ -144,17 +90,17 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
       return [];
     }
 
-    const platform = detectBatchPlatform(tab.url);
+    const provider = getProviderByUrl(tab.url);
 
-    if (platform === undefined) {
+    if (provider === undefined) {
       return [];
     }
 
     return [
       {
         id: tab.id,
-        platform: platform.platform,
-        platformLabel: platform.label,
+        platform: provider.id,
+        platformLabel: provider.label,
         title: tab.title?.trim() || "Untitled chat",
         url: tab.url
       }
@@ -163,9 +109,9 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
 }
 
 export function getSupportedChatPageInfo(url: string): SupportedChatPageInfo | undefined {
-  const config = detectBatchPlatform(url);
+  const provider = getProviderByUrl(url);
 
-  return config === undefined ? undefined : { label: config.label, platform: config.platform };
+  return provider === undefined ? undefined : { label: provider.label, platform: provider.id };
 }
 
 export function createBatchRootDirectory(exportedAt: string): string {
@@ -177,20 +123,9 @@ export function createBatchEntryBase(tab: BatchCandidateTab, index: number): str
 }
 
 export function getBatchRequiredOrigins(tab: Pick<BatchCandidateTab, "url">): readonly string[] {
-  const config = detectBatchPlatform(tab.url);
+  const origin = getProviderOriginForUrl(tab.url);
 
-  if (config === undefined) {
-    return [];
-  }
-
-  try {
-    const hostname = new URL(tab.url).hostname;
-    const origin = config.origins[hostname];
-
-    return origin === undefined ? [] : [origin];
-  } catch {
-    return [];
-  }
+  return origin === undefined ? [] : [origin];
 }
 
 export function getBatchRequiredOriginsForTabs(
@@ -230,16 +165,6 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
       };
     })
   };
-}
-
-function detectBatchPlatform(url: string): BatchPlatformConfig | undefined {
-  try {
-    const parsed = new URL(url);
-
-    return BATCH_PLATFORM_CONFIGS.find((config) => config.hostnames.includes(parsed.hostname));
-  } catch {
-    return undefined;
-  }
 }
 
 function slugify(value: string): string {

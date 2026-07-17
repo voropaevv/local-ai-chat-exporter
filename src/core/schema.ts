@@ -1,11 +1,6 @@
-export const CHAT_PLATFORMS = [
-  "chatgpt",
-  "claude",
-  "gemini",
-  "perplexity",
-  "notebooklm",
-  "unknown"
-] as const;
+import { PROVIDER_IDS, type ProviderId } from "./provider-catalog";
+
+export const CHAT_PLATFORMS = [...PROVIDER_IDS, "unknown"] as const;
 
 export const CHAT_ROLES = ["user", "assistant", "system", "tool", "other"] as const;
 
@@ -16,7 +11,7 @@ export const COMPLETENESS_STATUSES = [
   "unknown"
 ] as const;
 
-export type ChatPlatform = (typeof CHAT_PLATFORMS)[number];
+export type ChatPlatform = ProviderId | "unknown";
 
 export type ChatRole = (typeof CHAT_ROLES)[number];
 

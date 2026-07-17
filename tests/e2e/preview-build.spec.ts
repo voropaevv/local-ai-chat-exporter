@@ -12,6 +12,7 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   );
 
   expect(existsSync(resolve(projectRoot, "dist/preview/index.html"))).toBe(true);
+  expect(existsSync(resolve(projectRoot, "dist/visual-qa.html"))).toBe(false);
 
   const distPopup = await readFile(resolve(projectRoot, "dist/popup/index.html"), "utf8");
   const distPreview = await readFile(resolve(projectRoot, "dist/preview/index.html"), "utf8");
@@ -28,7 +29,8 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   expect(sourceCss).toContain("max-height: 760px");
   expect(sourceCss).toContain("margin-inline: auto");
   expect(sourceCss).toContain("position: sticky");
-  expect(popupHeader).toContain("options/index.html#filename-settings");
+  expect(popupHeader).toContain('SETTINGS_PAGE_PATH = "options/index.html"');
+  expect(popupHeader).not.toContain("#filename-settings");
   expect(popupHeader).toContain('className="settings-button"');
   expect(sourceCss).not.toContain(".popup-footer");
 });

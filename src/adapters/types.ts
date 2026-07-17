@@ -1,7 +1,12 @@
-import type { ChatPlatform, ExportedMessage } from "../core/schema";
+import type {
+  ProviderCapabilities,
+  ProviderId,
+  ProviderSupportStatus
+} from "../core/provider-catalog";
+import type { ExportedMessage } from "../core/schema";
 
-export type SupportedChatPlatform = Exclude<ChatPlatform, "unknown">;
-export type ProviderSupportStatus = "stable" | "beta" | "experimental";
+export type SupportedChatPlatform = ProviderId;
+export type { ProviderSupportStatus } from "../core/provider-catalog";
 
 export interface AdapterDetectionContext {
   readonly document?: ParentNode;
@@ -26,13 +31,14 @@ export interface AdapterMetadata {
 }
 
 export interface PlatformAdapter {
+  readonly capabilities: ProviderCapabilities;
   readonly id: SupportedChatPlatform;
   readonly label: string;
   readonly hostnames: readonly string[];
   readonly supportStatus: ProviderSupportStatus;
   readonly selectors: AdapterSelectors;
   readonly limitations: readonly string[];
-  readonly experimentalWarning?: string;
+  readonly supportWarning?: string;
   readonly providerWarnings: readonly string[];
   detect(context?: AdapterDetectionContext): boolean;
   scanVisible(root?: ParentNode): readonly ExportedMessage[];

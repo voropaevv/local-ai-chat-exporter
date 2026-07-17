@@ -255,9 +255,6 @@ function makeScanSummary(): ScanSummary {
     },
     messageCount: 2,
     platformLabel: "ChatGPT",
-    previewMessages: [],
-    selectedMessageCount: 0,
-    sourceUrl: "https://chatgpt.com/c/html",
-    title: "HTML chat"
+    sourceUrl: "https://chatgpt.com/c/html"
   };
 }

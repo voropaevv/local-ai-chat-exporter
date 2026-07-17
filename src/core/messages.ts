@@ -1,6 +1,6 @@
 import type { ExportOptions, SerializedExportError } from "./export-options";
 import type { BatchCandidateTab, BatchManifestResult } from "./batch";
-import type { CompletenessReport, ChatRole, ConversationExport } from "./schema";
+import type { CompletenessReport, ConversationExport, ExportFormat } from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
 export const POPUP_SCAN_MESSAGE = "jelluvi/scan-current-tab";
@@ -8,39 +8,23 @@ export const POPUP_CANCEL_SCAN_MESSAGE = "jelluvi/cancel-scan";
 export const POPUP_EXPORT_MESSAGE = "jelluvi/export-current-tab";
 export const POPUP_BATCH_LIST_MESSAGE = "jelluvi/list-open-chat-tabs";
 export const POPUP_BATCH_EXPORT_MESSAGE = "jelluvi/export-open-chat-tabs";
-export const POPUP_START_SELECTION_MESSAGE = "jelluvi/start-selection";
-export const POPUP_CLEAR_SELECTION_MESSAGE = "jelluvi/clear-selection";
 export const POPUP_GET_ACTIVE_TAB_INFO_MESSAGE = "jelluvi/get-active-tab-info";
 export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/get-scan-cache-summary";
-export const POPUP_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/get-cached-conversation";
 export const POPUP_OPEN_PREVIEW_MESSAGE = "jelluvi/open-preview";
 export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/preview-get-cached-conversation";
 export const PREVIEW_RETURN_TO_SOURCE_MESSAGE = "jelluvi/preview-return-to-source";
 export const CONTENT_SCAN_MESSAGE = "jelluvi/content-scan";
 export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/content-cancel-scan";
 export const CONTENT_EXPORT_MESSAGE = "jelluvi/content-export";
-export const CONTENT_START_SELECTION_MESSAGE = "jelluvi/content-start-selection";
-export const CONTENT_CLEAR_SELECTION_MESSAGE = "jelluvi/content-clear-selection";
 export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/content-get-scan-cache-summary";
 export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/content-get-cached-conversation";
-
-export interface PreviewMessage {
-  readonly index: number;
-  readonly role: ChatRole;
-  readonly authorLabel: string;
-  readonly text: string;
-  readonly selected?: boolean;
-}
 
 export interface ScanSummary {
   readonly completeness: CompletenessReport;
   readonly messageCount: number;
   readonly platformLabel: string;
-  readonly previewMessages: readonly PreviewMessage[];
   readonly scanId?: string;
-  readonly selectedMessageCount: number;
   readonly sourceUrl: string;
-  readonly title?: string;
 }
 
 export interface PopupScanRequest {
@@ -69,14 +53,6 @@ export interface PopupBatchExportRequest {
   readonly type: typeof POPUP_BATCH_EXPORT_MESSAGE;
 }
 
-export interface PopupStartSelectionRequest {
-  readonly type: typeof POPUP_START_SELECTION_MESSAGE;
-}
-
-export interface PopupClearSelectionRequest {
-  readonly type: typeof POPUP_CLEAR_SELECTION_MESSAGE;
-}
-
 export interface PopupGetScanCacheSummaryRequest {
   readonly type: typeof POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE;
 }
@@ -85,12 +61,10 @@ export interface PopupGetActiveTabInfoRequest {
   readonly type: typeof POPUP_GET_ACTIVE_TAB_INFO_MESSAGE;
 }
 
-export interface PopupGetCachedConversationRequest {
-  readonly type: typeof POPUP_GET_CACHED_CONVERSATION_MESSAGE;
-}
-
 export interface PopupOpenPreviewRequest {
+  readonly formats: readonly ExportFormat[];
   readonly type: typeof POPUP_OPEN_PREVIEW_MESSAGE;
+  readonly zipFormats?: readonly Exclude<ExportFormat, "zip">[];
 }
 
 export interface PreviewGetCachedConversationRequest {
@@ -118,14 +92,6 @@ export interface ContentExportRequest {
   readonly delivery: "anchor" | "return_files";
   readonly download?: boolean;
   readonly options: Partial<ExportOptions>;
-}
-
-export interface ContentStartSelectionRequest {
-  readonly type: typeof CONTENT_START_SELECTION_MESSAGE;
-}
-
-export interface ContentClearSelectionRequest {
-  readonly type: typeof CONTENT_CLEAR_SELECTION_MESSAGE;
 }
 
 export interface ContentGetScanCacheSummaryRequest {
@@ -165,7 +131,6 @@ export interface ActiveTabInfoResult {
   readonly platformLabel?: string;
   readonly sourceUrl?: string;
   readonly supported: boolean;
-  readonly title?: string;
 }
 
 export type CachedConversationResult =

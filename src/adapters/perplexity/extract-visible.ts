@@ -1,10 +1,15 @@
+import {
+  getProviderDefinition,
+  getProviderHostnames,
+  getProviderWarnings
+} from "../../core/provider-catalog";
 import type { PlatformAdapter } from "../types";
-import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleAdapterContract } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
 } from "../shared/extract-visible";
-import { PERPLEXITY_HOSTNAMES, detectPerplexity } from "./detect";
+import { detectPerplexity } from "./detect";
 import { perplexitySelectors } from "./selectors";
 
 const PERPLEXITY_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
@@ -22,21 +27,20 @@ const PERPLEXITY_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
-const PERPLEXITY_LIMITATIONS = [
-  "Visible-message extraction only; unloaded or collapsed turns may be missing."
-] as const;
-const PERPLEXITY_SUPPORT_WARNING =
-  "Perplexity support is experimental. Verify first and last messages before relying on export.";
+const PERPLEXITY_PROVIDER = getProviderDefinition("perplexity");
 
 export const perplexityAdapter: PlatformAdapter = {
-  id: "perplexity",
-  label: "Perplexity",
-  hostnames: PERPLEXITY_HOSTNAMES,
-  supportStatus: "experimental",
+  capabilities: PERPLEXITY_PROVIDER.capabilities,
+  id: PERPLEXITY_PROVIDER.id,
+  label: PERPLEXITY_PROVIDER.label,
+  hostnames: getProviderHostnames(PERPLEXITY_PROVIDER.id),
+  supportStatus: PERPLEXITY_PROVIDER.supportStatus,
   selectors: perplexitySelectors,
-  limitations: PERPLEXITY_LIMITATIONS,
-  experimentalWarning: PERPLEXITY_SUPPORT_WARNING,
-  providerWarnings: createProviderWarnings(PERPLEXITY_SUPPORT_WARNING, PERPLEXITY_LIMITATIONS),
+  limitations: PERPLEXITY_PROVIDER.limitations,
+  ...(PERPLEXITY_PROVIDER.supportWarning !== undefined
+    ? { supportWarning: PERPLEXITY_PROVIDER.supportWarning }
+    : {}),
+  providerWarnings: getProviderWarnings(PERPLEXITY_PROVIDER.id),
   detect: detectPerplexity,
   ...createVisibleAdapterContract(extractVisiblePerplexityMessages)
 };

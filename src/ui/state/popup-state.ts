@@ -4,26 +4,19 @@ import {
   POPUP_CANCEL_SCAN_MESSAGE,
   POPUP_BATCH_EXPORT_MESSAGE,
   POPUP_BATCH_LIST_MESSAGE,
-  POPUP_CLEAR_SELECTION_MESSAGE,
   POPUP_GET_ACTIVE_TAB_INFO_MESSAGE,
-  POPUP_GET_CACHED_CONVERSATION_MESSAGE,
   POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   POPUP_OPEN_PREVIEW_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
-  POPUP_START_SELECTION_MESSAGE,
   type PopupBatchExportRequest,
   type PopupBatchListRequest,
   type PopupCancelScanRequest,
-  type PopupClearSelectionRequest,
   type PopupGetActiveTabInfoRequest,
   type PopupExportRequest,
-  type PopupGetCachedConversationRequest,
   type PopupGetScanCacheSummaryRequest,
   type PopupOpenPreviewRequest,
   type PopupScanRequest,
-  type PopupStartSelectionRequest,
-  type PreviewMessage,
   type ScanSummary
 } from "../../core/messages";
 import type { CompletenessReport, ExportFormat } from "../../core/schema";
@@ -36,6 +29,7 @@ export type PopupOutputMode = "separate" | "zip";
 export type PopupFileFormat = Exclude<ExportFormat, "zip">;
 
 export type PopupScanStatus = "idle" | "scanning" | "scanned" | "exporting" | "error";
+export type PopupActiveTabStatus = "checking" | "ready" | "failed";
 
 export interface PopupOptionsState {
   readonly filenameTemplate: string;
@@ -48,28 +42,23 @@ export interface PopupOptionsState {
   readonly markdownProfile: MarkdownProfile;
   readonly outputMode: PopupOutputMode;
   readonly pdfSettings: PdfSettingsInput;
-  readonly rangeEndIndex: number;
-  readonly rangeStartIndex: number;
   readonly redact: boolean;
   readonly redactionCustomPatterns: readonly string[];
   readonly redactionPreset: RedactionPreset;
-  readonly scope: ExportOptions["scope"];
 }
 
 export interface PopupState {
+  readonly activeTabStatus: PopupActiveTabStatus;
   readonly canCancelScan: boolean;
   readonly completeness?: CompletenessReport;
   readonly errorMessage?: string;
   readonly options: PopupOptionsState;
   readonly partialWarning?: string;
   readonly platformLabel: string;
-  readonly previewMessages: readonly PreviewMessage[];
   readonly progressLabel: string;
   readonly scanStatus: PopupScanStatus;
-  readonly selectedMessageCount: number;
   readonly sourceSupported?: boolean;
   readonly sourceUrl?: string;
-  readonly title?: string;
 }
 
 export interface ExportStatusMessageInput {
@@ -81,6 +70,7 @@ export interface ExportStatusMessageInput {
 }
 
 export type PopupAction =
+  | { readonly type: "active_tab_info_started" }
   | { readonly message: string; readonly type: "active_tab_info_failed" }
   | { readonly type: "scan_started" }
   | { readonly type: "scan_succeeded"; readonly scan: ScanSummary }
@@ -88,12 +78,10 @@ export type PopupAction =
   | { readonly type: "scan_cancelled" }
   | { readonly type: "export_started" }
   | { readonly type: "export_finished"; readonly message: string }
-  | { readonly selectedMessageCount: number; readonly type: "selection_count_changed" }
   | {
       readonly platformLabel?: string;
       readonly sourceUrl?: string;
       readonly supported: boolean;
-      readonly title?: string;
       readonly type: "set_active_tab_info";
     }
   | { readonly type: "set_format"; readonly format: ExportFormat }
@@ -102,11 +90,15 @@ export type PopupAction =
       readonly bundleFormats: readonly PopupFileFormat[];
       readonly filenameTemplate: string;
       readonly formats: readonly ExportFormat[];
+      readonly includeAdvancedContent: boolean;
+      readonly includeMetadata: boolean;
+      readonly includeReasoning: boolean;
+      readonly markdownProfile: MarkdownProfile;
       readonly outputMode: PopupOutputMode;
+      readonly pdfSettings: PdfSettingsInput;
       readonly type: "set_export_settings";
     }
   | { readonly type: "set_output_mode"; readonly outputMode: PopupOutputMode }
-  | { readonly type: "set_scope"; readonly scope: ExportOptions["scope"] }
   | { readonly type: "set_markdown_profile"; readonly markdownProfile: MarkdownProfile }
   | { readonly type: "set_filename_template"; readonly filenameTemplate: string }
   | { readonly type: "set_include_advanced_content"; readonly includeAdvancedContent: boolean }
@@ -115,9 +107,7 @@ export type PopupAction =
   | { readonly type: "set_pdf_settings"; readonly pdfSettings: PdfSettingsInput }
   | { readonly type: "set_redact"; readonly redact: boolean }
   | { readonly type: "set_redaction_settings"; readonly redaction: RedactionSettings }
-  | { readonly type: "set_redaction_preset"; readonly redactionPreset: RedactionPreset }
-  | { readonly type: "set_range_start"; readonly rangeStartIndex: number }
-  | { readonly type: "set_range_end"; readonly rangeEndIndex: number };
+  | { readonly type: "set_redaction_preset"; readonly redactionPreset: RedactionPreset };
 
 const DEFAULT_OPTIONS: PopupOptionsState = {
   bundleFormats: ["md", "json", "html"],
@@ -130,12 +120,9 @@ const DEFAULT_OPTIONS: PopupOptionsState = {
   markdownProfile: "default",
   outputMode: "separate",
   pdfSettings: DEFAULT_PDF_SETTINGS,
-  rangeEndIndex: 1,
-  rangeStartIndex: 1,
   redact: false,
   redactionCustomPatterns: [],
-  redactionPreset: "off",
-  scope: "all"
+  redactionPreset: "off"
 };
 
 export const POPUP_FILE_FORMATS: readonly PopupFileFormat[] = [
@@ -151,26 +138,33 @@ export const POPUP_FILE_FORMATS: readonly PopupFileFormat[] = [
 
 export function createInitialPopupState(): PopupState {
   return {
+    activeTabStatus: "checking",
     canCancelScan: false,
     options: DEFAULT_OPTIONS,
     platformLabel: "Current tab",
-    previewMessages: [],
     progressLabel: "Ready when you are.",
-    scanStatus: "idle",
-    selectedMessageCount: 0
+    scanStatus: "idle"
   };
 }
 
 export function popupReducer(state: PopupState, action: PopupAction): PopupState {
   switch (action.type) {
+    case "active_tab_info_started":
+      return {
+        ...state,
+        activeTabStatus: "checking",
+        errorMessage: undefined,
+        sourceSupported: undefined
+      };
     case "active_tab_info_failed":
       return {
         ...state,
+        activeTabStatus: "failed",
         canCancelScan: false,
         errorMessage: action.message,
         progressLabel: action.message,
-        scanStatus: "error",
-        sourceSupported: false
+        scanStatus: "idle",
+        sourceSupported: undefined
       };
     case "scan_started":
       return {
@@ -191,13 +185,10 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
             ? undefined
             : "This export may be partial.",
         platformLabel: action.scan.platformLabel,
-        previewMessages: action.scan.previewMessages,
         progressLabel: `${formatCount(action.scan.messageCount, "message")} ready`,
         scanStatus: "scanned",
-        selectedMessageCount: action.scan.selectedMessageCount,
         sourceSupported: true,
-        sourceUrl: action.scan.sourceUrl,
-        title: action.scan.title
+        sourceUrl: action.scan.sourceUrl
       };
     case "scan_failed":
       return {
@@ -225,29 +216,16 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
       return {
         ...state,
         progressLabel: action.message,
-        previewMessages:
-          state.options.scope === "selected"
-            ? state.previewMessages.map((message) => ({ ...message, selected: false }))
-            : state.previewMessages,
-        scanStatus: state.completeness === undefined ? "idle" : "scanned",
-        selectedMessageCount: state.options.scope === "selected" ? 0 : state.selectedMessageCount
-      };
-    case "selection_count_changed":
-      return {
-        ...state,
-        previewMessages:
-          action.selectedMessageCount === 0
-            ? state.previewMessages.map((message) => ({ ...message, selected: false }))
-            : state.previewMessages,
-        selectedMessageCount: action.selectedMessageCount
+        scanStatus: state.completeness === undefined ? "idle" : "scanned"
       };
     case "set_active_tab_info":
       return {
         ...state,
+        activeTabStatus: "ready",
+        errorMessage: undefined,
         ...(action.platformLabel !== undefined ? { platformLabel: action.platformLabel } : {}),
         sourceSupported: action.supported,
-        sourceUrl: action.sourceUrl,
-        title: action.title
+        sourceUrl: action.sourceUrl
       };
     case "set_format":
       return toggleFormat(state, action.format);
@@ -261,7 +239,12 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
           bundleFormats: action.bundleFormats.length > 0 ? action.bundleFormats : ["md"],
           filenameTemplate: action.filenameTemplate,
           formats: action.formats.length > 0 ? action.formats : ["md"],
-          outputMode: action.outputMode
+          includeAdvancedContent: action.includeAdvancedContent,
+          includeMetadata: action.includeMetadata,
+          includeReasoning: action.includeReasoning,
+          markdownProfile: action.markdownProfile,
+          outputMode: action.outputMode,
+          pdfSettings: normalizePdfSettings(action.pdfSettings)
         }
       };
     case "set_output_mode":
@@ -272,8 +255,6 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
           outputMode: action.outputMode
         }
       };
-    case "set_scope":
-      return { ...state, options: { ...state.options, scope: action.scope } };
     case "set_markdown_profile":
       return {
         ...state,
@@ -335,36 +316,6 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
           redactionPreset: action.redactionPreset
         }
       };
-    case "set_range_start": {
-      const rangeStartIndex = normalizeOneBasedIndex(
-        action.rangeStartIndex,
-        state.completeness?.messageCount
-      );
-
-      return {
-        ...state,
-        options: {
-          ...state.options,
-          rangeEndIndex: Math.max(state.options.rangeEndIndex, rangeStartIndex),
-          rangeStartIndex
-        }
-      };
-    }
-    case "set_range_end": {
-      const rangeEndIndex = normalizeOneBasedIndex(
-        action.rangeEndIndex,
-        state.completeness?.messageCount
-      );
-
-      return {
-        ...state,
-        options: {
-          ...state.options,
-          rangeEndIndex,
-          rangeStartIndex: Math.min(state.options.rangeStartIndex, rangeEndIndex)
-        }
-      };
-    }
   }
 }
 
@@ -416,14 +367,6 @@ export function buildCancelScanRequest(): PopupCancelScanRequest {
   return { type: POPUP_CANCEL_SCAN_MESSAGE };
 }
 
-export function buildStartSelectionRequest(): PopupStartSelectionRequest {
-  return { type: POPUP_START_SELECTION_MESSAGE };
-}
-
-export function buildClearSelectionRequest(): PopupClearSelectionRequest {
-  return { type: POPUP_CLEAR_SELECTION_MESSAGE };
-}
-
 export function buildGetActiveTabInfoRequest(): PopupGetActiveTabInfoRequest {
   return { type: POPUP_GET_ACTIVE_TAB_INFO_MESSAGE };
 }
@@ -432,12 +375,12 @@ export function buildGetScanCacheSummaryRequest(): PopupGetScanCacheSummaryReque
   return { type: POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE };
 }
 
-export function buildGetCachedConversationRequest(): PopupGetCachedConversationRequest {
-  return { type: POPUP_GET_CACHED_CONVERSATION_MESSAGE };
-}
-
-export function buildOpenPreviewRequest(): PopupOpenPreviewRequest {
-  return { type: POPUP_OPEN_PREVIEW_MESSAGE };
+export function buildOpenPreviewRequest(state: PopupState): PopupOpenPreviewRequest {
+  return {
+    formats: state.options.outputMode === "zip" ? ["zip"] : state.options.formats,
+    type: POPUP_OPEN_PREVIEW_MESSAGE,
+    ...(state.options.outputMode === "zip" ? { zipFormats: state.options.bundleFormats } : {})
+  };
 }
 
 export function buildBatchListRequest(): PopupBatchListRequest {
@@ -465,31 +408,11 @@ export function buildDownloadRequest(state: PopupState): PopupExportRequest {
   };
 }
 
-export function buildDownloadMarkdownRequest(state: PopupState): PopupExportRequest {
-  return {
-    copyToClipboard: false,
-    download: true,
-    options: buildExportOptions(state, ["md"]),
-    returnFiles: false,
-    type: POPUP_EXPORT_MESSAGE
-  };
-}
-
 export function buildCopyMarkdownRequest(state: PopupState): PopupExportRequest {
   return {
     copyToClipboard: false,
     download: false,
     options: buildExportOptions(state, ["md"]),
-    returnFiles: true,
-    type: POPUP_EXPORT_MESSAGE
-  };
-}
-
-export function buildOpenPdfRequest(state: PopupState): PopupExportRequest {
-  return {
-    copyToClipboard: false,
-    download: false,
-    options: buildExportOptions(state, ["pdf"]),
     returnFiles: true,
     type: POPUP_EXPORT_MESSAGE
   };
@@ -516,14 +439,6 @@ export function buildExportOptions(
     includeReasoning: state.options.includeReasoning,
     markdownProfile: state.options.markdownProfile,
     pdfSettings: normalizePdfSettings(state.options.pdfSettings),
-    ...(state.options.scope === "range"
-      ? {
-          range: {
-            endIndex: Math.max(0, state.options.rangeEndIndex - 1),
-            startIndex: Math.max(0, state.options.rangeStartIndex - 1)
-          }
-        }
-      : {}),
     redact: state.options.redact,
     redaction: {
       customPatterns: [...state.options.redactionCustomPatterns],
@@ -532,45 +447,8 @@ export function buildExportOptions(
     ...(state.options.outputMode === "zip" && formats === state.options.formats
       ? { zipFormats: [...state.options.bundleFormats] }
       : {}),
-    scope: state.options.scope
+    scope: "all"
   };
-}
-
-export function getScopedPreviewMessages(state: PopupState): readonly PreviewMessage[] {
-  const messages = state.previewMessages;
-
-  if (state.options.scope === "user_only") {
-    return messages.filter((message) => message.role === "user");
-  }
-
-  if (state.options.scope === "assistant_only") {
-    return messages.filter((message) => message.role === "assistant");
-  }
-
-  if (state.options.scope === "selected") {
-    return messages.filter((message) => message.selected === true);
-  }
-
-  if (state.options.scope === "range") {
-    const startIndex = Math.max(0, state.options.rangeStartIndex - 1);
-    const endIndex = Math.max(0, state.options.rangeEndIndex - 1);
-
-    return messages.filter((message) => message.index >= startIndex && message.index <= endIndex);
-  }
-
-  return messages;
-}
-
-export function getSelectionStatusText(state: PopupState): string | undefined {
-  if (state.options.scope !== "selected") {
-    return undefined;
-  }
-
-  if (state.selectedMessageCount === 0) {
-    return "No selected messages. Select messages again.";
-  }
-
-  return `Selected messages: ${state.selectedMessageCount}`;
 }
 
 export function buildExportStatusMessage(result: ExportStatusMessageInput): string {
@@ -587,18 +465,6 @@ export function buildExportStatusMessage(result: ExportStatusMessageInput): stri
 
 export function buildCopyMarkdownStatusMessage(result: ExportStatusMessageInput): string {
   return `Copied ${formatCount(result.exportedMessageCount, "message")} to clipboard.`;
-}
-
-function normalizeOneBasedIndex(value: number, maxValue: number | undefined): number {
-  if (!Number.isInteger(value) || value < 1) {
-    return 1;
-  }
-
-  if (maxValue !== undefined && maxValue > 0) {
-    return Math.min(value, maxValue);
-  }
-
-  return value;
 }
 
 function getBatchExportFormats(state: PopupState): readonly PopupFileFormat[] {

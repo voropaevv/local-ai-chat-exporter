@@ -5,14 +5,10 @@ import {
   FileJson,
   FileText,
   FileType,
-  Heart,
-  HelpCircle,
-  Mail,
   Moon,
   Monitor,
   ShieldCheck,
   Sun,
-  Tag,
   X
 } from "lucide-preact";
 import type { LucideIcon } from "lucide-preact";
@@ -38,6 +34,9 @@ import { downloadRenderedFiles } from "../utils/download";
 import { requestBatchDiscoveryPermission, requestBatchHostPermissions } from "./batch-permissions";
 import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
 import { BrandIcon } from "./components/BrandIcon";
+import { ContentSettingsControls } from "./components/ContentSettingsControls";
+import { LocalLibraryPanel } from "./components/LocalLibraryPanel";
+import { PdfSettingsControls } from "./components/PdfSettingsControls";
 import {
   DEFAULT_EXPORT_SETTINGS,
   normalizeExportSettings,
@@ -56,7 +55,6 @@ import {
   createInitialPopupState,
   type PopupState
 } from "./state/popup-state";
-import { JELLUVI_GITHUB_URL, JELLUVI_PRIVACY_URL, SUPPORT_LINKS } from "./support-links";
 import {
   applyThemePreference,
   readThemePreference,
@@ -345,8 +343,8 @@ export function OptionsApp() {
         />
       </SettingsCard>
 
-      <SettingsCard icon={FileText} title="Default export formats">
-        <div className="settings-format-row" role="group" aria-label="Default export formats">
+      <SettingsCard icon={FileText} title="Export">
+        <div className="settings-format-row" role="group" aria-label="Export formats">
           {DEFAULT_FORMATS.map((format) => (
             <FormatSettingButton
               active={isFormatActive(exportSettings, format)}
@@ -368,22 +366,6 @@ export function OptionsApp() {
             <span className="switch-track" aria-hidden="true" />
           </label>
         </div>
-      </SettingsCard>
-
-      <BatchExport
-        busy={batchBusy}
-        candidates={batchCandidates}
-        onClearSelection={handleClearBatchSelection}
-        onExportSelected={handleBatchExport}
-        onLoadCandidates={handleLoadBatchCandidates}
-        onSelectAll={handleSelectAllBatchTabs}
-        onToggleTab={handleToggleBatchTab}
-        results={batchResults}
-        selectedTabIds={batchSelectedTabIds}
-        status={batchStatus}
-      />
-
-      <SettingsCard icon={Tag} title="Filename pattern">
         <FilenamePatternControl
           onChange={(filenameTemplate) => updateExportSettings({ filenameTemplate })}
           saveStatus={filenameSaveStatus}
@@ -391,9 +373,20 @@ export function OptionsApp() {
         />
       </SettingsCard>
 
-      <SettingsCard icon={ShieldCheck} title="Privacy / redaction preset">
+      <SettingsCard icon={FileCode} title="Content">
+        <ContentSettingsControls onChange={updateExportSettings} settings={exportSettings} />
+      </SettingsCard>
+
+      <SettingsCard icon={FileType} title="PDF">
+        <PdfSettingsControls
+          onChange={(pdfSettings) => updateExportSettings({ pdfSettings })}
+          settings={exportSettings.pdfSettings}
+        />
+      </SettingsCard>
+
+      <SettingsCard icon={ShieldCheck} title="Privacy">
         <label className="field-row settings-select-row">
-          <span className="sr-only">Privacy / redaction preset</span>
+          <span className="sr-only">Redaction preset</span>
           <select
             onChange={(event) =>
               updateRedaction({
@@ -404,7 +397,7 @@ export function OptionsApp() {
             value={redaction.preset}
           >
             <option value="off">Off</option>
-            <option value="basic">Default (Recommended)</option>
+            <option value="basic">Default</option>
             <option value="strict">Strict</option>
             <option value="custom">Custom</option>
           </select>
@@ -431,21 +424,23 @@ export function OptionsApp() {
         ) : null}
       </SettingsCard>
 
-      <SettingsCard icon={Heart} title="Support">
-        <div className="settings-support-grid">
-          <a href={SUPPORT_LINKS[0]?.href} target="_blank" rel="noreferrer">
-            <Heart size={18} strokeWidth={2.2} />
-            GitHub Sponsors
-          </a>
-          <a href={JELLUVI_PRIVACY_URL} target="_blank" rel="noreferrer">
-            <HelpCircle size={18} strokeWidth={2.2} />
-            Privacy Policy
-          </a>
-          <a href={`${JELLUVI_GITHUB_URL}/issues`} target="_blank" rel="noreferrer">
-            <Mail size={18} strokeWidth={2.2} />
-            Send Feedback
-          </a>
-        </div>
+      <SettingsCard icon={FileArchive} title="Library">
+        <LocalLibraryPanel />
+      </SettingsCard>
+
+      <SettingsCard icon={Braces} title="Batch">
+        <BatchExport
+          busy={batchBusy}
+          candidates={batchCandidates}
+          onClearSelection={handleClearBatchSelection}
+          onExportSelected={handleBatchExport}
+          onLoadCandidates={handleLoadBatchCandidates}
+          onSelectAll={handleSelectAllBatchTabs}
+          onToggleTab={handleToggleBatchTab}
+          results={batchResults}
+          selectedTabIds={batchSelectedTabIds}
+          status={batchStatus}
+        />
       </SettingsCard>
     </main>
   );
@@ -525,7 +520,7 @@ function FilenamePatternControl({ onChange, saveStatus, value }: FilenamePattern
         </select>
       </div>
       <p className="status-text" role="status">
-        <strong>Preview:</strong> {preview}
+        {preview}
       </p>
       {saveStatus ? (
         <p className="status-text" role="status">
@@ -642,7 +637,12 @@ function buildSettingsPopupState(
       bundleFormats: exportSettings.bundleFormats,
       filenameTemplate: exportSettings.filenameTemplate,
       formats: exportSettings.formats,
+      includeAdvancedContent: exportSettings.includeAdvancedContent,
+      includeMetadata: exportSettings.includeMetadata,
+      includeReasoning: exportSettings.includeReasoning,
+      markdownProfile: exportSettings.markdownProfile,
       outputMode: exportSettings.outputMode,
+      pdfSettings: exportSettings.pdfSettings,
       redact: redaction.preset !== "off",
       redactionCustomPatterns: [...redaction.customPatterns],
       redactionPreset: redaction.preset

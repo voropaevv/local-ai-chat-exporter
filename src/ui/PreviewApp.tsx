@@ -1,44 +1,87 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 
+import { renderConversationFiles, type ExportOptions } from "../core/export-options";
 import {
   PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
   PREVIEW_RETURN_TO_SOURCE_MESSAGE,
   type CachedConversationResult,
   type RuntimeResponse
 } from "../core/messages";
+import { DEFAULT_REDACTION_SETTINGS, type RedactionSettings } from "../core/redaction";
+import type { ConversationExport, ExportFormat } from "../core/schema";
+import { createLocalLibraryRecord, saveLocalLibraryRecord } from "../library/local-library";
+import type { RenderedFile } from "../renderers";
 import { createFileBlob } from "../utils/blob";
 import { copyRenderedFileToClipboard } from "../utils/clipboard";
 import { downloadRenderedFiles } from "../utils/download";
-import {
-  createPreviewRenderState,
-  PREVIEW_MISSING_CACHE_MESSAGE,
-  type PreviewRenderState
-} from "./preview-rendering";
-import type { RenderedFile } from "../renderers";
 import { BrandIcon } from "./components/BrandIcon";
+import {
+  buildStoredExportOptions,
+  DEFAULT_EXPORT_SETTINGS,
+  readStoredExportSettings,
+  type ExportSettings
+} from "./export-settings-storage";
+import { createPreviewRenderState } from "./preview-rendering";
+import {
+  applyPreviewMessageSelection,
+  buildPreviewSelectionOptions,
+  togglePreviewMessageSelection,
+  type PreviewSelectionState
+} from "./preview-selection";
+import { readStoredRedactionSettings } from "./redaction-storage";
 import { applyThemePreference, readThemePreference } from "./theme-preference";
 
 type PreviewLoadState =
   | { readonly status: "loading" }
-  | { readonly renderState: PreviewRenderState; readonly status: "ready" };
+  | { readonly conversation: ConversationExport; readonly status: "ready" }
+  | { readonly status: "missing" };
 
 export function PreviewApp() {
   const query = useMemo(() => parsePreviewQuery(globalThis.location.search), []);
   const [loadState, setLoadState] = useState<PreviewLoadState>({ status: "loading" });
   const [actionStatus, setActionStatus] = useState("");
+  const [exportSettings, setExportSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
+  const [projectLabel, setProjectLabel] = useState("");
+  const [rangeEndIndex, setRangeEndIndex] = useState(1);
+  const [rangeStartIndex, setRangeStartIndex] = useState(1);
+  const [redaction, setRedaction] = useState<RedactionSettings>(DEFAULT_REDACTION_SETTINGS);
+  const [savePanelOpen, setSavePanelOpen] = useState(false);
+  const [settingsReady, setSettingsReady] = useState(false);
+  const [scope, setScope] = useState<ExportOptions["scope"]>("all");
+  const [selectedMessageIds, setSelectedMessageIds] = useState<readonly string[]>([]);
+  const [tagsInput, setTagsInput] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     applyThemePreference(readThemePreference());
+
+    Promise.all([readStoredExportSettings(), readStoredRedactionSettings()])
+      .then(([storedExportSettings, storedRedaction]) => {
+        if (!cancelled) {
+          setExportSettings(storedExportSettings);
+          setRedaction(storedRedaction);
+        }
+      })
+      .catch(() => {
+        // Preview remains usable with local defaults if settings storage is unavailable.
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSettingsReady(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     if (query.sourceTabId === undefined) {
-      setLoadState({
-        renderState: createPreviewRenderState(undefined),
-        status: "ready"
-      });
+      setLoadState({ status: "missing" });
       return () => undefined;
     }
 
@@ -52,20 +95,17 @@ export function PreviewApp() {
           return;
         }
 
-        const conversation =
-          response.ok && response.value.hasConversation ? response.value.conversation : undefined;
+        if (response.ok && response.value.hasConversation) {
+          setLoadState({ conversation: response.value.conversation, status: "ready" });
+          setRangeEndIndex(Math.max(1, response.value.conversation.messageCount));
+          return;
+        }
 
-        setLoadState({
-          renderState: createPreviewRenderState(conversation),
-          status: "ready"
-        });
+        setLoadState({ status: "missing" });
       })
       .catch(() => {
         if (!cancelled) {
-          setLoadState({
-            renderState: createPreviewRenderState(undefined),
-            status: "ready"
-          });
+          setLoadState({ status: "missing" });
         }
       });
 
@@ -74,39 +114,104 @@ export function PreviewApp() {
     };
   }, [query.scanId, query.sourceTabId]);
 
-  const renderState =
-    loadState.status === "ready" ? loadState.renderState : createPreviewRenderState(undefined);
-  const isReady = loadState.status === "ready" && renderState.status === "ready";
+  const sourceConversation = loadState.status === "ready" ? loadState.conversation : undefined;
+  const selectionState: PreviewSelectionState = {
+    rangeEndIndex,
+    rangeStartIndex,
+    scope
+  };
+  const selectableConversation = useMemo(
+    () =>
+      sourceConversation === undefined
+        ? undefined
+        : applyPreviewMessageSelection(sourceConversation, selectedMessageIds),
+    [selectedMessageIds, sourceConversation]
+  );
+  const exportOptions = useMemo(
+    () =>
+      buildStoredExportOptions(exportSettings, redaction, {
+        ...buildPreviewSelectionOptions(selectionState),
+        ...(query.formats !== undefined ? { formats: [...query.formats] } : {}),
+        ...(query.zipFormats !== undefined ? { zipFormats: [...query.zipFormats] } : {})
+      }),
+    [
+      exportSettings,
+      query.formats,
+      query.zipFormats,
+      rangeEndIndex,
+      rangeStartIndex,
+      redaction,
+      scope
+    ]
+  );
+  const renderState = useMemo(
+    () => createPreviewRenderState(selectableConversation, exportOptions),
+    [exportOptions, selectableConversation]
+  );
+  const loading = loadState.status === "loading" || !settingsReady;
+  const isReady = !loading && loadState.status === "ready" && renderState.status === "ready";
 
   async function handleDownload() {
-    if (renderState.status !== "ready") {
+    if (selectableConversation === undefined || !isReady) {
       return;
     }
 
-    await downloadRenderedFiles([renderState.markdown]);
-    setActionStatus(`Downloaded ${renderState.markdown.filename}.`);
+    await runAction(async () => {
+      const files = renderConversationFiles(selectableConversation, exportOptions);
+      await downloadRenderedFiles(files);
+      return files.length === 1 ? `Downloaded ${files[0]?.filename ?? "file"}.` : "Downloaded.";
+    });
   }
 
   async function handleCopyMarkdown() {
-    if (renderState.status !== "ready") {
+    if (selectableConversation === undefined || !isReady) {
       return;
     }
 
-    await copyRenderedFileToClipboard([renderState.markdown]);
-    setActionStatus("Copied Markdown from the local snapshot.");
+    await runAction(async () => {
+      const files = renderConversationFiles(selectableConversation, {
+        ...exportOptions,
+        formats: ["md"]
+      });
+      await copyRenderedFileToClipboard(files);
+      return "Copied MD.";
+    });
   }
 
-  function handleOpenPdf() {
+  async function handleOpenPdf() {
+    if (selectableConversation === undefined || !isReady) {
+      return;
+    }
+
+    await runAction(async () => {
+      const [pdf] = renderConversationFiles(selectableConversation, {
+        ...exportOptions,
+        formats: ["pdf"]
+      });
+
+      if (pdf === undefined) {
+        throw new Error("PDF unavailable.");
+      }
+
+      openRenderedFile(pdf);
+      return "Opened PDF.";
+    });
+  }
+
+  async function handleSave() {
     if (renderState.status !== "ready") {
       return;
     }
 
-    openRenderedFile(renderState.pdf);
-    setActionStatus(
-      renderState.pdf.mimeType === "application/pdf"
-        ? "Opened PDF from the local snapshot."
-        : "PDF generation fell back to PDF-ready HTML. No conversation content was uploaded."
-    );
+    await runAction(async () => {
+      const record = createLocalLibraryRecord(renderState.conversation, {
+        projectLabel,
+        tags: parseTags(tagsInput)
+      });
+      await saveLocalLibraryRecord(record);
+      setSavePanelOpen(false);
+      return "Saved.";
+    });
   }
 
   async function handleReturnToSource() {
@@ -127,6 +232,28 @@ export function PreviewApp() {
     setActionStatus(response.error.message);
   }
 
+  function updateRangeStart(value: number) {
+    const next = clampRangeValue(value, sourceConversation?.messageCount ?? 1);
+    setRangeStartIndex(next);
+    setRangeEndIndex((current) => Math.max(current, next));
+  }
+
+  function updateRangeEnd(value: number) {
+    const next = clampRangeValue(value, sourceConversation?.messageCount ?? 1);
+    setRangeEndIndex(next);
+    setRangeStartIndex((current) => Math.min(current, next));
+  }
+
+  async function runAction(action: () => Promise<string>) {
+    setActionStatus("");
+
+    try {
+      setActionStatus(await action());
+    } catch (error) {
+      setActionStatus(error instanceof Error ? error.message : "Action failed.");
+    }
+  }
+
   return (
     <main className="app-shell app-shell--preview">
       <header className="preview-page-header">
@@ -134,13 +261,9 @@ export function PreviewApp() {
           <BrandIcon />
           <div>
             <p className="brand-kicker">Jelluvi</p>
-            <h1>{renderPreviewTitle(renderState)}</h1>
+            <h1>{sourceConversation?.title ?? "Preview"}</h1>
             <p className="muted">
-              {loadState.status === "loading"
-                ? "Loading local snapshot..."
-                : renderState.status === "ready"
-                  ? renderState.statusMessage
-                  : "Preview unavailable."}
+              {loading ? "Loading…" : renderState.statusMessage}
             </p>
           </div>
         </div>
@@ -159,7 +282,7 @@ export function PreviewApp() {
             onClick={handleCopyMarkdown}
             type="button"
           >
-            Copy Markdown
+            Copy MD
           </button>
           <button
             className="secondary-action"
@@ -167,7 +290,16 @@ export function PreviewApp() {
             onClick={handleOpenPdf}
             type="button"
           >
-            Open PDF
+            PDF
+          </button>
+          <button
+            aria-expanded={savePanelOpen}
+            className="secondary-action"
+            disabled={!isReady}
+            onClick={() => setSavePanelOpen((value) => !value)}
+            type="button"
+          >
+            Save
           </button>
           <button
             className="secondary-action"
@@ -175,47 +307,184 @@ export function PreviewApp() {
             onClick={handleReturnToSource}
             type="button"
           >
-            Return to chat
+            Return
           </button>
         </div>
       </header>
+
+      {savePanelOpen ? (
+        <section className="preview-save-panel" aria-label="Save to local library">
+          <input
+            aria-label="Project"
+            onInput={(event) => setProjectLabel(event.currentTarget.value)}
+            placeholder="Project"
+            type="text"
+            value={projectLabel}
+          />
+          <input
+            aria-label="Tags"
+            onInput={(event) => setTagsInput(event.currentTarget.value)}
+            placeholder="Tags"
+            type="text"
+            value={tagsInput}
+          />
+          <button
+            className="primary-action compact-action"
+            disabled={!isReady}
+            onClick={handleSave}
+            type="button"
+          >
+            Save
+          </button>
+        </section>
+      ) : null}
+
+      {sourceConversation !== undefined ? (
+        <section className="preview-scope-panel" aria-label="Messages">
+          <select
+            aria-label="Messages"
+            onChange={(event) => setScope(event.currentTarget.value as ExportOptions["scope"])}
+            value={scope}
+          >
+            <option value="all">All messages</option>
+            <option value="selected">Selected</option>
+            <option value="user_only">User</option>
+            <option value="assistant_only">Assistant</option>
+            <option value="range">Range</option>
+          </select>
+          {scope === "range" ? (
+            <div className="preview-range-controls">
+              <label>
+                From
+                <input
+                  max={sourceConversation.messageCount}
+                  min="1"
+                  onInput={(event) => updateRangeStart(Number(event.currentTarget.value))}
+                  type="number"
+                  value={String(rangeStartIndex)}
+                />
+              </label>
+              <label>
+                To
+                <input
+                  max={sourceConversation.messageCount}
+                  min="1"
+                  onInput={(event) => updateRangeEnd(Number(event.currentTarget.value))}
+                  type="number"
+                  value={String(rangeEndIndex)}
+                />
+              </label>
+            </div>
+          ) : null}
+          {scope === "selected" ? (
+            <MessageSelector
+              conversation={sourceConversation}
+              onChange={setSelectedMessageIds}
+              selectedMessageIds={selectedMessageIds}
+            />
+          ) : null}
+        </section>
+      ) : null}
+
       {actionStatus ? (
         <p className="status-text" role="status">
           {actionStatus}
         </p>
       ) : null}
-      {loadState.status === "loading" ? (
+
+      {loading ? (
         <section className="panel">
-          <p className="muted">Loading local snapshot...</p>
+          <p className="muted">Loading…</p>
         </section>
       ) : renderState.status === "ready" ? (
         <iframe
           className="preview-frame"
           sandbox=""
           srcDoc={renderState.html.bytes}
-          title="Full local conversation preview"
+          title="Conversation preview"
         />
       ) : (
-        <section className="panel">
-          <h2>Snapshot unavailable</h2>
-          <p className="muted">{PREVIEW_MISSING_CACHE_MESSAGE}</p>
-          <button
-            className="primary-action"
-            disabled={query.sourceTabId === undefined}
-            onClick={handleReturnToSource}
-            type="button"
-          >
-            Return to source chat
-          </button>
+        <section className="panel preview-empty-state">
+          <p className="muted">{renderState.statusMessage}</p>
+          {renderState.status === "missing" ? (
+            <button
+              className="primary-action"
+              disabled={query.sourceTabId === undefined}
+              onClick={handleReturnToSource}
+              type="button"
+            >
+              Return
+            </button>
+          ) : null}
         </section>
       )}
     </main>
   );
 }
 
+interface MessageSelectorProps {
+  readonly conversation: ConversationExport;
+  readonly onChange: (messageIds: readonly string[]) => void;
+  readonly selectedMessageIds: readonly string[];
+}
+
+function MessageSelector({ conversation, onChange, selectedMessageIds }: MessageSelectorProps) {
+  return (
+    <div className="preview-message-selector">
+      <div className="button-row">
+        <button
+          className="secondary-action compact-action"
+          onClick={() => onChange(conversation.messages.map((message) => message.id))}
+          type="button"
+        >
+          All
+        </button>
+        <button
+          className="secondary-action compact-action"
+          disabled={selectedMessageIds.length === 0}
+          onClick={() => onChange([])}
+          type="button"
+        >
+          None
+        </button>
+        <span
+          aria-label={`${selectedMessageIds.length} selected`}
+          aria-live="polite"
+          className="status-text"
+        >
+          {selectedMessageIds.length}
+        </span>
+      </div>
+      <ul aria-label="Select messages">
+        {conversation.messages.map((message) => (
+          <li key={message.id}>
+            <label>
+              <input
+                checked={selectedMessageIds.includes(message.id)}
+                onChange={() =>
+                  onChange(togglePreviewMessageSelection(selectedMessageIds, message.id))
+                }
+                type="checkbox"
+              />
+              <span>
+                <strong>
+                  {message.index + 1}. {message.authorLabel}
+                </strong>
+                <span>{compactMessageText(message.text)}</span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function parsePreviewQuery(search: string): {
+  readonly formats?: readonly ExportFormat[];
   readonly scanId?: string;
   readonly sourceTabId?: number;
+  readonly zipFormats?: readonly Exclude<ExportFormat, "zip">[];
 } {
   const params = new URLSearchParams(search);
   const rawSourceTabId = params.get("sourceTabId");
@@ -224,21 +493,19 @@ export function parsePreviewQuery(search: string): {
       ? Number.NaN
       : Number.parseInt(rawSourceTabId, 10);
   const scanId = params.get("scanId")?.trim() || undefined;
+  const formats = parseFormats(params.get("formats"), true);
+  const zipFormats = parseFormats(params.get("zipFormats"), false);
 
   return {
     ...(Number.isInteger(parsedSourceTabId) && parsedSourceTabId > 0
       ? { sourceTabId: parsedSourceTabId }
       : {}),
-    ...(scanId !== undefined ? { scanId } : {})
+    ...(scanId !== undefined ? { scanId } : {}),
+    ...(formats.length > 0 ? { formats } : {}),
+    ...(zipFormats.length > 0
+      ? { zipFormats: zipFormats as readonly Exclude<ExportFormat, "zip">[] }
+      : {})
   };
-}
-
-function renderPreviewTitle(renderState: PreviewRenderState): string {
-  if (renderState.status !== "ready") {
-    return "Full Preview";
-  }
-
-  return renderState.conversation.title ?? "Full Preview";
 }
 
 async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<T>> {
@@ -260,4 +527,48 @@ function openRenderedFile(file: RenderedFile<string | Uint8Array>): void {
   const url = URL.createObjectURL(createFileBlob(file));
   window.open(url, "_blank", "noopener,noreferrer");
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function parseFormats(value: string | null, allowZip: boolean): readonly ExportFormat[] {
+  if (value === null) {
+    return [];
+  }
+
+  const validFormats = new Set<ExportFormat>([
+    "csv",
+    "docx",
+    "html",
+    "json",
+    "md",
+    "pdf",
+    "png",
+    "txt",
+    ...(allowZip ? (["zip"] as const) : [])
+  ]);
+
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .filter((format): format is ExportFormat => validFormats.has(format as ExportFormat))
+    )
+  ];
+}
+
+function parseTags(value: string): readonly string[] {
+  return value
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+}
+
+function compactMessageText(value: string): string {
+  const compact = value.replace(/\s+/gu, " ").trim();
+  return compact.length > 96 ? `${compact.slice(0, 93)}…` : compact;
+}
+
+function clampRangeValue(value: number, messageCount: number): number {
+  const normalized = Number.isFinite(value) ? Math.round(value) : 1;
+
+  return Math.min(Math.max(1, normalized), Math.max(1, messageCount));
 }

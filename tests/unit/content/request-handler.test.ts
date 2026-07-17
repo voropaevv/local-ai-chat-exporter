@@ -5,7 +5,6 @@ import {
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_EXPORT_MESSAGE,
   CONTENT_SCAN_MESSAGE,
-  CONTENT_START_SELECTION_MESSAGE,
   type ScanSummary
 } from "../../../src/core/messages";
 import type { ConversationExport } from "../../../src/core/schema";
@@ -64,11 +63,6 @@ function createHandler(overrides: Partial<Parameters<typeof createContentRequest
   const renderedConversations: ConversationExport[] = [];
   const handler = createContentRequestHandler({
     copyRenderedFileToClipboard,
-    createSelectionOverlay: vi.fn(() => ({
-      cleanup: vi.fn(),
-      getSelection: () => ({ fingerprints: [], ids: ["msg-2"] }),
-      show: vi.fn()
-    })),
     downloadRenderedFiles: vi.fn().mockResolvedValue({ downloaded: [] }),
     getCurrentUrl: () => "https://chatgpt.com/c/cached",
     renderConversationFiles: vi.fn((conversation: ConversationExport) => {
@@ -311,28 +305,6 @@ describe("content request handler scan cache", () => {
     });
   });
 
-  test("selection export applies current selection to the cached conversation", async () => {
-    const { handler, renderedConversations, scanCurrentConversationExport } = createHandler();
-
-    await handler({ type: CONTENT_SCAN_MESSAGE });
-    await handler({ type: CONTENT_START_SELECTION_MESSAGE });
-    await handler({
-      copyToClipboard: false,
-      delivery: "return_files",
-      download: false,
-      options: { formats: ["md"], scope: "selected" },
-      type: CONTENT_EXPORT_MESSAGE
-    });
-
-    expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
-    expect(renderedConversations[0].messages).toHaveLength(1);
-    expect(renderedConversations[0].messages[0]).toMatchObject({
-      id: "msg-2",
-      index: 0,
-      metadata: { selected: true }
-    });
-  });
-
   test.each([
     ["user_only", 1],
     ["assistant_only", 1],
@@ -355,51 +327,6 @@ describe("content request handler scan cache", () => {
     expect(response).toMatchObject({
       exportedMessageCount: expectedCount,
       messageCount: expectedCount
-    });
-  });
-
-  test("reports exported message count for selected scope", async () => {
-    const { handler } = createHandler();
-
-    await handler({ type: CONTENT_SCAN_MESSAGE });
-    await handler({ type: CONTENT_START_SELECTION_MESSAGE });
-    const response = await handler({
-      copyToClipboard: false,
-      delivery: "return_files",
-      download: false,
-      options: { formats: ["md"], scope: "selected" },
-      type: CONTENT_EXPORT_MESSAGE
-    });
-
-    expect(response).toMatchObject({
-      exportedMessageCount: 1,
-      messageCount: 1
-    });
-  });
-
-  test("selected export reports a clear stale-selection error when no ids are selected", async () => {
-    const { handler } = createHandler({
-      createSelectionOverlay: vi.fn(() => ({
-        cleanup: vi.fn(),
-        getSelection: () => ({ fingerprints: [], ids: [] }),
-        show: vi.fn()
-      }))
-    });
-
-    await handler({ type: CONTENT_SCAN_MESSAGE });
-    await handler({ type: CONTENT_START_SELECTION_MESSAGE });
-
-    await expect(
-      handler({
-        copyToClipboard: false,
-        delivery: "return_files",
-        download: false,
-        options: { formats: ["md"], scope: "selected" },
-        type: CONTENT_EXPORT_MESSAGE
-      })
-    ).rejects.toMatchObject({
-      code: "no_messages_found",
-      message: "No selected messages. Select messages again."
     });
   });
 });

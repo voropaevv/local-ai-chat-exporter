@@ -1,7 +1,8 @@
 import type { AdapterDetectionContext } from "../types";
+import { getProviderHostnames } from "../../core/provider-catalog";
 import { chatGptSelectors } from "./selectors";
 
-export const CHAT_GPT_HOSTNAMES = ["chatgpt.com", "chat.openai.com"] as const;
+export const CHAT_GPT_HOSTNAMES = getProviderHostnames("chatgpt");
 
 const CHATGPT_HOSTS = new Set<string>(CHAT_GPT_HOSTNAMES);
 

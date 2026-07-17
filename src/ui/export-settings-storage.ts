@@ -1,4 +1,13 @@
+import type { ExportOptions } from "../core/export-options";
+import type { RedactionSettings } from "../core/redaction";
 import type { ExportFormat } from "../core/schema";
+import {
+  DEFAULT_PDF_SETTINGS,
+  MARKDOWN_PROFILES,
+  normalizePdfSettings,
+  type MarkdownProfile,
+  type PdfSettings
+} from "../renderers";
 import { DEFAULT_FILENAME_TEMPLATE } from "./filename-template";
 
 export const EXPORT_SETTINGS_STORAGE_KEY = "jelluvi/export-settings";
@@ -9,8 +18,14 @@ export type StoredPopupFileFormat = Exclude<ExportFormat, "zip">;
 export interface ExportSettings {
   readonly bundleFormats: readonly StoredPopupFileFormat[];
   readonly filenameTemplate: string;
-  readonly formats: readonly ExportFormat[];
+  readonly formats: readonly StoredPopupFileFormat[];
+  readonly includeAdvancedContent: boolean;
+  readonly includeMetadata: boolean;
+  readonly includeReasoning: boolean;
+  readonly markdownProfile: MarkdownProfile;
   readonly outputMode: ExportOutputMode;
+  readonly pdfSettings: PdfSettings;
+  readonly schemaVersion: 2;
 }
 
 export interface ExportSettingsStorageArea {
@@ -22,7 +37,13 @@ export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
   bundleFormats: ["md", "json", "html"],
   filenameTemplate: DEFAULT_FILENAME_TEMPLATE,
   formats: ["md"],
-  outputMode: "separate"
+  includeAdvancedContent: true,
+  includeMetadata: true,
+  includeReasoning: false,
+  markdownProfile: "default",
+  outputMode: "separate",
+  pdfSettings: DEFAULT_PDF_SETTINGS,
+  schemaVersion: 2
 };
 
 export async function readStoredExportSettings(
@@ -55,24 +76,61 @@ export function normalizeExportSettings(settings: Partial<ExportSettings> = {}):
     typeof settings.filenameTemplate === "string" && settings.filenameTemplate.trim().length > 0
       ? settings.filenameTemplate.trim()
       : DEFAULT_FILENAME_TEMPLATE;
-  const formats = normalizeFormats(settings.formats, ["md"]);
+  const formats = normalizePopupFormats(settings.formats, ["md"]);
   const bundleFormats = normalizePopupFormats(settings.bundleFormats, ["md", "json", "html"]);
   const outputMode = settings.outputMode === "zip" ? "zip" : "separate";
+  const markdownProfile = isMarkdownProfile(settings.markdownProfile)
+    ? settings.markdownProfile
+    : "default";
 
-  return { bundleFormats, filenameTemplate, formats, outputMode };
+  return {
+    bundleFormats,
+    filenameTemplate,
+    formats,
+    includeAdvancedContent: normalizeBoolean(settings.includeAdvancedContent, true),
+    includeMetadata: normalizeBoolean(settings.includeMetadata, true),
+    includeReasoning: normalizeBoolean(settings.includeReasoning, false),
+    markdownProfile,
+    outputMode,
+    pdfSettings: normalizePdfSettings(settings.pdfSettings),
+    schemaVersion: 2
+  };
 }
 
-const EXPORT_FORMATS = new Set<ExportFormat>([
-  "csv",
-  "docx",
-  "html",
-  "json",
-  "md",
-  "pdf",
-  "png",
-  "txt",
-  "zip"
-]);
+export function buildStoredExportOptions(
+  settings: ExportSettings,
+  redaction: RedactionSettings,
+  overrides: Partial<ExportOptions> = {}
+): ExportOptions {
+  const formats =
+    settings.outputMode === "zip" ? (["zip"] as ExportFormat[]) : [...settings.formats];
+  const base: ExportOptions = {
+    filenameTemplate: settings.filenameTemplate,
+    formats,
+    includeAdvancedContent: settings.includeAdvancedContent,
+    includeCompletenessReport: true,
+    includeMetadata: settings.includeMetadata,
+    includeReasoning: settings.includeReasoning,
+    markdownProfile: settings.markdownProfile,
+    pdfSettings: settings.pdfSettings,
+    redact: redaction.preset !== "off",
+    redaction,
+    scope: "all",
+    zipFormats: settings.bundleFormats
+  };
+  const merged = { ...base, ...overrides };
+  const mergedRedaction = overrides.redaction ?? redaction;
+
+  return {
+    ...merged,
+    formats: overrides.formats ?? formats,
+    pdfSettings: normalizePdfSettings(overrides.pdfSettings ?? settings.pdfSettings),
+    redact: overrides.redact ?? mergedRedaction.preset !== "off",
+    redaction: mergedRedaction,
+    zipFormats: overrides.zipFormats ?? settings.bundleFormats
+  };
+}
+
 const POPUP_FORMATS = new Set<StoredPopupFileFormat>([
   "csv",
   "docx",
@@ -83,21 +141,6 @@ const POPUP_FORMATS = new Set<StoredPopupFileFormat>([
   "png",
   "txt"
 ]);
-
-function normalizeFormats(
-  value: readonly unknown[] | undefined,
-  fallback: readonly ExportFormat[]
-): readonly ExportFormat[] {
-  if (!Array.isArray(value)) {
-    return [...fallback];
-  }
-
-  const formats = [
-    ...new Set(value.filter((format): format is ExportFormat => isExportFormat(format)))
-  ];
-
-  return formats.length > 0 ? formats : [...fallback];
-}
 
 function normalizePopupFormats(
   value: readonly unknown[] | undefined,
@@ -114,12 +157,16 @@ function normalizePopupFormats(
   return formats.length > 0 ? formats : [...fallback];
 }
 
-function isExportFormat(value: unknown): value is ExportFormat {
-  return typeof value === "string" && EXPORT_FORMATS.has(value as ExportFormat);
-}
-
 function isPopupFormat(value: unknown): value is StoredPopupFileFormat {
   return typeof value === "string" && POPUP_FORMATS.has(value as StoredPopupFileFormat);
+}
+
+function isMarkdownProfile(value: unknown): value is MarkdownProfile {
+  return typeof value === "string" && MARKDOWN_PROFILES.includes(value as MarkdownProfile);
+}
+
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function getLocalStorage(): ExportSettingsStorageArea | undefined {

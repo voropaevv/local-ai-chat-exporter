@@ -1,32 +1,31 @@
-import type { ConversationExport } from "../core/schema";
 import {
-  renderHtml,
-  renderMarkdown,
-  renderPdf,
-  type RenderedBytes,
-  type RenderedFile
-} from "../renderers";
+  normalizeExportOptions,
+  prepareConversationForExport,
+  type ExportOptions
+} from "../core/export-options";
+import type { ConversationExport } from "../core/schema";
+import { renderHtml, renderMarkdown, type RenderedFile } from "../renderers";
 import { formatCount } from "./pluralize";
 
 export const PREVIEW_MISSING_CACHE_MESSAGE =
-  "This local snapshot is no longer available. Return to the source chat and export or preview it again.";
+  "This local snapshot is no longer available. Return to the source chat and preview it again.";
 
 export type PreviewRenderState =
   | {
       readonly conversation: ConversationExport;
       readonly html: RenderedFile<string>;
       readonly markdown: RenderedFile<string>;
-      readonly pdf: RenderedFile<RenderedBytes>;
       readonly status: "ready";
       readonly statusMessage: string;
     }
   | {
-      readonly status: "missing";
+      readonly status: "empty" | "missing";
       readonly statusMessage: string;
     };
 
 export function createPreviewRenderState(
-  conversation: ConversationExport | undefined
+  conversation: ConversationExport | undefined,
+  options: Partial<ExportOptions> = {}
 ): PreviewRenderState {
   if (conversation === undefined) {
     return {
@@ -35,12 +34,28 @@ export function createPreviewRenderState(
     };
   }
 
+  const normalizedOptions = normalizeExportOptions(options);
+  const preparedConversation = prepareConversationForExport(conversation, normalizedOptions);
+
+  if (preparedConversation.messages.length === 0) {
+    return {
+      status: "empty",
+      statusMessage: "No messages in this view."
+    };
+  }
+
+  const rendererOptions = {
+    filenameTemplate: normalizedOptions.filenameTemplate,
+    includeMetadata: normalizedOptions.includeMetadata,
+    markdownProfile: normalizedOptions.markdownProfile,
+    pdfSettings: normalizedOptions.pdfSettings
+  };
+
   return {
-    conversation,
-    html: renderHtml(conversation),
-    markdown: renderMarkdown(conversation),
-    pdf: renderPdf(conversation),
+    conversation: preparedConversation,
+    html: renderHtml(preparedConversation, rendererOptions),
+    markdown: renderMarkdown(preparedConversation, rendererOptions),
     status: "ready",
-    statusMessage: `Previewing ${formatCount(conversation.messageCount, "message")}.`
+    statusMessage: formatCount(preparedConversation.messageCount, "message")
   };
 }

@@ -42,6 +42,19 @@ This project is not affiliated with, endorsed by, or sponsored by OpenAI, Anthro
 
 Markdown profiles are available for default archives, Obsidian, GitHub, GitBook, and research logs.
 
+## Extension workflow
+
+- The popup contains only provider status, format choices, Export, Copy MD, Preview, and transient
+  preparation controls. There is no manual Scan button or Options drawer.
+- Export, Copy MD, and Preview prepare or refresh the local snapshot automatically.
+- Preview provides provider-neutral all, selected, user, assistant, and range views. The current
+  prepared view can be downloaded, copied, opened as PDF, or saved to the opt-in Local Library.
+- Settings contains persistent export, content, PDF, privacy, library, and batch controls. Support
+  and product documentation remain on GitHub and the website.
+
+Provider metadata, origins, support levels, limitations, and capabilities are defined in one
+catalog. See [Provider architecture](docs/provider-architecture.md).
+
 ## Install from source
 
 ```bash
@@ -108,7 +121,7 @@ Business model:
 - No Jelluvi account is required.
 - Conversation content is not uploaded to Jelluvi or any export server.
 - Conversation content is not stored by default.
-- Browser storage is used for local preferences such as redaction settings.
+- Browser storage is used for versioned local export, PDF, content, theme, and redaction preferences.
 - Optional site access is requested only when the user starts batch discovery or batch export.
 - Jelluvi does not request browsing-history (`tabs`) or browser-downloads permissions.
 
@@ -126,10 +139,10 @@ Business model:
 ## Troubleshooting
 
 - Run `pnpm build` again after changing source files, then reload the unpacked extension.
-- If the popup stays on `Checking` after a rebuild, reload Jelluvi and the chat tab. The current
-  build recovers from an older background worker and exits an unanswered check after three seconds.
+- If provider detection does not answer, the popup exits the checking state after three seconds and
+  shows `Retry`. Reload Jelluvi and the chat tab if retry still fails.
 - If no messages are found, confirm the active tab is an open supported AI chat conversation.
-- If an export is marked partial, let the current chat finish loading and use Refresh snapshot.
+- If an export is marked partial, let the current chat finish loading and export again.
 - If a download does not appear, check whether the browser blocked page-initiated downloads.
 - If a secondary platform export looks incomplete, verify the first and last messages before relying on the file.
 

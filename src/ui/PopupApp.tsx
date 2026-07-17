@@ -1,9 +1,7 @@
-import { SlidersHorizontal } from "lucide-preact";
 import { useEffect, useReducer, useState } from "preact/hooks";
 
 import type {
   ActiveTabInfoResult,
-  CachedConversationResult,
   PopupExportSuccess,
   RuntimeResponse,
   ScanCacheSummaryResult,
@@ -16,27 +14,21 @@ import {
 } from "./active-tab-info";
 import { readStoredExportSettings } from "./export-settings-storage";
 import { getCachedScanSummary } from "./popup-cache";
-import { AdvancedExportOptions } from "./components/AdvancedExportOptions";
-import { LocalLibraryPanel } from "./components/LocalLibraryPanel";
 import { PageStatusCard } from "./components/PageStatusCard";
 import { PopupHeader } from "./components/PopupHeader";
 import { PopupExportPanel } from "./components/PopupExportPanel";
 import { ScanControls } from "./components/ScanControls";
 import {
   buildCancelScanRequest,
-  buildClearSelectionRequest,
   buildCopyMarkdownStatusMessage,
   buildCopyMarkdownRequest,
   buildDownloadRequest,
   buildExportStatusMessage,
   buildGetActiveTabInfoRequest,
-  buildGetCachedConversationRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPreviewRequest,
   buildScanRequest,
-  buildStartSelectionRequest,
   createInitialPopupState,
-  getSelectionStatusText,
   popupReducer
 } from "./state/popup-state";
 import { readStoredRedactionSettings } from "./redaction-storage";
@@ -44,9 +36,11 @@ import { copyRenderedFileToClipboard } from "../utils/clipboard";
 
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
-  const [advancedOpened, setAdvancedOpened] = useState(false);
+  const [activeTabRetryKey, setActiveTabRetryKey] = useState(0);
+  const [settingsReady, setSettingsReady] = useState(false);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
-  const canUseActions = state.sourceSupported === true && !busy;
+  const canUseActions =
+    settingsReady && state.activeTabStatus === "ready" && state.sourceSupported === true && !busy;
 
   useEffect(() => {
     let cancelled = false;
@@ -59,13 +53,23 @@ export function PopupApp() {
             bundleFormats: exportSettings.bundleFormats,
             filenameTemplate: exportSettings.filenameTemplate,
             formats: exportSettings.formats,
+            includeAdvancedContent: exportSettings.includeAdvancedContent,
+            includeMetadata: exportSettings.includeMetadata,
+            includeReasoning: exportSettings.includeReasoning,
+            markdownProfile: exportSettings.markdownProfile,
             outputMode: exportSettings.outputMode,
+            pdfSettings: exportSettings.pdfSettings,
             type: "set_export_settings"
           });
         }
       })
       .catch(() => {
         // Export still works with default local settings if extension storage is unavailable.
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSettingsReady(true);
+        }
       });
 
     return () => {
@@ -75,6 +79,8 @@ export function PopupApp() {
 
   useEffect(() => {
     let cancelled = false;
+
+    dispatch({ type: "active_tab_info_started" });
 
     waitForActiveTabInfo(sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest()))
       .then((response) => {
@@ -89,7 +95,6 @@ export function PopupApp() {
             platformLabel: activeTabInfo.platformLabel,
             sourceUrl: activeTabInfo.sourceUrl,
             supported: activeTabInfo.supported,
-            title: activeTabInfo.title,
             type: "set_active_tab_info"
           });
           return;
@@ -106,7 +111,7 @@ export function PopupApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeTabRetryKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,7 +208,7 @@ export function PopupApp() {
 
     dispatch({ type: "export_started" });
 
-    const response = await sendWithStaleRetry(buildOpenPreviewRequest());
+    const response = await sendWithStaleRetry(buildOpenPreviewRequest(state));
 
     if (!response.ok) {
       dispatch({ message: response.error.message, type: "scan_failed" });
@@ -214,44 +219,6 @@ export function PopupApp() {
       message: "Preview opened.",
       type: "export_finished"
     });
-  }
-
-  async function handleStartSelection() {
-    if (!(await ensureFreshConversation())) {
-      return;
-    }
-
-    const response = await sendRuntimeMessage(buildStartSelectionRequest());
-
-    if (!response.ok) {
-      dispatch({ message: response.error.message, type: "scan_failed" });
-      return;
-    }
-
-    window.close();
-  }
-
-  async function handleClearSelection() {
-    const response = await sendRuntimeMessage(buildClearSelectionRequest());
-
-    if (response.ok) {
-      dispatch({ selectedMessageCount: 0, type: "selection_count_changed" });
-      return;
-    }
-
-    dispatch({ message: response.error.message, type: "scan_failed" });
-  }
-
-  async function loadCurrentConversation() {
-    if (!(await ensureFreshConversation())) {
-      return undefined;
-    }
-
-    const response = await sendRuntimeMessage<CachedConversationResult>(
-      buildGetCachedConversationRequest()
-    );
-
-    return response.ok && response.value.hasConversation ? response.value.conversation : undefined;
   }
 
   async function runExportAction(request: ReturnType<typeof buildDownloadRequest>) {
@@ -285,10 +252,21 @@ export function PopupApp() {
     return sendRuntimeMessage<T>(message);
   }
 
+  function handleStatusRetry() {
+    if (state.activeTabStatus === "failed") {
+      setActiveTabRetryKey((value) => value + 1);
+      return;
+    }
+
+    void handleScan();
+  }
+
   return (
     <main className="app-shell app-shell--popup">
       <PopupHeader />
       <PageStatusCard
+        activeTabStatus={state.activeTabStatus}
+        onRetry={handleStatusRetry}
         platformLabel={state.platformLabel}
         scanStatus={state.scanStatus}
         sourceSupported={state.sourceSupported}
@@ -307,70 +285,15 @@ export function PopupApp() {
       <ScanControls
         canCancelScan={state.canCancelScan}
         onCancelScan={handleCancelScan}
-        onScan={handleScan}
+        partial={state.partialWarning !== undefined}
         progressLabel={state.progressLabel}
         scanStatus={state.scanStatus}
       />
-      {state.errorMessage ? (
+      {state.errorMessage && state.activeTabStatus !== "failed" ? (
         <p className="error-text" role="alert">
           {state.errorMessage}
         </p>
       ) : null}
-      <details
-        className="advanced-drawer"
-        onToggle={(event) => {
-          if (event.currentTarget.open) {
-            setAdvancedOpened(true);
-          }
-        }}
-      >
-        <summary>
-          <SlidersHorizontal size={16} strokeWidth={2.2} />
-          <strong>Options</strong>
-        </summary>
-        {advancedOpened ? (
-          <div className="advanced-drawer__body">
-            <AdvancedExportOptions
-              canSelectMessages={state.platformLabel === "ChatGPT"}
-              messageCount={state.completeness?.messageCount}
-              onClearSelection={handleClearSelection}
-              onIncludeAdvancedContentChange={(includeAdvancedContent) =>
-                dispatch({ includeAdvancedContent, type: "set_include_advanced_content" })
-              }
-              onIncludeMetadataChange={(includeMetadata) =>
-                dispatch({ includeMetadata, type: "set_include_metadata" })
-              }
-              onIncludeReasoningChange={(includeReasoning) =>
-                dispatch({ includeReasoning, type: "set_include_reasoning" })
-              }
-              onMarkdownProfileChange={(markdownProfile) =>
-                dispatch({ markdownProfile, type: "set_markdown_profile" })
-              }
-              onPdfSettingsChange={(pdfSettings) =>
-                dispatch({ pdfSettings, type: "set_pdf_settings" })
-              }
-              onRangeEndChange={(rangeEndIndex) =>
-                dispatch({ rangeEndIndex, type: "set_range_end" })
-              }
-              onRangeStartChange={(rangeStartIndex) =>
-                dispatch({ rangeStartIndex, type: "set_range_start" })
-              }
-              onRedactionPresetChange={(redactionPreset) =>
-                dispatch({ redactionPreset, type: "set_redaction_preset" })
-              }
-              onScopeChange={(scope) => dispatch({ scope, type: "set_scope" })}
-              onStartSelection={handleStartSelection}
-              options={state.options}
-              selectionStatusText={getSelectionStatusText(state)}
-            />
-            {state.partialWarning ? <p className="warning-text">Partial capture</p> : null}
-            <LocalLibraryPanel
-              canSave={canUseActions}
-              loadCurrentConversation={loadCurrentConversation}
-            />
-          </div>
-        ) : null}
-      </details>
     </main>
   );
 }

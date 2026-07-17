@@ -1,12 +1,16 @@
 # Release QA — Jelluvi 0.1.0
 
-Date: 2026-07-11
+Date: 2026-07-16
 
-Last verified: 2026-07-11 22:17:30 +04
+Last verified: 2026-07-16 19:32 +04
+
+Implementation locally verified: step-8 UI and provider-foundation revision.
 
 ## Release status
 
-- Product and Store package: release candidate.
+- Current source: local release candidate.
+- Product and Store package: previous baseline only; current rebuild required.
+- Packaged ZIP and Store screenshots: stale after the 2026-07-16 UI revision; rebuild required.
 - No known P0/P1 failures in automated checks.
 - Chrome Web Store submission: not completed.
 - Live provider toolbar matrix: not completed in this pass; it requires non-sensitive live chats.
@@ -14,14 +18,16 @@ Last verified: 2026-07-11 22:17:30 +04
 - Active-tab detection: legacy worker fallback and a three-second timeout prevent permanent
   `Checking`.
 - PDF Unicode: local embedded fonts preserve searchable Cyrillic and monospaced Cyrillic code.
+- Popup Options removed; advanced settings moved to Settings and message scope moved to Preview.
+- Existing Store screenshots predate this UI revision and must be recaptured before release.
 
 ## Verified checks
 
 | Check                                                                                                         | Result                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm check`                                                                                                  | Pass — lint, typecheck, 59 test files / 251 tests, palette, brand, build, content-script and preview guards, site build. |
-| [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain) | Pass — clean Linux build, six E2E checks passed, one toolbar-popup case skipped, release candidate uploaded.             |
-| `pnpm store-assets:build`                                                                                     | Pass — three icons, five real UI screenshots and one promo validated.                                                    |
+| `pnpm check`                                                                                                  | Pass — lint, typecheck, 61 test files / 250 tests, palette, brand, build, content-script and Preview guards, site build. |
+| [GitHub CI](https://github.com/voropaevv/local-ai-chat-exporter/actions/workflows/ci.yml?query=branch%3Amain) | Historical main-branch pass; the current branch has not been pushed.                                                     |
+| `pnpm store-assets:build`                                                                                     | Historical pass; visual assets predate the current UI and must be recaptured.                                            |
 | `node scripts/check-no-remote-code.mjs`                                                                       | Pass.                                                                                                                    |
 | `node scripts/check-manifest-permissions.mjs`                                                                 | Pass — no `tabs` or `downloads`; optional access is limited to supported sites.                                          |
 | `node scripts/check-export-output-hygiene.mjs qa-artifacts/exports`                                           | Pass — nine newly generated formats.                                                                                     |
@@ -29,7 +35,9 @@ Last verified: 2026-07-11 22:17:30 +04
 | Gitleaks current tree and full history                                                                        | No leaks across 81 commits.                                                                                              |
 | `pnpm package` twice                                                                                          | Pass; byte-for-byte deterministic.                                                                                       |
 
-Release package:
+## Release package baseline
+
+This is the previous package, not the current UI revision:
 
 - Path: `release/jelluvi-v0.1.0.zip`
 - Size: 980,217 bytes
@@ -41,7 +49,16 @@ Release package:
 
 ## Visual QA
 
-Verified in the selected in-app Browser with realistic local data:
+Current production components verified in Brave through the development-only visual harness:
+
+- compact supported-provider popup with no Options or manual Scan/Refresh row;
+- bounded failure state with a visible Retry action and disabled export controls;
+- Settings with persistent export, content, PDF, privacy, library, and batch controls;
+- Preview with all-message and selected-message rendering plus on-demand Local Library save.
+
+The harness is not included in `dist`. Evidence and scope are recorded in `design-qa.md`.
+
+The following Store screenshots are historical and must be recaptured from the unpacked extension:
 
 - compact light popup with supported-page state and prepared snapshot;
 - dark popup with PDF selected and advanced options open;
@@ -53,7 +70,7 @@ Verified in the selected in-app Browser with realistic local data:
 - landing desktop and mobile layouts;
 - Store screenshots and 440×280 promo.
 
-The Store pack uses actual rendered product screens, not illustrative feature mockups:
+The historical Store pack uses real UI screenshots, not illustrative feature mockups:
 
 - `site/store-assets/store-screens/01-one-click-export.png`
 - `site/store-assets/store-screens/02-advanced-export.png`
@@ -90,5 +107,6 @@ The Store pack uses actual rendered product screens, not illustrative feature mo
 
 ## Go/no-go
 
-Code and submission artifacts are ready for a final live QA pass. Do not publish or create the
-public release tag until the toolbar popup and provider matrix above are signed off.
+Local code checks and component visual QA pass. Do not publish or create the public release tag
+until the unpacked-extension matrix, live providers, rebuilt package, and replacement Store
+screenshots above are signed off.

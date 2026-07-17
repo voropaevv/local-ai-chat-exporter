@@ -1,10 +1,15 @@
+import {
+  getProviderDefinition,
+  getProviderHostnames,
+  getProviderWarnings
+} from "../../core/provider-catalog";
 import type { PlatformAdapter } from "../types";
-import { createProviderWarnings, createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleAdapterContract } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
 } from "../shared/extract-visible";
-import { NOTEBOOKLM_HOSTNAMES, detectNotebookLm } from "./detect";
+import { detectNotebookLm } from "./detect";
 import { notebookLmSelectors } from "./selectors";
 
 const NOTEBOOKLM_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
@@ -20,21 +25,20 @@ const NOTEBOOKLM_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
-const NOTEBOOKLM_LIMITATIONS = [
-  "Visible-message extraction only; unloaded or collapsed turns may be missing."
-] as const;
-const NOTEBOOKLM_SUPPORT_WARNING =
-  "NotebookLM support is experimental. Verify first and last messages before relying on export.";
+const NOTEBOOKLM_PROVIDER = getProviderDefinition("notebooklm");
 
 export const notebookLmAdapter: PlatformAdapter = {
-  id: "notebooklm",
-  label: "NotebookLM",
-  hostnames: NOTEBOOKLM_HOSTNAMES,
-  supportStatus: "experimental",
+  capabilities: NOTEBOOKLM_PROVIDER.capabilities,
+  id: NOTEBOOKLM_PROVIDER.id,
+  label: NOTEBOOKLM_PROVIDER.label,
+  hostnames: getProviderHostnames(NOTEBOOKLM_PROVIDER.id),
+  supportStatus: NOTEBOOKLM_PROVIDER.supportStatus,
   selectors: notebookLmSelectors,
-  limitations: NOTEBOOKLM_LIMITATIONS,
-  experimentalWarning: NOTEBOOKLM_SUPPORT_WARNING,
-  providerWarnings: createProviderWarnings(NOTEBOOKLM_SUPPORT_WARNING, NOTEBOOKLM_LIMITATIONS),
+  limitations: NOTEBOOKLM_PROVIDER.limitations,
+  ...(NOTEBOOKLM_PROVIDER.supportWarning !== undefined
+    ? { supportWarning: NOTEBOOKLM_PROVIDER.supportWarning }
+    : {}),
+  providerWarnings: getProviderWarnings(NOTEBOOKLM_PROVIDER.id),
   detect: detectNotebookLm,
   ...createVisibleAdapterContract(extractVisibleNotebookLmMessages)
 };
