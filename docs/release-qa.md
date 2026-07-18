@@ -9,8 +9,8 @@ Implementation locally verified: current provider-layout extraction revision and
 ## Release status
 
 - Current source: local release candidate.
-- Product `dist/`: rebuilt from current source and loaded in Brave.
-- Store package: previous baseline only; current package rebuild still required.
+- Product and Store package: production `dist/` was rebuilt and loaded in Brave; the Store archive
+  remains the previous baseline and still requires a current rebuild.
 - Packaged ZIP and Store screenshots: stale after the 2026-07-16 UI revision; rebuild required.
 - No known P0/P1 failures in automated checks.
 - Chrome Web Store submission: not completed.
@@ -29,9 +29,9 @@ Implementation locally verified: current provider-layout extraction revision and
 
 | Check                                                                                                         | Result                                                                                                                 |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test`                                                                                                   | Pass — 61 test files / 255 tests.                                                                                      |
+| `pnpm test`                                                                                                   | Pass — 61 test files / 254 tests.                                                                                      |
 | Targeted ESLint for changed provider files                                                                    | Pass.                                                                                                                  |
-| `pnpm lint`                                                                                                   | Source changes pass; full command is blocked only by pre-existing generated `.wrangler/deploy-output/no-op-worker.js`. |
+| `pnpm lint`                                                                                                   | Pass in the clean QA worktree; generated local `.wrangler` output is not part of the release.                         |
 | `pnpm typecheck` and `pnpm build`                                                                             | Pass; current production `dist/` rebuilt.                                                                              |
 | Palette, brand, content-script and Preview guards                                                             | Pass, including brand verification against rebuilt `dist/`.                                                            |
 | `pnpm test:e2e`                                                                                               | Six passed; the existing toolbar-popup download case remains skipped.                                                  |
@@ -122,13 +122,14 @@ This pass does not promote public support claims.
 - License: GPL-3.0-or-later.
 - Listing and reviewer copy: `site/store-assets/store-listing.md`.
 - Privacy policy: `PRIVACY.md` with Limited Use and permission disclosures.
-- Icons, five screenshots and small promo: ready.
+- Icons: ready. The five screenshots and small promo are historical and must be recaptured from the
+  current UI before Store submission.
 - No pricing wall; support is optional and exists only outside the primary popup flow.
 - No remote code, telemetry, account, cloud rendering, default transcript persistence, or broad
   browsing-history permission.
 
 ## Go/no-go
 
-Local code checks and component visual QA pass. Do not publish or create the public release tag
-until the unpacked-extension matrix, live providers, rebuilt package, and replacement Store
-screenshots above are signed off.
+Local code checks, component visual QA, and the short live provider matrix pass. Do not publish or
+create the public release tag until the long ChatGPT, same-URL invalidation, live message-scope and
+batch gates pass, and the Store package and screenshots are rebuilt from the current UI.
