@@ -1,0 +1,32 @@
+{
+  "name": "@jelluvi/spatial-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.6.2",
+  "scripts": {
+    "assets:sync": "node scripts/sync-brand.mjs",
+    "mascot:build": "blender --background --python scripts/build-mascot.py",
+    "dev": "pnpm assets:sync && astro dev --host 127.0.0.1",
+    "build": "pnpm assets:sync && astro check && astro build",
+    "preview": "astro preview --host 127.0.0.1",
+    "check": "pnpm build"
+  },
+  "dependencies": {
+    "@astrojs/react": "6.0.1",
+    "@react-three/drei": "10.7.7",
+    "@react-three/fiber": "9.6.1",
+    "astro": "7.1.1",
+    "gsap": "3.15.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "three": "0.182.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.9",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.182.0",
+    "typescript": "6.0.3"
+  }
+}
