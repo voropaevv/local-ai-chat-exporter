@@ -171,8 +171,7 @@ function PreparedMascot({
   reducedMotion: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const bodyRef = useRef<THREE.Mesh | null>(null);
-  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=2");
+  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=3");
   const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
   const basePosition = useMemo(() => new THREE.Vector3(...position), [position]);
 
@@ -182,21 +181,12 @@ function PreparedMascot({
       if (!(child instanceof THREE.Mesh)) return;
       const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
       const clonedMaterials = sourceMaterials.map((source) => {
-        const cloned =
-          source.name === "Canonical Front" && source instanceof THREE.MeshStandardMaterial && source.map
-            ? new THREE.MeshBasicMaterial({
-                color: "#ffffff",
-                map: source.map,
-                side: THREE.DoubleSide,
-                toneMapped: false
-              })
-            : source.clone();
+        const cloned = source.clone();
         cloned.name = source.name;
         ownedMaterials.push(cloned);
         return cloned;
       });
       child.material = Array.isArray(child.material) ? clonedMaterials : clonedMaterials[0];
-      if (child.name === "Body") bodyRef.current = child;
     });
     return () => ownedMaterials.forEach((material) => material.dispose());
   }, [model]);
@@ -209,18 +199,20 @@ function PreparedMascot({
     group.position.copy(basePosition);
     group.position.y += Math.sin(time * 1.25) * floatAmount;
     group.rotation.set(...rotation);
-    group.rotation.y += Math.sin(time * 0.42) * 0.055 + pointer.x * 0.035;
-    group.rotation.x += pointer.y * -0.018;
-    group.scale.setScalar(scale * (1 + Math.sin(time * 1.55) * 0.012));
-
-    const body = bodyRef.current;
-    if (body?.morphTargetInfluences && body.morphTargetDictionary) {
-      const squashIndex = body.morphTargetDictionary.Squash;
-      const stretchIndex = body.morphTargetDictionary.Stretch;
-      const pulse = reducedMotion ? 0 : Math.max(0, Math.sin(time * (motion === "keeper" ? 1.15 : 0.72)));
-      body.morphTargetInfluences[squashIndex] = motion === "keeper" ? pulse * 0.065 : 0.018;
-      body.morphTargetInfluences[stretchIndex] = motion === "current" ? pulse * 0.045 : 0;
-    }
+    group.rotation.y += Math.sin(time * 0.42) * 0.19 + pointer.x * 0.11;
+    group.rotation.x += pointer.y * -0.032;
+    const pulse = reducedMotion
+      ? 0
+      : Math.max(0, Math.sin(time * (motion === "keeper" ? 1.15 : 0.72)));
+    const breathe = 1 + Math.sin(time * 1.55) * 0.012;
+    const squash = motion === "keeper" ? pulse * 0.025 : 0.008;
+    const stretch = motion === "current" ? pulse * 0.02 : 0;
+    const baseScale = scale * breathe;
+    group.scale.set(
+      baseScale * (1 + squash),
+      baseScale * (1 - squash + stretch),
+      baseScale * (1 + squash * 0.55 - stretch * 0.35)
+    );
   });
 
   return (
@@ -603,4 +595,4 @@ export default function ConceptGallery() {
   );
 }
 
-useGLTF.preload("/models/jelluvi-mascot.glb?v=2");
+useGLTF.preload("/models/jelluvi-mascot.glb?v=3");

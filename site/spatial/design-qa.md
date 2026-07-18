@@ -5,8 +5,10 @@
 - Surface: local-only spatial prototype at `http://127.0.0.1:4174/`
 - Concept lab: `http://127.0.0.1:4174/concepts/`
 - Canonical mascot source: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/assets/brand/jelluvi.png`
-- Browser implementation capture: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-fidelity-desktop.png`
-- Combined source/implementation comparison: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-fidelity-comparison.png`
+- Browser implementation capture: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-rounded-browser.png`
+- Mobile implementation capture: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-rounded-mobile.png`
+- Combined source/browser comparison: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-rounded-browser-comparison.png`
+- Multi-angle geometry evidence: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-true-3d-turntable.png`
 - Concept rationale: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/concepts.md`
 
 The canonical mascot is the visual truth for the model repair. The three concept scenes are
@@ -36,8 +38,9 @@ they do not imply that one direction has been approved for production.
 - **Post-fix evidence:** `qa/mascot-fidelity-comparison.png` shows the canonical source and the
   browser-rendered 3D model in the same comparison image. The crown, eyes, highlights, side lobes,
   lower band, and wavy base are all visibly retained.
-- **Result:** No remaining P0/P1/P2 source-fidelity mismatch. The visible depth and slight lighting on
-  the side edge are intentional 3D behavior.
+- **Intermediate result:** The front view improved, but later owner review correctly identified a
+  remaining P1: the asset was still a shallow extrusion with a raster front and did not qualify as a
+  real character model. Pass 5 supersedes this implementation.
 
 ### Pass 2 — concept differentiation and meaning
 
@@ -77,6 +80,30 @@ they do not imply that one direction has been approved for production.
   source-and-build scan returns no matches in `src`, `dist`, `concepts.md`, or `README.md`.
 - **Result:** No Russian characters remain in the local site UI or compiled site output.
 
+### Pass 5 — genuine 3D volume and roundness
+
+- **P1 / geometry:** The contour-extrusion model used a canonical PNG as its entire front material.
+  From the front it looked correct, but side and rear views exposed a shallow 0.76-unit slab.
+- **Fix:** Replaced the extrusion with a closed 192-point loft that contracts through twelve depth
+  rings into front and rear poles. The body is a watertight manifold; the eyes, pupils, pupil
+  highlights, lower ribbon, and side accents are independent closed geometry. No canonical-front
+  raster is embedded in the GLB.
+- **P1 / proportions:** The first volumetric pass had 2.203 units of depth against 4.7 units of width,
+  so it still read as flattened.
+- **Fix:** Rebuilt the loft to 3.427 units of depth and 30.225 cubic units of body volume. The crown,
+  cheeks, back, and sides now form one round dome while the lower footprint retains the canonical
+  jelly silhouette.
+- **P2 / attached details:** Early physical highlight pieces read like raised pads at side view.
+- **Fix:** Removed those pieces. Brand highlights now come from the body's vertex color and physical
+  lighting, so the silhouette stays continuous at every angle.
+- **Post-fix evidence:** `qa/mascot-true-3d-turntable.png` combines the canonical front reference
+  with front, three-quarter, side, and back renders. `qa/mascot-rounded-browser-comparison.png`
+  combines the same source with the live browser render. A clean GLB re-import reports 2,306 body
+  vertices, 3.427 depth, 30.225 volume, and zero non-manifold edges. The revised round body remains
+  fully visible in `qa/mascot-rounded-mobile.png` at 390 × 844.
+- **Result:** No remaining P0/P1/P2 geometry issue. The different highlight placement is an accepted
+  physical-material translation from a flat illustration, not a missing model surface.
+
 ## Final fidelity surfaces
 
 - **Fonts and typography:** The existing local system display stack is preserved. Headline weight,
@@ -86,8 +113,9 @@ they do not imply that one direction has been approved for production.
   desktop layout indiscriminately.
 - **Colors and tokens:** Navy, electric blue, cyan, white, and quiet blue extend the canonical mascot
   palette consistently. The concept scenes avoid unrelated accent colors.
-- **Image quality and asset fidelity:** The canonical raster is embedded in the editable Blender
-  source and GLB front surface. There is no AI-generated replacement, placeholder avatar, custom SVG
+- **Image quality and asset fidelity:** The canonical raster is used only to sample the front-view
+  outline during authoring. The `.blend` and GLB contain a closed volumetric body and modeled face,
+  not a textured front plate. There is no AI-generated replacement, placeholder avatar, custom SVG
   approximation, or CSS-drawn mascot.
 - **Copy and content:** All visible UI is English. Privacy, local processing, nine supported outputs,
   continuity, and user-owned files are the only product claims represented.
@@ -105,7 +133,9 @@ they do not imply that one direction has been approved for production.
 - Desktop and mobile screenshots were captured from the browser, not from source files.
 - Concept query states `keeper`, `cosmos`, and `current` all resolved to the correct heading and scene.
 - The rationale control expanded and collapsed, and the concept selector changed `aria-pressed`.
-- No JavaScript console errors were present in the final refreshed states.
+- The rounded model loaded through the versioned GLB path and rendered with live lighting and motion.
+- Browser logs contain only Vite connection and React development information; there are no errors or
+  warnings in the final refreshed state.
 
 ## Open verification limits
 

@@ -29,10 +29,14 @@ production approval. All visible prototype copy is English-only.
 ## Source ownership
 
 - `scripts/build-mascot.py` is the reproducible, non-generative Blender authoring source. It samples
-  the canonical PNG alpha contour and embeds the canonical artwork on a beveled 3D body, preserving
-  the supplied silhouette and face instead of redrawing them.
+  the canonical PNG only for the front-view silhouette, then lofts that outline through depth into a
+  closed manifold body. Eyes, pupils, pupil highlights, and the lower accent are modeled as
+  independent three-dimensional geometry; the runtime model contains no flat canonical-front
+  texture.
 - `assets/source/jelluvi-mascot.blend` is the editable 3D source produced by that script.
 - `public/models/jelluvi-mascot.glb` is the optimized browser runtime model.
+- `qa/turntable/` contains deterministic front, three-quarter, side, and back renders that prove the
+  model has continuous volume outside the canonical front view.
 - `scripts/sync-brand.mjs` copies the canonical repository mascot into the ignored local public
   directory for accessible and reduced-motion fallbacks.
 

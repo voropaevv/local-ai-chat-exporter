@@ -301,11 +301,10 @@ function JelluviMascot({
   modeRef: RefObject<MascotMode>;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=2");
+  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=3");
   const { viewport } = useThree();
   const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
-  const bodyRef = useRef<THREE.Mesh | null>(null);
-  const sideMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const bodyMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
   useEffect(() => {
     const ownedMaterials: THREE.Material[] = [];
@@ -315,25 +314,16 @@ function JelluviMascot({
       child.receiveShadow = false;
       const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
       const clonedMaterials = sourceMaterials.map((source) => {
-        const cloned =
-          source.name === "Canonical Front" && source instanceof THREE.MeshStandardMaterial && source.map
-            ? new THREE.MeshBasicMaterial({
-                color: "#ffffff",
-                map: source.map,
-                side: THREE.DoubleSide,
-                toneMapped: false
-              })
-            : source.clone();
+        const cloned = source.clone();
         cloned.name = source.name;
         ownedMaterials.push(cloned);
         return cloned;
       });
       child.material = Array.isArray(child.material) ? clonedMaterials : clonedMaterials[0];
       if (child.name === "Body") {
-        bodyRef.current = child;
-        sideMaterialRef.current = clonedMaterials.find(
+        bodyMaterialRef.current = clonedMaterials.find(
           (candidate): candidate is THREE.MeshStandardMaterial =>
-            candidate instanceof THREE.MeshStandardMaterial && candidate.name === "Jelly Side"
+            candidate instanceof THREE.MeshStandardMaterial && candidate.name === "Jelly Body"
         ) ?? null;
       }
     });
@@ -360,45 +350,47 @@ function JelluviMascot({
     group.position.y = THREE.MathUtils.damp(group.position.y, targetY + modeLift, 4.6, delta);
     group.rotation.y = THREE.MathUtils.damp(
       group.rotation.y,
-      sampleKeyframes(progress, [-0.12, 0.18, -0.08, 0.12]) + pointer.x * 0.08,
+      sampleKeyframes(progress, [-0.18, 0.34, -0.24, 0.28]) + pointer.x * 0.13,
       4.2,
       delta
     );
     group.rotation.x = THREE.MathUtils.damp(group.rotation.x, -pointer.y * 0.045, 4.2, delta);
     const breathe = 1 + Math.sin(time * 1.7) * 0.018;
-    group.scale.setScalar(THREE.MathUtils.damp(group.scale.x, targetScale * breathe, 4.2, delta));
+    const absorb = Math.max(0, Math.sin(Math.PI * clamp((progress - 0.2) / 0.26)));
+    const process = Math.max(0, Math.sin(Math.PI * clamp((progress - 0.43) / 0.28)));
+    const actionSquash = mode === "export" ? 0.18 : mode === "success" ? 0.06 : 0;
+    const squash = Math.max(0.012 + Math.sin(time * 1.7) * 0.008, absorb * 0.1, actionSquash);
+    const stretch = Math.max(0, process * 0.055, mode === "success" ? 0.07 : 0);
+    const baseScale = targetScale * breathe;
+    group.scale.x = THREE.MathUtils.damp(
+      group.scale.x,
+      baseScale * (1 + squash * 0.55 - stretch * 0.18),
+      4.2,
+      delta
+    );
+    group.scale.y = THREE.MathUtils.damp(
+      group.scale.y,
+      baseScale * (1 - squash * 0.72 + stretch * 0.68),
+      4.2,
+      delta
+    );
+    group.scale.z = THREE.MathUtils.damp(
+      group.scale.z,
+      baseScale * (1 + squash * 0.34 - stretch * 0.12),
+      4.2,
+      delta
+    );
 
-    const body = bodyRef.current;
-    if (body?.morphTargetInfluences && body.morphTargetDictionary) {
-      const squashIndex = body.morphTargetDictionary.Squash;
-      const stretchIndex = body.morphTargetDictionary.Stretch;
-      const absorb = Math.sin(Math.PI * clamp((progress - 0.2) / 0.26));
-      const process = Math.sin(Math.PI * clamp((progress - 0.43) / 0.28));
-      const actionSquash = mode === "export" ? 0.62 : mode === "success" ? 0.18 : 0;
-      body.morphTargetInfluences[squashIndex] = THREE.MathUtils.damp(
-        body.morphTargetInfluences[squashIndex] ?? 0,
-        Math.max(0.035 + Math.sin(time * 1.7) * 0.025, absorb * 0.42, actionSquash),
-        5.2,
-        delta
-      );
-      body.morphTargetInfluences[stretchIndex] = THREE.MathUtils.damp(
-        body.morphTargetInfluences[stretchIndex] ?? 0,
-        Math.max(0, process * (0.17 + Math.sin(time * 7) * 0.08), mode === "success" ? 0.22 : 0),
-        5.2,
-        delta
-      );
-    }
-
-    const sideMaterial = sideMaterialRef.current;
-    if (sideMaterial) {
-      sideMaterial.emissive.set(mode === "success" ? "#0759ba" : "#00152f");
-      sideMaterial.emissiveIntensity = THREE.MathUtils.damp(
-        sideMaterial.emissiveIntensity,
+    const bodyMaterial = bodyMaterialRef.current;
+    if (bodyMaterial) {
+      bodyMaterial.emissive.set(mode === "success" ? "#0759ba" : "#00152f");
+      bodyMaterial.emissiveIntensity = THREE.MathUtils.damp(
+        bodyMaterial.emissiveIntensity,
         mode === "success"
-          ? 0.52
-          : 0.18 +
+          ? 0.28
+          : 0.08 +
             Math.max(0, Math.sin(Math.PI * clamp((progress - 0.43) / 0.28))) *
-              0.2,
+              0.12,
         4,
         delta
       );
@@ -724,4 +716,4 @@ export default function SpatialExperience() {
   );
 }
 
-useGLTF.preload("/models/jelluvi-mascot.glb");
+useGLTF.preload("/models/jelluvi-mascot.glb?v=3");
