@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+  <body>
+    <div class="chat-message-pair">
+      <chat-message class="individual-message">
+        <div class="from-user-container">
+          <mat-card>
+            <mat-card-content class="from-user-message-inner-content message-content">
+              <div class="message-text-content">
+                <div role="heading"><p>На основе источника ответь кратко.</p></div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+        </div>
+      </chat-message>
+      <chat-message class="individual-message">
+        <div class="to-user-container">
+          <mat-card>
+            <mat-card-content class="to-user-message-inner-content message-content">
+              <div class="message-text-content">
+                <labs-tailwind-doc-viewer>
+                  <element-list-renderer>
+                    <p>Начало NotebookLM: ёж, Юникод, ₽, —</p>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Элемент</th>
+                          <th>Значение</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Альфа</td>
+                          <td>1</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <ol>
+                      <labs-tailwind-structural-element-view-v2>
+                        <paragraph-element-view>
+                          <li>
+                            <span>Строка 1</span>
+                            <button class="citation-marker">1</button>
+                          </li>
+                        </paragraph-element-view>
+                      </labs-tailwind-structural-element-view-v2>
+                      <labs-tailwind-structural-element-view-v2>
+                        <paragraph-element-view>
+                          <li>
+                            <span>Строка 2</span>
+                            <button class="citation-marker">1</button>
+                          </li>
+                        </paragraph-element-view>
+                      </labs-tailwind-structural-element-view-v2>
+                    </ol>
+                    <p>Конец проверки NotebookLM 2026</p>
+                  </element-list-renderer>
+                </labs-tailwind-doc-viewer>
+              </div>
+            </mat-card-content>
+            <button aria-label="Copy model response to clipboard">Copy</button>
+          </mat-card>
+        </div>
+      </chat-message>
+    </div>
+  </body>
+</html>

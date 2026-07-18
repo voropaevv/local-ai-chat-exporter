@@ -17,13 +17,13 @@ const PERPLEXITY_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
     authorLabel: "User",
     role: "user",
     selector:
-      "[data-testid='query-text'], [data-test-id='query-text'], [data-testid='query-content'], [data-testid='thread-question'], [aria-label='Search query'] h1, main header h1, main section h1"
+      "[data-testid='query-text'], [data-test-id='query-text'], [data-testid='query-content'], [data-testid='thread-question'], [class~='group/query'], [aria-label='Search query'] h1, main header h1, main section h1"
   },
   {
     authorLabel: "Perplexity",
     role: "assistant",
     selector:
-      "[data-testid='answer'], [data-test-id='answer'], [data-testid='answer-content'], [data-testid='thread-answer'], main .prose"
+      "[data-testid='answer'], [data-test-id='answer'], [data-testid='answer-content'], [data-testid='thread-answer'], main [id^='markdown-content-'] .prose[data-renderer='lm'], main .prose"
   }
 ];
 

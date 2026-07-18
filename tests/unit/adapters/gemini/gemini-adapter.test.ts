@@ -37,4 +37,36 @@ describe("Gemini adapter", () => {
     expect(messages[0].text).toBe("Draft a privacy note.");
     expect(messages[1].text).toBe("Privacy note: exports stay on this device.");
   });
+
+  test("extracts a complete current Gemini response including nested code", () => {
+    const messages = extractVisibleGeminiMessages(loadFixture("current-layout.html"));
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[0].text).toBe("Jelluvi live QA Gemini 2026.");
+    expect(messages[0].text).not.toContain("You said");
+    expect(messages[1].text).toContain("Начало Gemini: ёж, Юникод, ₽, —");
+    expect(messages[1].codeBlocks).toEqual([
+      { code: "const gemini = 42;", language: "javascript" }
+    ]);
+    expect(messages[1].markdown).toContain("```javascript\nconst gemini = 42;\n```");
+    expect(messages[1].markdown).not.toContain("\n\nJavaScript\n\n```");
+    expect(messages[1].markdown).toContain("Конец Gemini short");
+  });
+
+  test("ignores conversation nodes hidden by the inactive SPA route", () => {
+    const document = new JSDOM(`
+      <style>.inactive-route { display: none; }</style>
+      <main>
+        <div class="inactive-route">
+          <user-query><div class="query-text">Hidden old prompt.</div></user-query>
+          <model-response><message-content><div class="markdown"><p>Hidden old answer.</p></div></message-content></model-response>
+        </div>
+        <div inert>
+          <model-response><message-content><div class="markdown"><p>Inert answer.</p></div></message-content></model-response>
+        </div>
+      </main>
+    `).window.document;
+
+    expect(extractVisibleGeminiMessages(document)).toEqual([]);
+  });
 });

@@ -24,6 +24,12 @@ const CLAUDE_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
     selector: "[data-testid='assistant-message']"
   },
   {
+    authorLabel: "Claude",
+    contentSelector: ".standard-markdown",
+    role: "assistant",
+    selector: "[role='article'] [data-is-streaming]"
+  },
+  {
     authorLabel: "User",
     role: "user",
     selector: "[data-local-export-platform='claude'][data-local-export-role='user']"

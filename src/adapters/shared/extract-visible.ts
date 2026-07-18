@@ -4,6 +4,7 @@ import { cleanChatGptNode } from "../chatgpt/clean-chatgpt-node";
 
 export interface VisibleMessageSelector {
   readonly authorLabel: string;
+  readonly contentSelector?: string;
   readonly role: ChatRole;
   readonly selector: string;
 }
@@ -28,7 +29,10 @@ export function extractVisibleMessagesBySelectors(
 
     const selectorConfig = findSelectorConfig(messageElement, config.messageSelectors);
     const role = selectorConfig?.role ?? "other";
-    const contentElement = getContentElement(messageElement, config.contentSelector);
+    const contentElement = getContentElement(
+      messageElement,
+      selectorConfig?.contentSelector ?? config.contentSelector
+    );
     const cleanedNode = cleanChatGptNode(contentElement);
 
     if (cleanedNode.text.length === 0 && cleanedNode.codeBlocks.length === 0) {
@@ -97,18 +101,48 @@ function buildMessageId(
 }
 
 function isVisibleMessageElement(element: Element): boolean {
-  if (element.closest("[hidden], [aria-hidden='true']")) {
+  if (element.closest("[hidden], [aria-hidden='true'], [inert]")) {
     return false;
   }
+
+  const view = element.ownerDocument.defaultView;
 
   for (const currentElement of getElementAndAncestors(element)) {
     const style = currentElement.getAttribute("style")?.toLocaleLowerCase() ?? "";
     if (style.includes("display: none") || style.includes("visibility: hidden")) {
       return false;
     }
+
+    if (view) {
+      const computedStyle = view.getComputedStyle(currentElement);
+      if (
+        computedStyle.display === "none" ||
+        computedStyle.visibility === "hidden" ||
+        computedStyle.visibility === "collapse" ||
+        computedStyle.opacity === "0"
+      ) {
+        return false;
+      }
+    }
+  }
+
+  if (hasMeasurableLayout(element.ownerDocument) && element.getClientRects().length === 0) {
+    return false;
   }
 
   return true;
+}
+
+function hasMeasurableLayout(document: Document): boolean {
+  const documentElement = document.documentElement;
+  const body = document.body;
+
+  return (
+    documentElement.clientWidth > 0 ||
+    documentElement.clientHeight > 0 ||
+    documentElement.getClientRects().length > 0 ||
+    (body?.getClientRects().length ?? 0) > 0
+  );
 }
 
 function getElementAndAncestors(element: Element): readonly Element[] {

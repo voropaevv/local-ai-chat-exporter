@@ -26,6 +26,21 @@ describe("Claude adapter", () => {
   test("defines selectors and extraction limitations", () => {
     expect(claudeSelectors.message).toContain("[data-testid='user-message']");
     expect(claudeSelectors.message).toContain("[data-testid='assistant-message']");
+    expect(claudeSelectors.message).toContain("[data-is-streaming]");
+  });
+
+  test("extracts the current Claude response container without thought UI", () => {
+    const messages = extractVisibleClaudeMessages(loadFixture("current-layout.html"));
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[0].text).toBe("Jelluvi live QA Claude 2026.");
+    expect(messages[1].text).toContain("Начало Claude: ёж, Юникод, ₽, —");
+    expect(messages[1].text).not.toContain("Thought for 2s");
+    expect(messages[1].codeBlocks).toEqual([
+      { code: "const claude = 42;", language: "javascript" }
+    ]);
+    expect(messages[1].markdown).not.toContain("\n\njavascript\n\n```");
+    expect(messages[1].markdown).toContain("Конец Claude short");
   });
 
   test("extracts visible user and assistant messages from fixture DOM", () => {
