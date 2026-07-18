@@ -1,6 +1,6 @@
 {
   "name": "jelluvi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Jelluvi is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
   "type": "module",
   "private": true,
@@ -19,11 +19,13 @@
     "icons:check": "node scripts/check-palette.mjs",
     "palette:check": "node scripts/check-palette.mjs",
     "brand:check": "node scripts/check-brand.mjs",
+    "provider-drift:check": "node scripts/check-provider-drift.mjs",
     "site:build": "node scripts/build-site.mjs",
     "store-assets:build": "node scripts/build-store-assets.mjs",
+    "store-assets:capture": "node scripts/capture-store-screens.mjs",
     "check:content-script": "node scripts/check-content-script-classic.mjs",
     "check:preview": "node scripts/check-preview-build.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm icons:check && pnpm brand:check && pnpm build && pnpm brand:check --include-dist && pnpm check:content-script && pnpm check:preview && pnpm site:build"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm provider-drift:check && pnpm icons:check && pnpm brand:check && pnpm build && pnpm brand:check --include-dist && pnpm check:content-script && pnpm check:preview && pnpm site:build"
   },
   "dependencies": {
     "fflate": "^0.8.3",

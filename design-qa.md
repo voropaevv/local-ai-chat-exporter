@@ -34,4 +34,19 @@ is excluded from `dist`. Live unpacked-extension checks on real provider pages a
 screenshots remain release QA, because installing/reloading the extension and using live accounts
 were not part of this component pass.
 
-final result: passed
+## 0.2.0 candidate review — 2026-07-18
+
+The current and historical Store states were captured at 1280×800 and reviewed side-by-side. This
+is a regression audit, not final design approval.
+
+1. Popup hierarchy is stronger after removing Options, Scan/Refresh and the message-status row.
+2. Provider state is concise and the primary Export action remains unmistakable in both themes.
+3. Store framing should be redesigned: the compact popup is too small inside the current canvas.
+4. Preview is usable and visually coherent; metadata density and final type scale remain open.
+5. Settings are consistent but vertically long; Library, Batch and Diagnostics need a later
+   information-architecture decision.
+
+QA candidates stay under ignored `qa-artifacts/store-candidate/`; tracked Store screenshots were
+not replaced because the user has not accepted the design as final.
+
+final result: functional candidate passed; final design not approved

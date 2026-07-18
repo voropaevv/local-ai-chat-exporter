@@ -14,3 +14,5 @@ Use current Jelluvi branding and the generated PNG icon in every screenshot.
 - Keep exactly five 1280×800 screenshots and one 440×280 small promo.
 - No private chat content, credentials, tokens, names, addresses, or sensitive data appear.
 - Secondary provider screenshots must not imply full support unless live QA passed.
+- Run `pnpm store-assets:capture` for ignored QA candidates. Promote with `--promote` only after
+  explicit design approval and a side-by-side reference comparison.
