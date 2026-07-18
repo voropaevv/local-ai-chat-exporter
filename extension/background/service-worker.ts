@@ -1,13 +1,14 @@
 import {
   DEFAULT_EXPORT_OPTIONS,
-  ExportPipelineError,
-  serializeExportError
+  getExportedMessageCount,
+  renderConversationFiles
 } from "../../src/core/export-options";
+import { ExportPipelineError, serializeExportError } from "../../src/core/export-errors";
+import { createDiagnosticReport, type DiagnosticReport } from "../../src/core/diagnostics";
 import {
   POPUP_BATCH_EXPORT_MESSAGE,
   POPUP_BATCH_LIST_MESSAGE,
   CONTENT_CANCEL_SCAN_MESSAGE,
-  CONTENT_EXPORT_MESSAGE,
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
@@ -17,12 +18,11 @@ import {
   POPUP_CANCEL_SCAN_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
+  SETTINGS_GET_DIAGNOSTICS_MESSAGE,
   PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
   PREVIEW_RETURN_TO_SOURCE_MESSAGE,
   type ActiveTabInfoResult,
   type CachedConversationResult,
-  type ContentExportRequest,
-  type ContentExportSuccess,
   type ContentGetCachedConversationRequest,
   type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
@@ -42,12 +42,20 @@ import {
   type PreviewOpenSuccess,
   type RuntimeResponse,
   type ScanCacheSummaryResult,
-  type ScanSummary
+  type ScanSummary,
+  type SettingsGetDiagnosticsRequest
 } from "../../src/core/messages";
 import { getSupportedChatPageInfo } from "../../src/core/batch";
+import { serializeRenderedFile } from "../../src/core/rendered-file-transport";
 import { buildPreviewPageUrl } from "../../src/ui/preview-url";
 import { ensureContentScript } from "../../src/utils/content-script";
 import { handlePopupBatchExportRequest, handlePopupBatchListRequest } from "./batch";
+import {
+  readDiagnosticContext,
+  readDiagnosticErrors,
+  recordDiagnosticError,
+  rememberDiagnosticContext
+} from "./diagnostic-session";
 
 chrome.runtime.onInstalled.addListener(() => {
   // Reserved for local-only extension setup in later tasks.
@@ -58,9 +66,19 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return false;
   }
 
+  const operation = getRequestOperation(message);
+
   handlePopupRequest(message)
     .then((value) => sendResponse({ ok: true, value }))
-    .catch((error: unknown) => sendResponse({ ok: false, error: serializeExportError(error) }));
+    .catch(async (error: unknown) => {
+      const serializedError = serializeExportError(error);
+
+      await recordDiagnosticError({
+        code: serializedError.code,
+        operation
+      }).catch(() => undefined);
+      sendResponse({ ok: false, error: serializedError });
+    });
 
   return true;
 });
@@ -77,6 +95,7 @@ async function handlePopupRequest(
     | PopupOpenPreviewRequest
     | PreviewGetCachedConversationRequest
     | PreviewReturnToSourceRequest
+    | SettingsGetDiagnosticsRequest
 ): Promise<
   | ScanSummary
   | ActiveTabInfoResult
@@ -85,23 +104,24 @@ async function handlePopupRequest(
   | BatchListSuccess
   | BatchExportSuccess
   | CachedConversationResult
+  | DiagnosticReport
   | PreviewOpenSuccess
   | { readonly cancelled: true }
 > {
   if (request.type === POPUP_SCAN_MESSAGE) {
-    return handlePopupScanRequest();
+    return handlePopupScanRequest(request);
   }
 
   if (request.type === POPUP_CANCEL_SCAN_MESSAGE) {
-    return handlePopupCancelScanRequest();
+    return handlePopupCancelScanRequest(request);
   }
 
   if (request.type === POPUP_GET_ACTIVE_TAB_INFO_MESSAGE) {
-    return handlePopupGetActiveTabInfoRequest();
+    return handlePopupGetActiveTabInfoRequest(request);
   }
 
   if (request.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE) {
-    return handlePopupGetScanCacheSummaryRequest();
+    return handlePopupGetScanCacheSummaryRequest(request);
   }
 
   if (request.type === POPUP_OPEN_PREVIEW_MESSAGE) {
@@ -125,23 +145,75 @@ async function handlePopupRequest(
     return handlePopupBatchExportRequest(request);
   }
 
+  if (request.type === SETTINGS_GET_DIAGNOSTICS_MESSAGE) {
+    return handleSettingsGetDiagnosticsRequest();
+  }
+
   return handlePopupExportRequest(request);
 }
 
-async function handlePopupGetActiveTabInfoRequest(): Promise<ActiveTabInfoResult> {
-  const tab = await getActiveTab();
+async function handlePopupGetActiveTabInfoRequest(
+  request: PopupGetActiveTabInfoRequest
+): Promise<ActiveTabInfoResult> {
+  const tab = await getActiveTab(request.sourceTabId);
   const sourceUrl = typeof tab.url === "string" && tab.url.length > 0 ? tab.url : undefined;
   const supportedPage = sourceUrl === undefined ? undefined : getSupportedChatPageInfo(sourceUrl);
 
+  await rememberDiagnosticContext(
+    supportedPage !== undefined && tab.id !== undefined
+      ? {
+          provider: { id: supportedPage.platform, label: supportedPage.label },
+          tabId: tab.id
+        }
+      : undefined
+  ).catch(() => undefined);
+
   return {
     ...(supportedPage !== undefined ? { platformLabel: supportedPage.label } : {}),
+    ...(tab.id !== undefined ? { sourceTabId: tab.id } : {}),
     ...(sourceUrl !== undefined ? { sourceUrl } : {}),
     supported: supportedPage !== undefined
   };
 }
 
-async function handlePopupScanRequest(): Promise<ScanSummary> {
-  const tab = await getActiveTab();
+async function handleSettingsGetDiagnosticsRequest(): Promise<DiagnosticReport> {
+  const [context, recentErrors] = await Promise.all([
+    readDiagnosticContext().catch(() => undefined),
+    readDiagnosticErrors().catch(() => [])
+  ]);
+  let scan: Parameters<typeof createDiagnosticReport>[0]["scan"] = { status: "missing" };
+
+  if (context !== undefined) {
+    try {
+      await ensureContentScript(context.tabId);
+      const response = await sendContentMessage<ScanCacheSummaryResult>(context.tabId, {
+        type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE
+      } satisfies ContentGetScanCacheSummaryRequest);
+
+      if (response.ok) {
+        scan = response.value.hasCache
+          ? {
+              completeness: response.value.scan.completeness,
+              messageCount: response.value.scan.messageCount,
+              status: "ready"
+            }
+          : { status: response.value.reason === "stale" ? "stale" : "missing" };
+      }
+    } catch {
+      scan = { status: "missing" };
+    }
+  }
+
+  return createDiagnosticReport({
+    extensionVersion: chrome.runtime.getManifest().version,
+    ...(context !== undefined ? { provider: context.provider } : {}),
+    recentErrors,
+    scan
+  });
+}
+
+async function handlePopupScanRequest(request: PopupScanRequest): Promise<ScanSummary> {
+  const tab = await getActiveTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await ensureContentScript(tabId);
@@ -157,9 +229,11 @@ async function handlePopupScanRequest(): Promise<ScanSummary> {
   return response.value;
 }
 
-async function handlePopupGetScanCacheSummaryRequest(): Promise<ScanCacheSummaryResult> {
+async function handlePopupGetScanCacheSummaryRequest(
+  request: PopupGetScanCacheSummaryRequest
+): Promise<ScanCacheSummaryResult> {
   try {
-    const tab = await getActiveTab();
+    const tab = await getActiveTab(request.sourceTabId);
     const tabId = requireTabId(tab);
 
     await ensureContentScript(tabId);
@@ -181,7 +255,7 @@ async function handlePopupGetScanCacheSummaryRequest(): Promise<ScanCacheSummary
 async function handlePopupOpenPreviewRequest(
   request: PopupOpenPreviewRequest
 ): Promise<PreviewOpenSuccess> {
-  const tab = await getActiveTab();
+  const tab = await getActiveTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await ensureContentScript(tabId);
@@ -235,8 +309,10 @@ async function handlePreviewGetCachedConversationRequest(
   }
 }
 
-async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: true }> {
-  const tab = await getActiveTab();
+async function handlePopupCancelScanRequest(
+  request: PopupCancelScanRequest
+): Promise<{ readonly cancelled: true }> {
+  const tab = await getActiveTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await sendContentMessage<{ readonly cancelled: true }>(tabId, {
@@ -247,35 +323,55 @@ async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: tru
 }
 
 async function handlePopupExportRequest(request: PopupExportRequest): Promise<PopupExportSuccess> {
-  const tab = await getActiveTab();
+  const tab = await getActiveTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await ensureContentScript(tabId);
 
-  const shouldDownload = request.download ?? true;
-  const contentResponse = await sendContentMessage<ContentExportSuccess>(tabId, {
-    copyToClipboard: request.copyToClipboard ?? true,
-    delivery: request.returnFiles ? "return_files" : "anchor",
-    download: shouldDownload,
-    options: request.options ?? DEFAULT_EXPORT_OPTIONS,
-    type: CONTENT_EXPORT_MESSAGE
-  } satisfies ContentExportRequest);
+  const contentResponse = await sendContentMessage<CachedConversationResult>(tabId, {
+    type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+  } satisfies ContentGetCachedConversationRequest);
 
   if (!contentResponse.ok) {
     throw new ExportPipelineError(contentResponse.error.code, contentResponse.error.message);
   }
 
+  if (!contentResponse.value.hasConversation) {
+    throw new ExportPipelineError(
+      contentResponse.value.reason === "stale" ? "scan_stale" : "scan_required",
+      contentResponse.value.reason === "stale"
+        ? "The conversation changed. Refresh it before exporting."
+        : "Prepare the conversation before exporting."
+    );
+  }
+
+  const options = request.options ?? DEFAULT_EXPORT_OPTIONS;
+  const conversation = contentResponse.value.conversation;
+  const exportedMessageCount = getExportedMessageCount(conversation, options);
+  const files = renderConversationFiles(conversation, options).map(serializeRenderedFile);
+
   return {
-    clipboardError: contentResponse.value.clipboardError,
-    downloaded: contentResponse.value.downloaded,
-    exportedMessageCount: contentResponse.value.exportedMessageCount,
-    ...(request.returnFiles ? { files: contentResponse.value.files } : {}),
-    messageCount: contentResponse.value.messageCount,
-    warnings: contentResponse.value.warnings
+    downloaded: [],
+    exportedMessageCount,
+    files,
+    messageCount: exportedMessageCount,
+    warnings: [...conversation.completeness.warnings, ...conversation.completeness.platformWarnings]
   };
 }
 
-async function getActiveTab(): Promise<chrome.tabs.Tab> {
+async function getActiveTab(sourceTabId?: number): Promise<chrome.tabs.Tab> {
+  if (sourceTabId !== undefined) {
+    try {
+      return await chrome.tabs.get(sourceTabId);
+    } catch (error) {
+      throw new ExportPipelineError(
+        "unsupported_platform",
+        "The source tab is no longer available.",
+        error
+      );
+    }
+  }
+
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const activeTab = tabs[0];
 
@@ -298,7 +394,6 @@ async function sendContentMessage<T>(
   tabId: number,
   request:
     | ContentScanRequest
-    | ContentExportRequest
     | ContentGetCachedConversationRequest
     | ContentGetScanCacheSummaryRequest
     | { readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE }
@@ -326,7 +421,8 @@ function isPopupRequest(
   | PopupGetScanCacheSummaryRequest
   | PopupOpenPreviewRequest
   | PreviewGetCachedConversationRequest
-  | PreviewReturnToSourceRequest {
+  | PreviewReturnToSourceRequest
+  | SettingsGetDiagnosticsRequest {
   return (
     isRecord(message) &&
     (message.type === POPUP_SCAN_MESSAGE ||
@@ -338,8 +434,13 @@ function isPopupRequest(
       message.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === PREVIEW_RETURN_TO_SOURCE_MESSAGE ||
       message.type === POPUP_BATCH_LIST_MESSAGE ||
-      message.type === POPUP_BATCH_EXPORT_MESSAGE)
+      message.type === POPUP_BATCH_EXPORT_MESSAGE ||
+      message.type === SETTINGS_GET_DIAGNOSTICS_MESSAGE)
   );
+}
+
+function getRequestOperation(message: unknown): string {
+  return isRecord(message) && typeof message.type === "string" ? message.type : "unknown";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

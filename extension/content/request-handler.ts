@@ -1,19 +1,9 @@
 import {
-  ExportPipelineError,
-  getExportedMessageCount,
-  serializeExportError,
-  type ExportOptions,
-  type SerializedExportError
-} from "../../src/core/export-options";
-import {
   CONTENT_CANCEL_SCAN_MESSAGE,
-  CONTENT_EXPORT_MESSAGE,
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   type ContentCancelScanRequest,
-  type ContentExportRequest,
-  type ContentExportSuccess,
   type ContentGetCachedConversationRequest,
   type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
@@ -22,13 +12,10 @@ import {
   type ScanSummary
 } from "../../src/core/messages";
 import type { ConversationExport } from "../../src/core/schema";
-import type { RenderedBytes, RenderedFile } from "../../src/renderers";
-import type { DownloadResult } from "../../src/utils/download";
 
 export type ContentRequest =
   | ContentScanRequest
   | ContentCancelScanRequest
-  | ContentExportRequest
   | ContentGetCachedConversationRequest
   | ContentGetScanCacheSummaryRequest;
 
@@ -36,22 +23,11 @@ export type ContentRequestResult =
   | ScanSummary
   | ScanCacheSummaryResult
   | CachedConversationResult
-  | ContentExportSuccess
   | { readonly cancelled: boolean };
 
 export interface ContentRequestHandlerDependencies {
-  readonly copyRenderedFileToClipboard: (
-    files: readonly RenderedFile<RenderedBytes>[]
-  ) => Promise<unknown>;
-  readonly downloadRenderedFiles: (
-    files: readonly RenderedFile<RenderedBytes>[]
-  ) => Promise<DownloadResult>;
   readonly getCurrentUrl: () => string;
   readonly observeConversationChanges?: (onChange: () => void) => () => void;
-  readonly renderConversationFiles: (
-    conversation: ConversationExport,
-    options?: Partial<ExportOptions>
-  ) => readonly RenderedFile<RenderedBytes>[];
   readonly scanCurrentConversationExport: (options?: {
     readonly signal?: AbortSignal;
   }) => Promise<ConversationExport>;
@@ -151,53 +127,6 @@ export function createContentRequestHandler(
     };
   }
 
-  async function handleContentExportRequest(
-    request: ContentExportRequest
-  ): Promise<ContentExportSuccess> {
-    const cached = getValidCachedConversation();
-
-    if (cached.status !== "ready") {
-      if (cached.reason === "stale") {
-        throw new ExportPipelineError(
-          "scan_stale",
-          "The conversation changed. Refresh it before exporting."
-        );
-      }
-
-      throw new ExportPipelineError("scan_required", "Prepare the conversation before exporting.");
-    }
-
-    const exportedMessageCount = getExportedMessageCount(cached.conversation, request.options);
-
-    const files = dependencies.renderConversationFiles(cached.conversation, request.options);
-    let clipboardError: SerializedExportError | undefined;
-
-    if (request.copyToClipboard ?? true) {
-      try {
-        await dependencies.copyRenderedFileToClipboard(files);
-      } catch (error) {
-        clipboardError = serializeExportError(error);
-      }
-    }
-
-    const downloaded =
-      request.delivery === "anchor" && request.download !== false
-        ? (await dependencies.downloadRenderedFiles(files)).downloaded
-        : [];
-    return {
-      ...(clipboardError !== undefined ? { clipboardError } : {}),
-      downloaded,
-      exportedMessageCount,
-      ...(request.delivery === "return_files" ? { files } : {}),
-      messageCount: exportedMessageCount,
-      warnings: [
-        ...cached.conversation.completeness.warnings,
-        ...cached.conversation.completeness.platformWarnings,
-        ...(clipboardError !== undefined ? [clipboardError.message] : [])
-      ]
-    };
-  }
-
   return async function handleContentRequest(
     request: ContentRequest
   ): Promise<ContentRequestResult> {
@@ -214,11 +143,7 @@ export function createContentRequestHandler(
       return handleGetScanCacheSummaryRequest();
     }
 
-    if (request.type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE) {
-      return handleGetCachedConversationRequest(request);
-    }
-
-    return handleContentExportRequest(request);
+    return handleGetCachedConversationRequest(request);
   };
 }
 
@@ -255,19 +180,11 @@ export function isContentRequest(message: unknown): message is ContentRequest {
     return false;
   }
 
-  if (
+  return (
     message.type === CONTENT_SCAN_MESSAGE ||
     message.type === CONTENT_CANCEL_SCAN_MESSAGE ||
     message.type === CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE ||
     message.type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE
-  ) {
-    return true;
-  }
-
-  return (
-    message.type === CONTENT_EXPORT_MESSAGE &&
-    (message.delivery === "anchor" || message.delivery === "return_files") &&
-    isRecord(message.options)
   );
 }
 

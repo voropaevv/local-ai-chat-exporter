@@ -2,12 +2,13 @@ import { describe, expect, test, vi } from "vitest";
 
 import { handlePopupBatchExportRequest } from "../../../extension/background/batch";
 import {
-  CONTENT_EXPORT_MESSAGE,
+  CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_SCAN_MESSAGE,
-  type ContentExportSuccess,
+  type CachedConversationResult,
   type RuntimeResponse,
   type ScanSummary
 } from "../../../src/core/messages";
+import type { ConversationExport } from "../../../src/core/schema";
 
 const failedScanResponse: RuntimeResponse<ScanSummary> = {
   error: {
@@ -23,29 +24,12 @@ describe("batch export background flow", () => {
       (_permissions: chrome.permissions.Permissions, callback: (granted: boolean) => void) =>
         callback(true)
     );
-    const exportResponse: RuntimeResponse<ContentExportSuccess> = {
+    const cachedResponse: RuntimeResponse<CachedConversationResult> = {
       ok: true,
       value: {
-        downloaded: [],
-        exportedMessageCount: 2,
-        files: [
-          {
-            bytes: "<!doctype html><title>Chat</title>",
-            encoding: "utf-8",
-            filename: "chat.html",
-            format: "html",
-            mimeType: "text/html;charset=utf-8"
-          },
-          {
-            bytes: "Chat text",
-            encoding: "utf-8",
-            filename: "chat.txt",
-            format: "txt",
-            mimeType: "text/plain;charset=utf-8"
-          }
-        ],
-        messageCount: 2,
-        warnings: []
+        conversation: makeConversation(),
+        hasConversation: true,
+        scanId: "scan-batch"
       }
     };
     const sendMessage = vi.fn(async (_tabId: number, request: { readonly type: string }) => {
@@ -56,7 +40,7 @@ describe("batch export background flow", () => {
         } satisfies RuntimeResponse<ScanSummary>;
       }
 
-      return exportResponse;
+      return cachedResponse;
     });
 
     vi.stubGlobal("chrome", {
@@ -85,12 +69,18 @@ describe("batch export background flow", () => {
       type: "jelluvi/export-open-chat-tabs"
     });
 
-    const exportRequest = sendMessage.mock.calls.find(
-      ([, request]) => (request as { readonly type: string }).type === CONTENT_EXPORT_MESSAGE
-    )?.[1] as { readonly options: { readonly formats: readonly string[] } } | undefined;
+    const cacheRequest = sendMessage.mock.calls.find(
+      ([, request]) =>
+        (request as { readonly type: string }).type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+    )?.[1] as { readonly scanId?: string } | undefined;
 
     expect(requestPermission).not.toHaveBeenCalled();
-    expect(exportRequest?.options.formats).toEqual(["html", "txt"]);
+    expect(cacheRequest?.scanId).toBe("scan-batch");
+    expect(response.results[0]).toMatchObject({
+      files: [{ format: "html" }, { format: "txt" }],
+      messageCount: 2,
+      status: "success"
+    });
     expect(response.zipFile?.format).toBe("zip");
     expect(response.zipFilename).toMatch(/jelluvi-\d{4}-\d{2}-\d{2}\.zip/u);
   });
@@ -181,7 +171,7 @@ describe("batch export background flow", () => {
     ]);
   });
 
-  test("does not return a downloadable ZIP when selected tabs produce no files", async () => {
+  test("does not return a downloadable ZIP when the post-scan snapshot is stale", async () => {
     vi.stubGlobal("chrome", {
       permissions: {
         contains: vi.fn((_permissions, callback: (granted: boolean) => void) => callback(true)),
@@ -194,8 +184,8 @@ describe("batch export background flow", () => {
         query: vi.fn(async () => [
           {
             id: 10,
-            title: "Empty files chat",
-            url: "https://chatgpt.com/c/empty"
+            title: "Stale chat",
+            url: "https://chatgpt.com/c/stale"
           }
         ]),
         sendMessage: vi.fn(async (_tabId: number, request: { readonly type: string }) => {
@@ -208,34 +198,29 @@ describe("batch export background flow", () => {
 
           return {
             ok: true,
-            value: {
-              downloaded: [],
-              exportedMessageCount: 2,
-              files: [],
-              messageCount: 2,
-              warnings: []
-            }
-          } satisfies RuntimeResponse<ContentExportSuccess>;
+            value: { hasConversation: false, reason: "stale" }
+          } satisfies RuntimeResponse<CachedConversationResult>;
         })
       }
     });
 
     const response = await handlePopupBatchExportRequest({
-      options: { formats: ["png"] },
+      options: { formats: ["md"] },
       tabIds: [10],
       type: "jelluvi/export-open-chat-tabs"
     });
 
     expect(response.zipFile).toBeUndefined();
     expect(response.zipFilename).toBeUndefined();
-    expect(response.results).toMatchObject([
+    expect(response.results).toEqual([
       {
-        files: [],
+        error: "The conversation changed. Refresh it before exporting.",
         platform: "chatgpt",
-        status: "success",
+        status: "failed",
         tabId: 10,
-        title: "Empty files chat",
-        url: "https://chatgpt.com/c/empty"
+        title: "Stale chat",
+        url: "https://chatgpt.com/c/stale",
+        warnings: []
       }
     ]);
   });
@@ -255,6 +240,51 @@ function makeScanSummary(): ScanSummary {
     },
     messageCount: 2,
     platformLabel: "ChatGPT",
+    scanId: "scan-batch",
     sourceUrl: "https://chatgpt.com/c/html"
+  };
+}
+
+function makeConversation(): ConversationExport {
+  return {
+    schemaVersion: "1.0",
+    platform: "chatgpt",
+    platformLabel: "ChatGPT",
+    sourceUrl: "https://chatgpt.com/c/html",
+    title: "HTML chat",
+    exportedAt: "2026-07-18T10:00:00.000Z",
+    messageCount: 2,
+    completeness: {
+      duplicateCount: 0,
+      messageCount: 2,
+      platformWarnings: [],
+      reachedBottom: true,
+      reachedTop: true,
+      scrollSteps: 1,
+      status: "complete",
+      warnings: []
+    },
+    messages: [
+      {
+        authorLabel: "User",
+        codeBlocks: [],
+        id: "user-1",
+        images: [],
+        index: 0,
+        metadata: {},
+        role: "user",
+        text: "Create a local export."
+      },
+      {
+        authorLabel: "ChatGPT",
+        codeBlocks: [],
+        id: "assistant-1",
+        images: [],
+        index: 1,
+        metadata: {},
+        role: "assistant",
+        text: "The export is ready."
+      }
+    ]
   };
 }

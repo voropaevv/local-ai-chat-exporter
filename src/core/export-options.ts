@@ -4,6 +4,7 @@ import {
   redactText,
   type RedactionSettings
 } from "./redaction";
+import { ExportPipelineError } from "./export-errors";
 import { filterMessagesByScope, type SelectionRange, type SelectionScope } from "./selection";
 import type {
   CompletenessReport,
@@ -26,17 +27,6 @@ import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../renderers/pdf-set
 
 export type ExportScope = SelectionScope;
 
-export type ExportErrorCode =
-  | "unsupported_platform"
-  | "no_messages_found"
-  | "scan_cancelled"
-  | "download_failed"
-  | "clipboard_failed"
-  | "unsupported_format"
-  | "content_script_injection_failed"
-  | "scan_required"
-  | "scan_stale";
-
 export interface ExportOptions {
   readonly formats: ExportFormat[];
   readonly scope: ExportScope;
@@ -53,11 +43,6 @@ export interface ExportOptions {
   readonly zipFormats?: readonly LocalRendererFormat[];
 }
 
-export interface SerializedExportError {
-  readonly code: ExportErrorCode;
-  readonly message: string;
-}
-
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   formats: ["md"],
   scope: "all",
@@ -71,18 +56,6 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   filenameTemplate: "{datetime}_{platform}_{title}.{format}",
   pdfSettings: DEFAULT_PDF_SETTINGS
 };
-
-export class ExportPipelineError extends Error {
-  readonly code: ExportErrorCode;
-  readonly causeValue?: unknown;
-
-  constructor(code: ExportErrorCode, message: string, cause?: unknown) {
-    super(message);
-    this.name = "ExportPipelineError";
-    this.code = code;
-    this.causeValue = cause;
-  }
-}
 
 export function normalizeExportOptions(options: Partial<ExportOptions> = {}): ExportOptions {
   const redaction = normalizeRedactionSettings(
@@ -154,24 +127,6 @@ export function getExportedMessageCount(
     range: normalizedOptions.range,
     scope: normalizedOptions.scope
   }).length;
-}
-
-export function isExportPipelineError(error: unknown): error is ExportPipelineError {
-  return error instanceof ExportPipelineError;
-}
-
-export function serializeExportError(error: unknown): SerializedExportError {
-  if (isExportPipelineError(error)) {
-    return {
-      code: error.code,
-      message: error.message
-    };
-  }
-
-  return {
-    code: "download_failed",
-    message: error instanceof Error ? error.message : "Export failed."
-  };
 }
 
 function prepareConversation(
@@ -355,3 +310,6 @@ function createPreview(value: string): string {
 function redactIfNeeded(value: string, redaction: RedactionSettings): string {
   return redactText(value, redaction);
 }
+
+export { ExportPipelineError, isExportPipelineError, serializeExportError } from "./export-errors";
+export type { ExportErrorCode, SerializedExportError } from "./export-errors";

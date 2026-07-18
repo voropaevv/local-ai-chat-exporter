@@ -1,7 +1,5 @@
-import { renderConversationFiles, serializeExportError } from "../../src/core/export-options";
+import { serializeExportError } from "../../src/core/export-errors";
 import { scanCurrentConversationExport } from "../../src/content/scan";
-import { copyRenderedFileToClipboard } from "../../src/utils/clipboard";
-import { downloadRenderedFiles } from "../../src/utils/download";
 import { observeConversationChanges } from "./conversation-change-observer";
 import { createContentRequestHandler, isContentRequest } from "./request-handler";
 
@@ -12,11 +10,8 @@ const contentGlobal = globalThis as typeof globalThis & {
 };
 
 const handleContentRequest = createContentRequestHandler({
-  copyRenderedFileToClipboard,
-  downloadRenderedFiles,
   getCurrentUrl: () => globalThis.location.href,
   observeConversationChanges,
-  renderConversationFiles,
   scanCurrentConversationExport
 });
 

@@ -5,7 +5,7 @@ import {
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
 import type { PlatformAdapter } from "../adapters/types";
 import { buildCompletenessReport } from "../core/completeness";
-import { ExportPipelineError } from "../core/export-options";
+import { ExportPipelineError } from "../core/export-errors";
 import { normalizeMessagesWithStats } from "../core/normalize";
 import type { ConversationExport } from "../core/schema";
 

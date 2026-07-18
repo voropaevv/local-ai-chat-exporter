@@ -359,25 +359,43 @@ export function toggleBundleFormat(state: PopupState, format: PopupFileFormat): 
   };
 }
 
-export function buildScanRequest(): PopupScanRequest {
-  return { type: POPUP_SCAN_MESSAGE };
+export function buildScanRequest(sourceTabId?: number): PopupScanRequest {
+  return {
+    ...(sourceTabId !== undefined ? { sourceTabId } : {}),
+    type: POPUP_SCAN_MESSAGE
+  };
 }
 
-export function buildCancelScanRequest(): PopupCancelScanRequest {
-  return { type: POPUP_CANCEL_SCAN_MESSAGE };
+export function buildCancelScanRequest(sourceTabId?: number): PopupCancelScanRequest {
+  return {
+    ...(sourceTabId !== undefined ? { sourceTabId } : {}),
+    type: POPUP_CANCEL_SCAN_MESSAGE
+  };
 }
 
-export function buildGetActiveTabInfoRequest(): PopupGetActiveTabInfoRequest {
-  return { type: POPUP_GET_ACTIVE_TAB_INFO_MESSAGE };
+export function buildGetActiveTabInfoRequest(sourceTabId?: number): PopupGetActiveTabInfoRequest {
+  return {
+    ...(sourceTabId !== undefined ? { sourceTabId } : {}),
+    type: POPUP_GET_ACTIVE_TAB_INFO_MESSAGE
+  };
 }
 
-export function buildGetScanCacheSummaryRequest(): PopupGetScanCacheSummaryRequest {
-  return { type: POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE };
+export function buildGetScanCacheSummaryRequest(
+  sourceTabId?: number
+): PopupGetScanCacheSummaryRequest {
+  return {
+    ...(sourceTabId !== undefined ? { sourceTabId } : {}),
+    type: POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE
+  };
 }
 
-export function buildOpenPreviewRequest(state: PopupState): PopupOpenPreviewRequest {
+export function buildOpenPreviewRequest(
+  state: PopupState,
+  sourceTabId?: number
+): PopupOpenPreviewRequest {
   return {
     formats: state.options.outputMode === "zip" ? ["zip"] : state.options.formats,
+    ...(sourceTabId !== undefined ? { sourceTabId } : {}),
     type: POPUP_OPEN_PREVIEW_MESSAGE,
     ...(state.options.outputMode === "zip" ? { zipFormats: state.options.bundleFormats } : {})
   };
@@ -398,22 +416,27 @@ export function buildBatchExportRequest(
   };
 }
 
-export function buildDownloadRequest(state: PopupState): PopupExportRequest {
+export function buildDownloadRequest(state: PopupState, sourceTabId?: number): PopupExportRequest {
   return {
     copyToClipboard: false,
     download: true,
     options: buildExportOptions(state),
     returnFiles: false,
+    ...(sourceTabId !== undefined ? { sourceTabId } : {}),
     type: POPUP_EXPORT_MESSAGE
   };
 }
 
-export function buildCopyMarkdownRequest(state: PopupState): PopupExportRequest {
+export function buildCopyMarkdownRequest(
+  state: PopupState,
+  sourceTabId?: number
+): PopupExportRequest {
   return {
     copyToClipboard: false,
     download: false,
     options: buildExportOptions(state, ["md"]),
     returnFiles: true,
+    ...(sourceTabId !== undefined ? { sourceTabId } : {}),
     type: POPUP_EXPORT_MESSAGE
   };
 }

@@ -32,11 +32,15 @@ import {
   popupReducer
 } from "./state/popup-state";
 import { readStoredRedactionSettings } from "./redaction-storage";
+import { readSourceTabId } from "./source-tab";
 import { copyRenderedFileToClipboard } from "../utils/clipboard";
+import { downloadRenderedFiles } from "../utils/download";
+import { deserializeRenderedFile } from "../core/rendered-file-transport";
 
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
   const [activeTabRetryKey, setActiveTabRetryKey] = useState(0);
+  const [sourceTabId, setSourceTabId] = useState<number | undefined>(readSourceTabId);
   const [settingsReady, setSettingsReady] = useState(false);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions =
@@ -82,7 +86,9 @@ export function PopupApp() {
 
     dispatch({ type: "active_tab_info_started" });
 
-    waitForActiveTabInfo(sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest()))
+    waitForActiveTabInfo(
+      sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest(sourceTabId))
+    )
       .then((response) => {
         if (cancelled) {
           return;
@@ -97,6 +103,7 @@ export function PopupApp() {
             supported: activeTabInfo.supported,
             type: "set_active_tab_info"
           });
+          setSourceTabId(activeTabInfo.sourceTabId ?? sourceTabId);
           return;
         }
 
@@ -111,12 +118,12 @@ export function PopupApp() {
     return () => {
       cancelled = true;
     };
-  }, [activeTabRetryKey]);
+  }, [activeTabRetryKey, sourceTabId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    sendRuntimeMessage<ScanCacheSummaryResult>(buildGetScanCacheSummaryRequest())
+    sendRuntimeMessage<ScanCacheSummaryResult>(buildGetScanCacheSummaryRequest(sourceTabId))
       .then((response) => {
         const cachedScan = response.ok ? getCachedScanSummary(response.value) : undefined;
 
@@ -131,12 +138,12 @@ export function PopupApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sourceTabId]);
 
   async function handleScan(): Promise<boolean> {
     dispatch({ type: "scan_started" });
 
-    const response = await sendRuntimeMessage<ScanSummary>(buildScanRequest());
+    const response = await sendRuntimeMessage<ScanSummary>(buildScanRequest(sourceTabId));
 
     if (response.ok) {
       dispatch({ scan: response.value, type: "scan_succeeded" });
@@ -149,7 +156,7 @@ export function PopupApp() {
 
   async function ensureFreshConversation(): Promise<boolean> {
     const cacheResponse = await sendRuntimeMessage<ScanCacheSummaryResult>(
-      buildGetScanCacheSummaryRequest()
+      buildGetScanCacheSummaryRequest(sourceTabId)
     );
 
     if (cacheResponse.ok && cacheResponse.value.hasCache) {
@@ -162,12 +169,12 @@ export function PopupApp() {
 
   async function handleCancelScan() {
     dispatch({ type: "scan_cancelled" });
-    await sendRuntimeMessage(buildCancelScanRequest());
+    await sendRuntimeMessage(buildCancelScanRequest(sourceTabId));
   }
 
   async function handleDownload() {
     if (await ensureFreshConversation()) {
-      await runExportAction(buildDownloadRequest(state));
+      await runExportAction(buildDownloadRequest(state, sourceTabId));
     }
   }
 
@@ -178,7 +185,9 @@ export function PopupApp() {
 
     dispatch({ type: "export_started" });
 
-    const response = await sendWithStaleRetry<PopupExportSuccess>(buildCopyMarkdownRequest(state));
+    const response = await sendWithStaleRetry<PopupExportSuccess>(
+      buildCopyMarkdownRequest(state, sourceTabId)
+    );
 
     if (!response.ok) {
       dispatch({ message: response.error.message, type: "scan_failed" });
@@ -186,7 +195,7 @@ export function PopupApp() {
     }
 
     try {
-      await copyRenderedFileToClipboard(response.value.files ?? []);
+      await copyRenderedFileToClipboard(response.value.files.map(deserializeRenderedFile));
     } catch (error) {
       dispatch({
         message: error instanceof Error ? error.message : "Clipboard copy failed.",
@@ -208,7 +217,7 @@ export function PopupApp() {
 
     dispatch({ type: "export_started" });
 
-    const response = await sendWithStaleRetry(buildOpenPreviewRequest(state));
+    const response = await sendWithStaleRetry(buildOpenPreviewRequest(state, sourceTabId));
 
     if (!response.ok) {
       dispatch({ message: response.error.message, type: "scan_failed" });
@@ -231,11 +240,24 @@ export function PopupApp() {
       return undefined;
     }
 
-    dispatch({
-      message: buildExportStatusMessage(response.value),
-      type: "export_finished"
-    });
-    return response.value;
+    try {
+      const downloaded = await downloadRenderedFiles(
+        response.value.files.map(deserializeRenderedFile)
+      );
+      const result = { ...response.value, downloaded: downloaded.downloaded };
+
+      dispatch({
+        message: buildExportStatusMessage(result),
+        type: "export_finished"
+      });
+      return result;
+    } catch (error) {
+      dispatch({
+        message: error instanceof Error ? error.message : "Download failed.",
+        type: "scan_failed"
+      });
+      return undefined;
+    }
   }
 
   async function sendWithStaleRetry<T>(message: unknown): Promise<RuntimeResponse<T>> {

@@ -1,25 +1,26 @@
 import { chromium, expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import { readFixture } from "../helpers/fixtures";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
-const extensionPath = resolve(projectRoot, "dist");
+const builtExtensionPath = resolve(projectRoot, "dist");
 
 test("extension popup automatically prepares a ChatGPT fixture and downloads markdown", async () => {
-  test.skip(
-    !existsSync(resolve(extensionPath, "manifest.json")),
-    "Run pnpm build before extension e2e."
+  await expect(readFile(resolve(builtExtensionPath, "manifest.json"), "utf8")).resolves.toContain(
+    '"default_popup": "popup/index.html"'
   );
 
-  const userDataDir = await mkdtemp(resolve(tmpdir(), "jelluvi-"));
+  const testRoot = await mkdtemp(resolve(tmpdir(), "jelluvi-"));
+  const userDataDir = resolve(testRoot, "profile");
+  const extensionPath = resolve(testRoot, "extension");
   let context: BrowserContext | undefined;
 
   try {
-    context = await launchExtensionContext(userDataDir);
+    await prepareExtensionForFixture(extensionPath);
+    context = await launchExtensionContext(userDataDir, extensionPath);
     const fixturePage = await context.newPage();
     await fixturePage.route("https://chatgpt.com/**", async (route) => {
       await route.fulfill({
@@ -34,7 +35,7 @@ test("extension popup automatically prepares a ChatGPT fixture and downloads mar
     await expect(popup.getByText("ChatGPT", { exact: true })).toBeVisible();
     await expect(popup.getByRole("button", { name: "Scan" })).toHaveCount(0);
 
-    const downloadPromise = fixturePage.waitForEvent("download");
+    const downloadPromise = popup.waitForEvent("download");
     await popup.getByRole("button", { name: "Export", exact: true }).click();
     const download = await downloadPromise;
     const downloadedPath = await download.path();
@@ -46,56 +47,53 @@ test("extension popup automatically prepares a ChatGPT fixture and downloads mar
     expect(markdown).toContain("Hello, can you summarize this?");
     expect(markdown).toContain("Sure. Here is a concise summary.");
     await expect(popup.getByRole("button", { name: "Export", exact: true })).toBeEnabled();
-  } catch (error) {
-    if (isLocalBrowserUnavailable(error)) {
-      test.skip(true, `Chromium extension e2e unavailable in this environment: ${String(error)}`);
-    }
-
-    throw error;
   } finally {
     await context?.close();
-    await rm(userDataDir, { force: true, recursive: true });
+    await rm(testRoot, { force: true, recursive: true });
   }
 });
 
-async function launchExtensionContext(userDataDir: string): Promise<BrowserContext> {
+async function launchExtensionContext(
+  userDataDir: string,
+  extensionPath: string
+): Promise<BrowserContext> {
   return chromium.launchPersistentContext(userDataDir, {
     args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     headless: false
   });
 }
 
+async function prepareExtensionForFixture(extensionPath: string): Promise<void> {
+  await mkdir(extensionPath, { recursive: true });
+  await cp(builtExtensionPath, extensionPath, { recursive: true });
+
+  const manifestPath = resolve(extensionPath, "manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+
+  manifest.host_permissions = ["https://chatgpt.com/*"];
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
 async function openExtensionPopup(context: BrowserContext, fixturePage: Page): Promise<Page> {
   const serviceWorker =
     context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+  const extensionId = new URL(serviceWorker.url()).host;
 
   await fixturePage.bringToFront();
+  const sourceTabId = await serviceWorker.evaluate(async () => {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  const popupPromise = context.waitForEvent("page", { timeout: 5_000 });
+    if (activeTab?.id === undefined) {
+      throw new Error("No active extension test tab is available.");
+    }
 
-  try {
-    await serviceWorker.evaluate(() => chrome.action.openPopup());
-  } catch (error) {
-    popupPromise.catch(() => undefined);
-    throw error;
-  }
+    return activeTab.id;
+  });
+  const popup = await context.newPage();
 
-  const popup = await popupPromise;
-  await popup.waitForLoadState("domcontentloaded");
+  await popup.goto(
+    `chrome-extension://${extensionId}/popup/index.html?sourceTabId=${sourceTabId.toString()}`
+  );
 
   return popup;
-}
-
-function isLocalBrowserUnavailable(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-
-  return (
-    message.includes("Executable doesn't exist") ||
-    message.includes("Looks like you launched a headed browser without having a XServer") ||
-    message.includes("chrome.action.openPopup") ||
-    message.includes('waiting for event "page"') ||
-    message.includes("Could not find an active browser window") ||
-    message.includes("Target page, context or browser has been closed") ||
-    message.includes("Missing X server")
-  );
 }

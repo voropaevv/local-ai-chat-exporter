@@ -1,4 +1,4 @@
-import { ExportPipelineError } from "../core/export-options";
+import { ExportPipelineError } from "../core/export-errors";
 import type { RenderedFile } from "../renderers";
 import { createUtf8Blob } from "./blob";
 

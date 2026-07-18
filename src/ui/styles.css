@@ -1184,6 +1184,11 @@ h3 {
   gap: 12px;
 }
 
+.settings-diagnostic-action {
+  width: 100%;
+  margin: 0;
+}
+
 .settings-control-stack {
   display: grid;
   gap: 10px;

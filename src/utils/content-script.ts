@@ -1,4 +1,4 @@
-import { ExportPipelineError } from "../core/export-options";
+import { ExportPipelineError } from "../core/export-errors";
 
 export const CONTENT_SCRIPT_FILE = "content/main.js";
 

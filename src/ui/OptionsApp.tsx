@@ -1,5 +1,7 @@
 import {
   Braces,
+  Bug,
+  Download,
   FileArchive,
   FileCode,
   FileJson,
@@ -16,12 +18,9 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
 import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
-import type {
-  BatchExportSuccess,
-  BatchListSuccess,
-  RuntimeResponse,
-  SerializedRenderedFile
-} from "../core/messages";
+import type { DiagnosticReport } from "../core/diagnostics";
+import type { BatchExportSuccess, BatchListSuccess, RuntimeResponse } from "../core/messages";
+import { SETTINGS_GET_DIAGNOSTICS_MESSAGE } from "../core/messages";
 import {
   DEFAULT_REDACTION_SETTINGS,
   normalizeRedactionSettings,
@@ -29,8 +28,8 @@ import {
   type RedactionSettings
 } from "../core/redaction";
 import type { ExportFormat } from "../core/schema";
-import type { RenderedBytes, RenderedFile } from "../renderers";
 import { downloadRenderedFiles } from "../utils/download";
+import { deserializeRenderedFile } from "../core/rendered-file-transport";
 import { requestBatchDiscoveryPermission, requestBatchHostPermissions } from "./batch-permissions";
 import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
 import { BrandIcon } from "./components/BrandIcon";
@@ -47,6 +46,7 @@ import {
   type StoredPopupFileFormat
 } from "./export-settings-storage";
 import { DEFAULT_FILENAME_TEMPLATE, createFilenamePreview } from "./filename-template";
+import { createDiagnosticExportFile } from "./diagnostic-export";
 import { formatCount } from "./pluralize";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
 import {
@@ -112,6 +112,8 @@ export function OptionsApp() {
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
   const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
   const [batchStatus, setBatchStatus] = useState("");
+  const [diagnosticBusy, setDiagnosticBusy] = useState(false);
+  const [diagnosticStatus, setDiagnosticStatus] = useState("");
   const [filenameSaveStatus, setFilenameSaveStatus] = useState("");
   const [redaction, setRedaction] = useState<RedactionSettings>(DEFAULT_REDACTION_SETTINGS);
   const [redactionSaveStatus, setRedactionSaveStatus] = useState("");
@@ -321,6 +323,30 @@ export function OptionsApp() {
     return selectedTabs;
   }
 
+  async function handleDiagnosticExport() {
+    setDiagnosticBusy(true);
+    setDiagnosticStatus("");
+
+    const response = await sendRuntimeMessage<DiagnosticReport>({
+      type: SETTINGS_GET_DIAGNOSTICS_MESSAGE
+    });
+
+    if (!response.ok) {
+      setDiagnosticStatus(response.error.message);
+      setDiagnosticBusy(false);
+      return;
+    }
+
+    try {
+      await downloadRenderedFiles([createDiagnosticExportFile(response.value)]);
+      setDiagnosticStatus("Saved.");
+    } catch (error) {
+      setDiagnosticStatus(error instanceof Error ? error.message : "Download failed.");
+    } finally {
+      setDiagnosticBusy(false);
+    }
+  }
+
   return (
     <main className="app-shell app-shell--options">
       <header className="settings-header">
@@ -441,6 +467,23 @@ export function OptionsApp() {
           selectedTabIds={batchSelectedTabIds}
           status={batchStatus}
         />
+      </SettingsCard>
+
+      <SettingsCard icon={Bug} title="Diagnostics">
+        <button
+          className="secondary-action settings-diagnostic-action"
+          disabled={diagnosticBusy}
+          onClick={handleDiagnosticExport}
+          type="button"
+        >
+          <Download size={18} strokeWidth={2.2} aria-hidden="true" />
+          <span>{diagnosticBusy ? "Preparing..." : "Export JSON"}</span>
+        </button>
+        {diagnosticStatus ? (
+          <p className="status-text" role="status">
+            {diagnosticStatus}
+          </p>
+        ) : null}
       </SettingsCard>
     </main>
   );
@@ -647,16 +690,6 @@ function buildSettingsPopupState(
       redactionCustomPatterns: [...redaction.customPatterns],
       redactionPreset: redaction.preset
     }
-  };
-}
-
-function deserializeRenderedFile(file: SerializedRenderedFile): RenderedFile<RenderedBytes> {
-  return {
-    bytes: typeof file.bytes === "string" ? file.bytes : Uint8Array.from(file.bytes),
-    encoding: file.encoding,
-    filename: file.filename,
-    format: file.format,
-    mimeType: file.mimeType
   };
 }
 

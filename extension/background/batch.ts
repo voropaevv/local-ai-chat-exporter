@@ -8,16 +8,17 @@ import {
 } from "../../src/core/batch";
 import {
   DEFAULT_EXPORT_OPTIONS,
-  ExportPipelineError,
-  serializeExportError
+  getExportedMessageCount,
+  renderConversationFiles
 } from "../../src/core/export-options";
+import { ExportPipelineError, serializeExportError } from "../../src/core/export-errors";
 import {
-  CONTENT_EXPORT_MESSAGE,
+  CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   type BatchExportSuccess,
   type BatchListSuccess,
-  type ContentExportRequest,
-  type ContentExportSuccess,
+  type CachedConversationResult,
+  type ContentGetCachedConversationRequest,
   type ContentScanRequest,
   type PopupBatchExportRequest,
   type RuntimeResponse,
@@ -29,7 +30,7 @@ import {
   type BatchZipResult
 } from "../../src/renderers/zip";
 import { ensureContentScript } from "../../src/utils/content-script";
-import type { RenderedBytes, RenderedFile } from "../../src/renderers";
+import { serializeRenderedFile } from "../../src/core/rendered-file-transport";
 
 export async function handlePopupBatchListRequest(): Promise<BatchListSuccess> {
   const tabs = await chrome.tabs.query({ url: [...SUPPORTED_CHAT_ORIGINS] });
@@ -90,27 +91,41 @@ async function exportTab(
       throw new ExportPipelineError(scanResponse.error.code, scanResponse.error.message);
     }
 
-    const response = await sendContentMessage<ContentExportSuccess>(tab.id, {
-      copyToClipboard: false,
-      delivery: "return_files",
-      download: false,
-      options: {
-        ...DEFAULT_EXPORT_OPTIONS,
-        ...request.options
-      },
-      type: CONTENT_EXPORT_MESSAGE
-    } satisfies ContentExportRequest);
+    const response = await sendContentMessage<CachedConversationResult>(tab.id, {
+      ...(scanResponse.value.scanId !== undefined ? { scanId: scanResponse.value.scanId } : {}),
+      type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+    } satisfies ContentGetCachedConversationRequest);
 
     if (!response.ok) {
       throw new ExportPipelineError(response.error.code, response.error.message);
     }
 
+    if (!response.value.hasConversation) {
+      throw new ExportPipelineError(
+        response.value.reason === "stale" ? "scan_stale" : "scan_required",
+        response.value.reason === "stale"
+          ? "The conversation changed. Refresh it before exporting."
+          : "Prepare the conversation before exporting."
+      );
+    }
+
+    const options = {
+      ...DEFAULT_EXPORT_OPTIONS,
+      ...request.options
+    };
+    const conversation = response.value.conversation;
+    const files = renderConversationFiles(conversation, options);
+    const exportedMessageCount = getExportedMessageCount(conversation, options);
+
     return {
-      files: response.value.files ?? [],
-      messageCount: response.value.exportedMessageCount,
+      files,
+      messageCount: exportedMessageCount,
       status: "success",
       tab,
-      warnings: response.value.warnings
+      warnings: [
+        ...conversation.completeness.warnings,
+        ...conversation.completeness.platformWarnings
+      ]
     };
   } catch (error) {
     const serialized = serializeExportError(error);
@@ -126,7 +141,7 @@ async function exportTab(
 
 async function sendContentMessage<T>(
   tabId: number,
-  request: ContentExportRequest | ContentScanRequest
+  request: ContentGetCachedConversationRequest | ContentScanRequest
 ): Promise<RuntimeResponse<T>> {
   return chrome.tabs.sendMessage(tabId, request);
 }
@@ -161,14 +176,4 @@ function containsPermission(permissions: chrome.permissions.Permissions): Promis
 
 function formatOriginList(origins: readonly string[]): string {
   return origins.map((origin) => origin.replace(/^https:\/\/|\/\*$/gu, "")).join(", ");
-}
-
-function serializeRenderedFile(file: RenderedFile<RenderedBytes>): BatchExportSuccess["zipFile"] {
-  return {
-    bytes: typeof file.bytes === "string" ? file.bytes : Array.from(file.bytes),
-    encoding: file.encoding,
-    filename: file.filename,
-    format: file.format,
-    mimeType: file.mimeType
-  };
 }

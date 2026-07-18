@@ -3,13 +3,14 @@ import { describe, expect, test, vi } from "vitest";
 import {
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
-  CONTENT_EXPORT_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   type ScanSummary
 } from "../../../src/core/messages";
 import type { ConversationExport } from "../../../src/core/schema";
-import type { RenderedFile } from "../../../src/renderers";
-import { createContentRequestHandler } from "../../../extension/content/request-handler";
+import {
+  createContentRequestHandler,
+  isContentRequest
+} from "../../../extension/content/request-handler";
 
 function makeConversation(sourceUrl = "https://chatgpt.com/c/cached"): ConversationExport {
   const messages = [
@@ -58,33 +59,15 @@ function makeConversation(sourceUrl = "https://chatgpt.com/c/cached"): Conversat
 }
 
 function createHandler(overrides: Partial<Parameters<typeof createContentRequestHandler>[0]> = {}) {
-  const copyRenderedFileToClipboard = vi.fn().mockResolvedValue(undefined);
   const scanCurrentConversationExport = vi.fn().mockResolvedValue(makeConversation());
-  const renderedConversations: ConversationExport[] = [];
   const handler = createContentRequestHandler({
-    copyRenderedFileToClipboard,
-    downloadRenderedFiles: vi.fn().mockResolvedValue({ downloaded: [] }),
     getCurrentUrl: () => "https://chatgpt.com/c/cached",
-    renderConversationFiles: vi.fn((conversation: ConversationExport) => {
-      renderedConversations.push(conversation);
-      return [
-        {
-          bytes: "exported",
-          encoding: "utf-8",
-          filename: "chat.md",
-          format: "md",
-          mimeType: "text/markdown"
-        }
-      ] satisfies readonly RenderedFile[];
-    }),
     scanCurrentConversationExport,
     ...overrides
   });
 
   return {
-    copyRenderedFileToClipboard,
     handler,
-    renderedConversations,
     scanCurrentConversationExport
   };
 }
@@ -152,70 +135,6 @@ describe("content request handler scan cache", () => {
     expect(scanCurrentConversationExport).not.toHaveBeenCalled();
   });
 
-  test("export after scan renders from the cached snapshot without rescanning", async () => {
-    const {
-      copyRenderedFileToClipboard,
-      handler,
-      renderedConversations,
-      scanCurrentConversationExport
-    } = createHandler();
-
-    await handler({ type: CONTENT_SCAN_MESSAGE });
-    await handler({
-      copyToClipboard: false,
-      delivery: "return_files",
-      download: false,
-      options: { formats: ["md"] },
-      type: CONTENT_EXPORT_MESSAGE
-    });
-
-    expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
-    expect(copyRenderedFileToClipboard).not.toHaveBeenCalled();
-    expect(renderedConversations).toHaveLength(1);
-    expect(renderedConversations[0].sourceUrl).toBe("https://chatgpt.com/c/cached");
-  });
-
-  test("export without a cached scan returns a clear error", async () => {
-    const { handler, scanCurrentConversationExport } = createHandler();
-
-    await expect(
-      handler({
-        copyToClipboard: false,
-        delivery: "return_files",
-        download: false,
-        options: { formats: ["md"] },
-        type: CONTENT_EXPORT_MESSAGE
-      })
-    ).rejects.toMatchObject({
-      code: "scan_required",
-      message: "Prepare the conversation before exporting."
-    });
-    expect(scanCurrentConversationExport).not.toHaveBeenCalled();
-  });
-
-  test("export rejects a stale cached scan when the page URL changes", async () => {
-    let currentUrl = "https://chatgpt.com/c/cached";
-    const { handler } = createHandler({
-      getCurrentUrl: () => currentUrl
-    });
-
-    await handler({ type: CONTENT_SCAN_MESSAGE });
-    currentUrl = "https://chatgpt.com/c/changed";
-
-    await expect(
-      handler({
-        copyToClipboard: false,
-        delivery: "return_files",
-        download: false,
-        options: { formats: ["md"] },
-        type: CONTENT_EXPORT_MESSAGE
-      })
-    ).rejects.toMatchObject({
-      code: "scan_stale",
-      message: "The conversation changed. Refresh it before exporting."
-    });
-  });
-
   test("cache lookup treats URL changes as stale and does not expose the snapshot", async () => {
     let currentUrl = "https://chatgpt.com/c/cached";
     const { handler, scanCurrentConversationExport } = createHandler({
@@ -258,18 +177,6 @@ describe("content request handler scan cache", () => {
       hasCache: false,
       reason: "stale"
     });
-    await expect(
-      handler({
-        copyToClipboard: false,
-        delivery: "return_files",
-        download: false,
-        options: { formats: ["md"] },
-        type: CONTENT_EXPORT_MESSAGE
-      })
-    ).rejects.toMatchObject({
-      code: "scan_stale",
-      message: "The conversation changed. Refresh it before exporting."
-    });
     expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
   });
 
@@ -305,28 +212,13 @@ describe("content request handler scan cache", () => {
     });
   });
 
-  test.each([
-    ["user_only", 1],
-    ["assistant_only", 1],
-    ["range", 1]
-  ] as const)("reports exported message count for %s scope", async (scope, expectedCount) => {
-    const { handler } = createHandler();
-
-    await handler({ type: CONTENT_SCAN_MESSAGE });
-    const response = await handler({
-      copyToClipboard: false,
-      delivery: "return_files",
-      download: false,
-      options:
-        scope === "range"
-          ? { formats: ["md"], range: { endIndex: 0, startIndex: 0 }, scope }
-          : { formats: ["md"], scope },
-      type: CONTENT_EXPORT_MESSAGE
-    });
-
-    expect(response).toMatchObject({
-      exportedMessageCount: expectedCount,
-      messageCount: expectedCount
-    });
+  test("does not accept rendering or delivery commands in the provider page", () => {
+    expect(
+      isContentRequest({
+        delivery: "anchor",
+        options: { formats: ["md"] },
+        type: "jelluvi/content-export"
+      })
+    ).toBe(false);
   });
 });
