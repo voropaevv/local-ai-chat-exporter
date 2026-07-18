@@ -1,0 +1,336 @@
+.concept-lab {
+  position: relative;
+  min-height: 100svh;
+  overflow: clip;
+  background: #020714;
+}
+
+.concept-lab::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(2, 7, 20, 0.94) 0%, rgba(2, 7, 20, 0.66) 28%, transparent 54%),
+    linear-gradient(0deg, rgba(2, 7, 20, 0.88) 0%, transparent 28%);
+  content: "";
+  pointer-events: none;
+}
+
+.concept-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.concept-canvas canvas {
+  display: block;
+}
+
+.concept-lab-header {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px clamp(24px, 4vw, 72px);
+}
+
+.concept-lab-header > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 820;
+  letter-spacing: -0.025em;
+}
+
+.concept-lab-header img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.concept-lab-header p {
+  margin: 0;
+  color: rgba(210, 230, 247, 0.5);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.concept-intro {
+  position: absolute;
+  top: 50%;
+  left: clamp(28px, 6vw, 104px);
+  z-index: 5;
+  display: grid;
+  width: min(560px, 39vw);
+  gap: 18px;
+  transform: translateY(-54%);
+  pointer-events: none;
+}
+
+.concept-kicker {
+  margin: 0;
+  color: #55ddff;
+  font-size: 11px;
+  font-weight: 820;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.concept-intro h1 {
+  max-width: 650px;
+  margin: 0;
+  color: #f8fbff;
+  font-size: clamp(52px, 5.45vw, 92px);
+  font-weight: 760;
+  letter-spacing: -0.063em;
+  line-height: 0.93;
+  text-wrap: balance;
+}
+
+.concept-intro > p:last-child {
+  max-width: 520px;
+  margin: 0;
+  color: #9bb0c7;
+  font-size: clamp(15px, 1.14vw, 18px);
+  line-height: 1.55;
+}
+
+.rationale-toggle {
+  position: absolute;
+  top: 86px;
+  right: clamp(24px, 4vw, 72px);
+  z-index: 10;
+  border: 0;
+  border-bottom: 1px solid rgba(83, 221, 255, 0.55);
+  padding: 8px 0;
+  background: transparent;
+  color: #bceeff;
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.concept-rationale {
+  position: absolute;
+  top: 126px;
+  right: clamp(24px, 4vw, 72px);
+  bottom: 120px;
+  z-index: 9;
+  width: min(390px, 31vw);
+  overflow-y: auto;
+  border-left: 1px solid rgba(86, 218, 255, 0.28);
+  padding: 4px 0 24px 24px;
+  background: linear-gradient(90deg, rgba(2, 7, 20, 0.05), rgba(2, 7, 20, 0.84) 22%);
+  scrollbar-color: rgba(83, 221, 255, 0.5) transparent;
+}
+
+.rationale-heading {
+  display: grid;
+  gap: 7px;
+  padding-bottom: 16px;
+}
+
+.rationale-heading p,
+.rationale-heading span {
+  margin: 0;
+}
+
+.rationale-heading p {
+  color: #f8fbff;
+  font-size: 14px;
+  font-weight: 780;
+}
+
+.rationale-heading span {
+  color: #55ddff;
+  font-size: 10px;
+  font-weight: 730;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.concept-rationale ol {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  counter-reset: rationale;
+  list-style: none;
+}
+
+.concept-rationale li {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding-left: 32px;
+  counter-increment: rationale;
+}
+
+.concept-rationale li::before {
+  position: absolute;
+  top: 1px;
+  left: 0;
+  color: #55ddff;
+  font-size: 10px;
+  font-weight: 830;
+  content: "0" counter(rationale);
+}
+
+.concept-rationale h2,
+.concept-rationale p {
+  margin: 0;
+}
+
+.concept-rationale h2 {
+  color: #f5fbff;
+  font-size: 13px;
+  font-weight: 790;
+}
+
+.concept-rationale p {
+  color: #8fa4bc;
+  font-size: 11px;
+  line-height: 1.47;
+}
+
+.concept-rationale strong {
+  color: #d9e8f5;
+  font-weight: 720;
+}
+
+.concept-selector {
+  position: absolute;
+  right: clamp(24px, 4vw, 72px);
+  bottom: 58px;
+  left: clamp(24px, 4vw, 72px);
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(18px, 3vw, 56px);
+}
+
+.concept-selector button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-top: 1px solid rgba(124, 157, 187, 0.3);
+  border-radius: 0;
+  padding: 14px 0 10px;
+  background: transparent;
+  color: rgba(212, 229, 242, 0.5);
+  font-size: 12px;
+  font-weight: 720;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 220ms ease, color 220ms ease;
+}
+
+.concept-selector button:hover,
+.concept-selector button.is-active {
+  border-color: #55ddff;
+  color: #f8fbff;
+}
+
+.concept-selector button span {
+  color: #55ddff;
+  font-size: 10px;
+  font-weight: 830;
+  letter-spacing: 0.1em;
+}
+
+@media (max-width: 1080px) {
+  .concept-intro {
+    top: 42%;
+    width: min(520px, 48vw);
+  }
+
+  .concept-rationale {
+    width: min(340px, 34vw);
+  }
+}
+
+@media (max-width: 760px) {
+  .concept-lab {
+    min-height: 100svh;
+  }
+
+  .concept-lab::after {
+    background:
+      linear-gradient(180deg, rgba(2, 7, 20, 0.45), transparent 36%),
+      linear-gradient(0deg, rgba(2, 7, 20, 0.96) 0%, rgba(2, 7, 20, 0.48) 46%, transparent 70%);
+  }
+
+  .concept-lab-header {
+    padding: 16px 18px;
+  }
+
+  .concept-lab-header p {
+    display: none;
+  }
+
+  .concept-intro {
+    top: auto;
+    right: 20px;
+    bottom: 220px;
+    left: 20px;
+    width: auto;
+    gap: 10px;
+    transform: none;
+  }
+
+  .concept-intro h1 {
+    max-width: 520px;
+    font-size: clamp(42px, 12vw, 62px);
+  }
+
+  .concept-intro > p:last-child {
+    display: none;
+  }
+
+  .rationale-toggle {
+    top: 68px;
+    right: 18px;
+  }
+
+  .concept-rationale {
+    top: 108px;
+    right: 16px;
+    bottom: 198px;
+    left: 16px;
+    width: auto;
+    border-left: 0;
+    padding: 20px;
+    background: rgba(2, 7, 20, 0.92);
+    backdrop-filter: blur(18px);
+  }
+
+  .concept-selector {
+    right: 18px;
+    bottom: 54px;
+    left: 18px;
+    gap: 12px;
+  }
+
+  .concept-selector button {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .concept-selector button {
+    transition: none;
+  }
+}

@@ -36,11 +36,6 @@ const CHAPTERS = [
 
 type MascotMode = "idle" | "look" | "absorb" | "process" | "export" | "success" | "error";
 
-type ObjectSnapshot = {
-  position: THREE.Vector3;
-  scale: THREE.Vector3;
-};
-
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -306,47 +301,45 @@ function JelluviMascot({
   modeRef: RefObject<MascotMode>;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const gltf = useGLTF("/models/jelluvi-mascot.glb");
+  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=2");
   const { viewport } = useThree();
   const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
   const bodyRef = useRef<THREE.Mesh | null>(null);
-  const trackedObjects = useRef(new Map<string, ObjectSnapshot>());
-  const bodyMaterial = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color("#078cf5"),
-        roughness: 0.13,
-        metalness: 0.01,
-        transmission: 0.22,
-        thickness: 1.8,
-        ior: 1.38,
-        clearcoat: 1,
-        clearcoatRoughness: 0.12,
-        attenuationColor: new THREE.Color("#005fef"),
-        attenuationDistance: 3.6
-      }),
-    []
-  );
+  const sideMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
   useEffect(() => {
+    const ownedMaterials: THREE.Material[] = [];
     model.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return;
       child.castShadow = false;
       child.receiveShadow = false;
+      const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
+      const clonedMaterials = sourceMaterials.map((source) => {
+        const cloned =
+          source.name === "Canonical Front" && source instanceof THREE.MeshStandardMaterial && source.map
+            ? new THREE.MeshBasicMaterial({
+                color: "#ffffff",
+                map: source.map,
+                side: THREE.DoubleSide,
+                toneMapped: false
+              })
+            : source.clone();
+        cloned.name = source.name;
+        ownedMaterials.push(cloned);
+        return cloned;
+      });
+      child.material = Array.isArray(child.material) ? clonedMaterials : clonedMaterials[0];
       if (child.name === "Body") {
-        child.material = bodyMaterial;
         bodyRef.current = child;
-      }
-      if (child.name.startsWith("Pupil") || child.name.startsWith("Eye")) {
-        trackedObjects.current.set(child.name, {
-          position: child.position.clone(),
-          scale: child.scale.clone()
-        });
+        sideMaterialRef.current = clonedMaterials.find(
+          (candidate): candidate is THREE.MeshStandardMaterial =>
+            candidate instanceof THREE.MeshStandardMaterial && candidate.name === "Jelly Side"
+        ) ?? null;
       }
     });
 
-    return () => bodyMaterial.dispose();
-  }, [bodyMaterial, model]);
+    return () => ownedMaterials.forEach((owned) => owned.dispose());
+  }, [model]);
 
   useFrame(({ clock, pointer }, delta) => {
     const group = groupRef.current;
@@ -396,37 +389,20 @@ function JelluviMascot({
       );
     }
 
-    const blink = Math.sin(time * 0.91) > 0.992 ? 0.08 : 1;
-    trackedObjects.current.forEach((snapshot, name) => {
-      const object = model.getObjectByName(name);
-      if (!object) return;
-      if (name.startsWith("Eye")) {
-        object.scale.y = THREE.MathUtils.damp(object.scale.y, snapshot.scale.y * blink, 28, delta);
-      }
-      if (name.startsWith("Pupil")) {
-        object.position.x = THREE.MathUtils.damp(
-          object.position.x,
-          snapshot.position.x + pointer.x * 0.11,
-          9,
-          delta
-        );
-        object.position.y = THREE.MathUtils.damp(
-          object.position.y,
-          snapshot.position.y + pointer.y * 0.08,
-          9,
-          delta
-        );
-        object.scale.y = THREE.MathUtils.damp(object.scale.y, snapshot.scale.y * blink, 28, delta);
-      }
-    });
-
-    bodyMaterial.emissive = new THREE.Color(mode === "success" ? "#0759ba" : "#00152f");
-    bodyMaterial.emissiveIntensity = THREE.MathUtils.damp(
-      bodyMaterial.emissiveIntensity,
-      mode === "success" ? 0.52 : 0.18 + Math.max(0, Math.sin(Math.PI * clamp((progress - 0.43) / 0.28))) * 0.2,
-      4,
-      delta
-    );
+    const sideMaterial = sideMaterialRef.current;
+    if (sideMaterial) {
+      sideMaterial.emissive.set(mode === "success" ? "#0759ba" : "#00152f");
+      sideMaterial.emissiveIntensity = THREE.MathUtils.damp(
+        sideMaterial.emissiveIntensity,
+        mode === "success"
+          ? 0.52
+          : 0.18 +
+            Math.max(0, Math.sin(Math.PI * clamp((progress - 0.43) / 0.28))) *
+              0.2,
+        4,
+        delta
+      );
+    }
   });
 
   return (

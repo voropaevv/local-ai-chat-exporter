@@ -19,12 +19,18 @@ pnpm mascot:build
 pnpm dev -- --port 4173
 ```
 
-Open `http://127.0.0.1:4173/` locally. Do not publish this directory or add it to
-`scripts/build-site.mjs` without a separate preview and production approval.
+Open `http://127.0.0.1:4173/` for the current spatial story and
+`http://127.0.0.1:4173/concepts/` for the three selection studies. The concept route also accepts
+`?concept=keeper`, `?concept=cosmos`, and `?concept=current` for stable local review states.
+
+Do not publish this directory or add it to `scripts/build-site.mjs` without a separate preview and
+production approval. All visible prototype copy is English-only.
 
 ## Source ownership
 
-- `scripts/build-mascot.py` is the reproducible, non-generative Blender authoring source.
+- `scripts/build-mascot.py` is the reproducible, non-generative Blender authoring source. It samples
+  the canonical PNG alpha contour and embeds the canonical artwork on a beveled 3D body, preserving
+  the supplied silhouette and face instead of redrawing them.
 - `assets/source/jelluvi-mascot.blend` is the editable 3D source produced by that script.
 - `public/models/jelluvi-mascot.glb` is the optimized browser runtime model.
 - `scripts/sync-brand.mjs` copies the canonical repository mascot into the ignored local public

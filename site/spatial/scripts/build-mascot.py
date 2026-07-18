@@ -1,131 +1,224 @@
 """Build the editable and runtime Jelluvi mascot without generative AI.
 
-The model is constructed from Blender primitives and manually authored deformation rules that
-follow the canonical Jelluvi silhouette: a gravity-flattened blue jelly body, tall white eyes,
-rectangular navy pupils, and square highlights.
+The canonical PNG is both the visual truth and the texture source. Its alpha contour is sampled
+directly to form the 3D silhouette, so the browser model keeps the original crown, side lobes,
+wavy base, eyes, lower accent, and highlights instead of approximating them with a sphere.
 """
 
 from __future__ import annotations
 
+from array import array
 import math
 from pathlib import Path
 
 import bpy
+from mathutils import Vector
+from mathutils.geometry import tessellate_polygon
 
 
 ROOT = Path(__file__).resolve().parent.parent
+REPOSITORY_ROOT = ROOT.parent.parent
+CANONICAL_MASCOT = REPOSITORY_ROOT / "assets" / "brand" / "jelluvi.png"
 SOURCE_DIR = ROOT / "assets" / "source"
 RUNTIME_DIR = ROOT / "public" / "models"
 BLEND_PATH = SOURCE_DIR / "jelluvi-mascot.blend"
 GLB_PATH = RUNTIME_DIR / "jelluvi-mascot.glb"
 
+RAY_COUNT = 160
+ALPHA_THRESHOLD = 0.38
+SOURCE_CENTER_TOP_LEFT = (600.0, 650.0)
+MODEL_WIDTH = 4.7
+MODEL_DEPTH = 0.76
+
 
 def reset_scene() -> None:
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
-    for data_collection in (bpy.data.meshes, bpy.data.curves, bpy.data.materials, bpy.data.cameras):
+    for data_collection in (
+        bpy.data.meshes,
+        bpy.data.curves,
+        bpy.data.materials,
+        bpy.data.cameras,
+    ):
         for block in list(data_collection):
             if block.users == 0:
                 data_collection.remove(block)
 
 
-def material(
+def principled_material(
     name: str,
     color: tuple[float, float, float, float],
     *,
     roughness: float,
-    metallic: float = 0.0,
-    transmission: float = 0.0,
+    coat: float = 0.5,
 ) -> bpy.types.Material:
     result = bpy.data.materials.new(name)
     result.diffuse_color = color
     result.use_nodes = True
+    result.use_backface_culling = False
     principled = result.node_tree.nodes.get("Principled BSDF")
     if principled is not None:
         principled.inputs["Base Color"].default_value = color
         principled.inputs["Roughness"].default_value = roughness
-        principled.inputs["Metallic"].default_value = metallic
-        principled.inputs["Transmission Weight"].default_value = transmission
-        principled.inputs["Coat Weight"].default_value = 0.55
-        principled.inputs["Coat Roughness"].default_value = 0.12
+        principled.inputs["Coat Weight"].default_value = coat
+        principled.inputs["Coat Roughness"].default_value = 0.18
         principled.inputs["IOR"].default_value = 1.38
     return result
 
 
-def add_uv_sphere(
-    name: str,
-    location: tuple[float, float, float],
-    scale: tuple[float, float, float],
-    assigned_material: bpy.types.Material,
-    *,
-    segments: int = 48,
-    rings: int = 32,
+def canonical_front_material(source_image: bpy.types.Image) -> bpy.types.Material:
+    result = bpy.data.materials.new("Canonical Front")
+    result.use_nodes = True
+    result.use_backface_culling = False
+    nodes = result.node_tree.nodes
+    links = result.node_tree.links
+    principled = nodes.get("Principled BSDF")
+    texture = nodes.new("ShaderNodeTexImage")
+    texture.name = "Canonical Jelluvi artwork"
+    texture.image = source_image
+    texture.interpolation = "Linear"
+    texture.extension = "CLIP"
+    if principled is not None:
+        links.new(texture.outputs["Color"], principled.inputs["Base Color"])
+        links.new(texture.outputs["Color"], principled.inputs["Emission Color"])
+        principled.inputs["Emission Strength"].default_value = 0.08
+        principled.inputs["Roughness"].default_value = 0.34
+        principled.inputs["Coat Weight"].default_value = 0.3
+        principled.inputs["Coat Roughness"].default_value = 0.2
+    return result
+
+
+def sample_canonical_outline(
+    source_image: bpy.types.Image,
+) -> list[tuple[float, float, float, float]]:
+    """Return clockwise (x, z, u, v) samples from the canonical alpha silhouette."""
+
+    width, height = source_image.size
+    center_x = SOURCE_CENTER_TOP_LEFT[0] / 1200.0 * width
+    center_y = height - SOURCE_CENTER_TOP_LEFT[1] / 1200.0 * height
+    pixels = array("f", [0.0]) * len(source_image.pixels)
+    source_image.pixels.foreach_get(pixels)
+    max_radius = int(math.hypot(width, height))
+    source_visible_width = 1111.0 / 1200.0 * width
+    model_scale = MODEL_WIDTH / source_visible_width
+    outline: list[tuple[float, float, float, float]] = []
+
+    for index in range(RAY_COUNT):
+        angle = math.pi / 2.0 - index * math.tau / RAY_COUNT
+        last_inside: tuple[int, int] | None = None
+        for radius in range(max_radius):
+            pixel_x = round(center_x + math.cos(angle) * radius)
+            pixel_y = round(center_y + math.sin(angle) * radius)
+            if pixel_x < 0 or pixel_y < 0 or pixel_x >= width or pixel_y >= height:
+                break
+            alpha_index = (pixel_y * width + pixel_x) * 4 + 3
+            if pixels[alpha_index] >= ALPHA_THRESHOLD:
+                last_inside = (pixel_x, pixel_y)
+        if last_inside is None:
+            raise RuntimeError(f"No alpha contour intersection for ray {index}")
+
+        pixel_x, pixel_y = last_inside
+        outline.append(
+            (
+                (pixel_x - center_x) * model_scale,
+                (pixel_y - center_y) * model_scale,
+                pixel_x / width,
+                pixel_y / height,
+            )
+        )
+
+    return outline
+
+
+def triangulate_outline(outline: list[tuple[float, float, float, float]]) -> list[tuple[int, int, int]]:
+    polygon = [Vector((x, z, 0.0)) for x, z, _, _ in outline]
+    triangles: list[tuple[int, int, int]] = []
+
+    for triangle in tessellate_polygon([polygon]):
+        triangles.append(tuple(int(index) for index in triangle))
+
+    if not triangles:
+        raise RuntimeError("Canonical silhouette could not be triangulated")
+    return triangles
+
+
+def add_canonical_body(
+    outline: list[tuple[float, float, float, float]],
+    front_material: bpy.types.Material,
+    side_material: bpy.types.Material,
 ) -> bpy.types.Object:
-    bpy.ops.mesh.primitive_uv_sphere_add(
-        segments=segments,
-        ring_count=rings,
-        location=location,
-    )
-    obj = bpy.context.object
-    obj.name = name
-    obj.scale = scale
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    obj.data.materials.append(assigned_material)
-    for polygon in obj.data.polygons:
-        polygon.use_smooth = True
-    return obj
+    half_depth = MODEL_DEPTH / 2.0
+    point_count = len(outline)
+    vertices = [(x, -half_depth, z) for x, z, _, _ in outline]
+    vertices.extend((x, half_depth, z) for x, z, _, _ in outline)
 
+    triangles = triangulate_outline(outline)
+    # The canonical front faces -Y. Materials are double-sided as a safety net for exporters.
+    front_faces = [tuple(reversed(triangle)) for triangle in triangles]
+    back_faces = [tuple(point_count + index for index in triangle) for triangle in triangles]
+    side_faces = [
+        (
+            index,
+            (index + 1) % point_count,
+            point_count + (index + 1) % point_count,
+            point_count + index,
+        )
+        for index in range(point_count)
+    ]
 
-def add_rounded_cube(
-    name: str,
-    location: tuple[float, float, float],
-    scale: tuple[float, float, float],
-    assigned_material: bpy.types.Material,
-    *,
-    bevel: float,
-) -> bpy.types.Object:
-    bpy.ops.mesh.primitive_cube_add(location=location)
-    obj = bpy.context.object
-    obj.name = name
-    obj.scale = scale
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    modifier = obj.modifiers.new(name="Soft corners", type="BEVEL")
-    modifier.width = bevel
-    modifier.segments = 5
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.modifier_apply(modifier=modifier.name)
-    obj.data.materials.append(assigned_material)
-    for polygon in obj.data.polygons:
-        polygon.use_smooth = True
-    return obj
+    mesh = bpy.data.meshes.new("Canonical Jelluvi silhouette")
+    mesh.from_pydata(vertices, [], front_faces + back_faces + side_faces)
+    mesh.materials.append(front_material)
+    mesh.materials.append(side_material)
+    mesh.update()
 
+    front_face_count = len(front_faces)
+    for polygon_index, polygon in enumerate(mesh.polygons):
+        polygon.material_index = 0 if polygon_index < front_face_count else 1
+        polygon.use_smooth = polygon_index >= front_face_count
 
-def shape_body(body: bpy.types.Object) -> None:
-    for vertex in body.data.vertices:
-        point = vertex.co
-        original_z = point.z
+    uv_layer = mesh.uv_layers.new(name="UVMap")
+    for polygon in mesh.polygons:
+        for loop_index in polygon.loop_indices:
+            vertex_index = mesh.loops[loop_index].vertex_index % point_count
+            uv_layer.data[loop_index].uv = outline[vertex_index][2:4]
 
-        lower_bulge = math.exp(-((original_z + 0.78) / 0.48) ** 2)
-        point.x *= 1.0 + 0.12 * lower_bulge
-        point.y *= 1.0 + 0.055 * lower_bulge
+    body = bpy.data.objects.new("Body", mesh)
+    bpy.context.collection.objects.link(body)
 
-        if original_z < -0.88:
-            point.z = -0.88 + (original_z + 0.88) * 0.17
+    bevel = body.modifiers.new(name="Soft jelly edge", type="BEVEL")
+    bevel.width = 0.105
+    bevel.segments = 5
+    bevel.limit_method = "ANGLE"
+    bevel.angle_limit = math.radians(34)
+    bevel.harden_normals = True
+    bpy.context.view_layer.objects.active = body
+    body.select_set(True)
+    bpy.ops.object.modifier_apply(modifier=bevel.name)
 
     body.shape_key_add(name="Basis")
     squash = body.shape_key_add(name="Squash")
     stretch = body.shape_key_add(name="Stretch")
-
     basis = body.data.shape_keys.key_blocks["Basis"]
+    floor = min(point.co.z for point in basis.data)
+    ceiling = max(point.co.z for point in basis.data)
+    height = ceiling - floor
+
     for index, basis_point in enumerate(basis.data):
         x, y, z = basis_point.co
-        squash.data[index].co = (x * 1.1, y * 1.08, -0.86 + (z + 0.86) * 0.78)
-        stretch.data[index].co = (x * 0.92, y * 0.94, -0.86 + (z + 0.86) * 1.16)
+        normalized_height = (z - floor) / height
+        squash.data[index].co = (
+            x * (1.08 - normalized_height * 0.035),
+            y * 1.05,
+            floor + (z - floor) * 0.82,
+        )
+        stretch.data[index].co = (
+            x * (0.95 + normalized_height * 0.015),
+            y * 0.96,
+            floor + (z - floor) * 1.12,
+        )
 
-
-def parent_to_root(root: bpy.types.Object, *objects: bpy.types.Object) -> None:
-    for obj in objects:
-        obj.parent = root
+    return body
 
 
 def build_mascot() -> None:
@@ -134,59 +227,31 @@ def build_mascot() -> None:
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
-    blue = material(
-        "Jelluvi Blue",
-        (0.018, 0.49, 1.0, 1.0),
-        roughness=0.16,
-        metallic=0.02,
-        transmission=0.2,
+    if not CANONICAL_MASCOT.exists():
+        raise FileNotFoundError(f"Canonical mascot is missing: {CANONICAL_MASCOT}")
+
+    source_image = bpy.data.images.load(str(CANONICAL_MASCOT), check_existing=False)
+    source_image.name = "Canonical Jelluvi PNG"
+    source_image.colorspace_settings.name = "sRGB"
+    source_image.pack()
+
+    front = canonical_front_material(source_image)
+    side = principled_material(
+        "Jelly Side",
+        (0.006, 0.29, 0.92, 1.0),
+        roughness=0.2,
+        coat=0.72,
     )
-    white = material("Eye White", (0.96, 0.99, 1.0, 1.0), roughness=0.28)
-    navy = material("Pupil Navy", (0.012, 0.035, 0.16, 1.0), roughness=0.22)
-    shine = material("Jelly Highlight", (0.75, 0.96, 1.0, 0.92), roughness=0.08)
 
     root = bpy.data.objects.new("JelluviMascot", None)
     root["behavior_contract"] = "idle,look,absorb,process,export,success,error"
+    root["visual_truth"] = "assets/brand/jelluvi.png"
+    root["generation_method"] = "canonical alpha contour + canonical texture; no generative AI"
     bpy.context.collection.objects.link(root)
 
-    body = add_uv_sphere("Body", (0.0, 0.0, 0.0), (2.28, 1.17, 1.82), blue)
-    shape_body(body)
-
-    eye_left = add_uv_sphere("Eye.L", (-0.73, -1.02, 0.18), (0.42, 0.22, 0.67), white)
-    eye_right = add_uv_sphere("Eye.R", (0.73, -1.02, 0.18), (0.42, 0.22, 0.67), white)
-    pupil_left = add_rounded_cube(
-        "Pupil.L", (-0.73, -1.27, 0.13), (0.23, 0.09, 0.39), navy, bevel=0.16
-    )
-    pupil_right = add_rounded_cube(
-        "Pupil.R", (0.73, -1.27, 0.13), (0.23, 0.09, 0.39), navy, bevel=0.16
-    )
-    pupil_shine_left = add_rounded_cube(
-        "PupilHighlight.L", (-0.8, -1.39, 0.36), (0.07, 0.035, 0.07), white, bevel=0.035
-    )
-    pupil_shine_right = add_rounded_cube(
-        "PupilHighlight.R", (0.66, -1.39, 0.36), (0.07, 0.035, 0.07), white, bevel=0.035
-    )
-
-    body_shine_large = add_uv_sphere(
-        "BodyHighlight.Large", (-0.88, -1.0, 1.05), (0.53, 0.055, 0.16), shine, segments=32, rings=20
-    )
-    body_shine_large.rotation_euler[1] = math.radians(-19)
-    body_shine_small = add_uv_sphere(
-        "BodyHighlight.Small", (-1.42, -0.92, 0.62), (0.14, 0.05, 0.1), shine, segments=24, rings=16
-    )
-
-    parent_to_root(
-        root,
-        body,
-        eye_left,
-        eye_right,
-        pupil_left,
-        pupil_right,
-        pupil_shine_left,
-        pupil_shine_right,
-        body_shine_large,
-        body_shine_small,
-    )
+    outline = sample_canonical_outline(source_image)
+    body = add_canonical_body(outline, front, side)
+    body.parent = root
 
     bpy.context.scene.render.engine = "BLENDER_EEVEE"
     bpy.context.scene.render.film_transparent = True
@@ -204,6 +269,7 @@ def build_mascot() -> None:
         export_materials="EXPORT",
     )
 
+    print(f"Sampled {len(outline)} silhouette points from {CANONICAL_MASCOT}")
     print(f"Saved editable mascot to {BLEND_PATH}")
     print(f"Saved browser mascot to {GLB_PATH}")
 

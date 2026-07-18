@@ -1,61 +1,119 @@
-# Jelluvi Spatial — design QA
+# Jelluvi spatial — design QA
 
-## Scope and visual truth
+## Scope and source visual truth
 
-- Page: local-only interactive concept at `http://127.0.0.1:4174/`
-- Brand source: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/assets/brand/jelluvi.png`
-- Product direction: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/docs/site-brief.md`
-- Full desktop state: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/desktop-hero.jpg`
-- Desktop formats state: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/desktop-formats.jpg`
-- Desktop success state: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/desktop-export-success.jpg`
-- Mobile success state: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mobile-export-success.jpg`
-- Focused source/implementation comparison: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-focused-comparison.png`
+- Surface: local-only spatial prototype at `http://127.0.0.1:4174/`
+- Concept lab: `http://127.0.0.1:4174/concepts/`
+- Canonical mascot source: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/assets/brand/jelluvi.png`
+- Browser implementation capture: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-fidelity-desktop.png`
+- Combined source/implementation comparison: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-fidelity-comparison.png`
+- Concept rationale: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/concepts.md`
 
-The page is an original spatial concept rather than a clone of a supplied page. The canonical mascot is therefore the source visual for fidelity; the repository brief is the source for product truth, privacy language, and conversion behavior.
+The canonical mascot is the visual truth for the model repair. The three concept scenes are
+deliberately independent ideation directions rather than a chosen production page. Their QA checks
+therefore cover internal coherence, product meaning, language, responsiveness, and interactions;
+they do not imply that one direction has been approved for production.
+
+## Viewports and states
+
+- Desktop: 1440 × 900
+- Mobile: 390 × 844
+- Concepts: The Living Keeper, Format Cosmos, and Memory Current
+- Rationale drawer: collapsed and expanded
+- Motion: live default motion; static reduced-motion behavior is implemented but not OS-simulated
 
 ## Comparison history
 
-### Pass 1 — desktop composition
+### Pass 1 — mascot fidelity
 
-- **P1 / layout:** Chapters 2–4 initially placed the mascot and file artifact beneath live text. This reduced legibility and made the scene feel like layered panels instead of one intentional composition.
-- **Fix:** Alternated the mascot between left and right keyframes, constrained the right-side copy width, reduced the final artifact scale, and gave the fourth chapter its own vertical composition.
-- **Result:** Chapter copy, mascot, format orbit, controls, and output artifact now occupy separate visual zones at 1440×1000.
+- **P1 / image fidelity:** The earlier model was a deformed sphere. It approximated a blue jelly but
+  lost the canonical crown-to-base proportions, side lobes, wavy bottom edge, lower accent, exact eye
+  geometry, and highlight placement.
+- **Fix:** Replaced the sphere with a deterministic mesh sampled at 160 points from the canonical PNG
+  alpha contour. UVs now use the canonical artwork itself on the front surface; a separate blue side
+  material, 0.76-unit depth, and a five-segment bevel provide real volume without redrawing the face.
+  Squash and stretch morph targets are rebuilt on the corrected geometry.
+- **Post-fix evidence:** `qa/mascot-fidelity-comparison.png` shows the canonical source and the
+  browser-rendered 3D model in the same comparison image. The crown, eyes, highlights, side lobes,
+  lower band, and wavy base are all visibly retained.
+- **Result:** No remaining P0/P1/P2 source-fidelity mismatch. The visible depth and slight lighting on
+  the side edge are intentional 3D behavior.
 
-### Pass 2 — typography and product explanation
+### Pass 2 — concept differentiation and meaning
 
-- **P2 / typography:** The original display tracking made adjacent words feel joined at large sizes.
-- **Fix:** Relaxed heading letter spacing and added small optical word spacing without reducing the dramatic scale.
-- **P2 / content:** The nine-format transformation lacked a visual state beyond prose.
-- **Fix:** Added four animated local 3D format markers around the processing mascot while keeping the complete nine-format list in copy.
-- **Result:** The formats chapter now communicates its transformation before the body copy is read.
+- **P1 / concept structure:** Reusing a block layout would not satisfy the spatial brief or establish
+  a meaningful role for the mascot.
+- **Fix:** Built three distinct full-screen interaction grammars: transformation portal, orbital
+  format system, and continuous memory thread. Every visible object maps to input, local processing,
+  format choice, continuity, privacy boundary, or user-owned output.
+- **Post-fix evidence:**
+  - `qa/concept-01-living-keeper-desktop.png`
+  - `qa/concept-02-format-cosmos-desktop.png`
+  - `qa/concept-03-memory-current-desktop.png`
+- **Result:** The directions differ in hierarchy, spatial composition, motion logic, and product
+  framing rather than merely in palette or card arrangement.
 
-### Pass 3 — mobile and final action
+### Pass 3 — mobile composition
 
-- **P1 / responsiveness:** At 390×844 the desktop camera position cropped the mascot down to one eye and placed the file off-screen.
-- **Fix:** Added narrow-viewport 3D keyframes for mascot scale/position and a separate file-artifact composition in the open space above the mobile copy.
-- **P1 / interaction:** The desktop success artifact initially overlapped the download control; on mobile it was only partially visible.
-- **Fix:** Tuned responsive artifact positions and scales independently for wide and narrow viewports.
-- **Result:** The complete mascot, output file, heading, primary CTA, and generated download link remain legible and usable on mobile.
+- **P1 / responsiveness:** The first narrow-viewport pass enlarged the desktop scene until the mascot
+  was cropped to one eye and most semantic objects left the frame.
+- **Fix:** Added scene-specific mobile scale and position rules. The Keeper retains the full mascot,
+  Format Cosmos retains the nucleus and orbit, and Memory Current retains the gateway, guide, thread,
+  and archive relationship.
+- **Post-fix evidence:**
+  - `qa/concept-01-living-keeper-mobile.png`
+  - `qa/concept-02-format-cosmos-mobile.png`
+  - `qa/concept-03-memory-current-mobile.png`
+- **Result:** No horizontal overflow, clipped headline, hidden selector, or inaccessible primary
+  concept control at 390 × 844.
 
-## Final rubric pass
+### Pass 4 — audience language
 
-- **Fonts and typography:** System display stack is deliberate and local-only. Heading hierarchy, line-height, wrapping, and optical spacing are stable in desktop and mobile captures.
-- **Spacing and layout:** No remaining collisions in the four settled desktop chapters or the mobile export state. The file intentionally approaches the right desktop edge but does not cover the controls.
-- **Viewport resilience:** Verified at 1440×1000 and 390×844. Tablet was represented by the responsive breakpoint logic but was not captured separately.
-- **Colors and tokens:** Navy, electric blue, cyan, white, and quiet-blue text consistently extend the canonical mascot palette. Body copy contrast was increased during QA.
-- **Image and asset fidelity:** The deterministic Blender model preserves the canonical flattened jelly silhouette, two white eyes, navy pupils, square highlights, and body gloss. The 3D material is a deliberate spatial interpretation, not an AI-generated replacement.
-- **Copy and content:** Privacy, local processing, supported formats, and final file outcome match the repository brief. No adoption, store-publication, or revenue claims are present.
-- **Icons:** The page uses the source mascot mark and text-only controls; there are no placeholder icon substitutes.
-- **States and interactions:** Chapter navigation, scroll progress, pointer eye tracking, processing animation, export loading state, success state, and real local Markdown download-link creation were exercised. The download itself was not triggered during QA.
-- **Accessibility:** Semantic buttons/navigation, skip link, focus rings, live status, useful labels, decorative empty alt text, tap-sized controls, and a reduced-motion static fallback are implemented.
-- **AI shortcut artifacts:** No AI image generation, emoji, handcrafted SVG illustration, or placeholder avatar was used. The editable mascot source is a Blender file generated by a deterministic local modeling script.
+- **P1 / content:** The first concept-lab pass exposed Russian names, summaries, controls, and
+  rationale copy even though the product is not aimed at a Russian audience.
+- **Fix:** Converted all visible concept-lab copy, metadata, accessible names, selector labels, and
+  rationale content to English.
+- **Post-fix evidence:** The final desktop and mobile captures above are English-only. A Cyrillic
+  source-and-build scan returns no matches in `src`, `dist`, `concepts.md`, or `README.md`.
+- **Result:** No Russian characters remain in the local site UI or compiled site output.
+
+## Final fidelity surfaces
+
+- **Fonts and typography:** The existing local system display stack is preserved. Headline weight,
+  wrapping, line height, and selector text remain legible at both tested viewports.
+- **Spacing and layout rhythm:** Desktop copy, primary spatial event, rationale control, and concept
+  selector occupy distinct zones. Mobile uses a staged vertical composition rather than shrinking the
+  desktop layout indiscriminately.
+- **Colors and tokens:** Navy, electric blue, cyan, white, and quiet blue extend the canonical mascot
+  palette consistently. The concept scenes avoid unrelated accent colors.
+- **Image quality and asset fidelity:** The canonical raster is embedded in the editable Blender
+  source and GLB front surface. There is no AI-generated replacement, placeholder avatar, custom SVG
+  approximation, or CSS-drawn mascot.
+- **Copy and content:** All visible UI is English. Privacy, local processing, nine supported outputs,
+  continuity, and user-owned files are the only product claims represented.
+- **Icons:** No icon library is needed in this visual study; the site uses the supplied mascot asset
+  and text controls rather than placeholder glyphs.
+- **States and interactions:** Concept selection, URL-addressable concept state, rationale
+  expand/collapse, live mascot motion, and the current local export story were browser-tested.
+- **Accessibility:** Semantic navigation and buttons, `aria-pressed`, `aria-expanded`, a skip link,
+  visible focus treatment, meaningful scene labels, mobile tap targets, and reduced-motion behavior are
+  present.
+
+## Browser verification
+
+- Rendered locally in the Codex in-app browser.
+- Desktop and mobile screenshots were captured from the browser, not from source files.
+- Concept query states `keeper`, `cosmos`, and `current` all resolved to the correct heading and scene.
+- The rationale control expanded and collapsed, and the concept selector changed `aria-pressed`.
+- No JavaScript console errors were present in the final refreshed states.
 
 ## Open verification limits
 
-- Safari/WebKit, forced WebGL failure, browser zoom/text scaling, and an actual `prefers-reduced-motion` device setting were not simulated.
-- The optimized production chunk is intentionally larger than a conventional 2D landing page because it includes the local Three.js renderer. Performance on low-end phones still needs a physical-device pass before any release decision.
-- Browser logs contain historical `THREE.Clock` warnings from the earlier Three.js version; after pinning Three.js to the compatible pre-deprecation release, the refreshed page produced no JavaScript errors and no new warning.
+- Safari/WebKit, physical low-end phones, browser zoom/text scaling, forced WebGL failure, and a real
+  OS-level `prefers-reduced-motion` session were not tested.
+- The 3D bundle remains larger than a conventional 2D landing page and needs a physical-device
+  performance pass before any release decision.
+- The three concepts remain selection studies. None has been integrated into the production landing
+  page or any Cloudflare deployment path.
 
-## Result
-
-**PASS for a local vertical slice.** No public-deployment readiness is implied.
+final result: passed
