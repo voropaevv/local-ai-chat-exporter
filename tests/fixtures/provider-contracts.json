@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "contracts": [
+    {
+      "provider": "chatgpt",
+      "hostname": "chatgpt.com",
+      "fixture": "chatgpt/simple-conversation.html",
+      "messageSelector": "[data-message-author-role]",
+      "contentSelector": ".markdown, [data-message-author-role]",
+      "minimumMessages": 2,
+      "expectedRoles": ["user", "assistant"]
+    },
+    {
+      "provider": "claude",
+      "hostname": "claude.ai",
+      "fixture": "claude/current-layout.html",
+      "messageSelector": "[data-testid='user-message'], [data-testid='assistant-message'], [role='article'] [data-is-streaming], [data-local-export-platform='claude'][data-local-export-role]",
+      "contentSelector": ".standard-markdown, .font-claude-message, [data-message-content], .prose",
+      "minimumMessages": 2,
+      "expectedRoles": ["user", "assistant"]
+    },
+    {
+      "provider": "gemini",
+      "hostname": "gemini.google.com",
+      "fixture": "gemini/current-layout.html",
+      "messageSelector": "[data-testid='user-query'], [data-test-id='user-query'], user-query, [data-testid='model-response'], [data-test-id='model-response'], [data-testid='response'], [data-test-id='response'], model-response",
+      "contentSelector": "message-content, [data-message-content], .markdown, .query-text",
+      "minimumMessages": 2,
+      "expectedRoles": ["user", "assistant"]
+    },
+    {
+      "provider": "perplexity",
+      "hostname": "www.perplexity.ai",
+      "fixture": "perplexity/current-layout.html",
+      "messageSelector": "[data-testid='query-text'], [data-test-id='query-text'], [data-testid='query-content'], [data-testid='thread-question'], [class~='group/query'], [data-testid='answer'], [data-test-id='answer'], [data-testid='answer-content'], [data-testid='thread-answer'], main [id^='markdown-content-'] .prose[data-renderer='lm']",
+      "contentSelector": "article, [data-message-content], [data-testid='query-content'], [data-testid='answer-content'], .prose",
+      "minimumMessages": 4,
+      "expectedRoles": ["user", "assistant"]
+    },
+    {
+      "provider": "notebooklm",
+      "hostname": "notebooklm.google.com",
+      "fixture": "notebooklm/current-layout.html",
+      "messageSelector": "[data-testid='user-query'], [data-test-id='user-query'], .from-user-message-inner-content, [data-testid='chat-message-answer'], [data-test-id='chat-message-answer'], .to-user-message-inner-content",
+      "contentSelector": "[data-message-content], .message-text-content, labs-tailwind-doc-viewer, .markdown, .prose",
+      "minimumMessages": 2,
+      "expectedRoles": ["user", "assistant"]
+    }
+  ]
+}
