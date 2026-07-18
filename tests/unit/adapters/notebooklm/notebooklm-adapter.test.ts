@@ -29,6 +29,8 @@ describe("NotebookLM adapter", () => {
   test("defines selectors and extraction limitations", () => {
     expect(notebookLmSelectors.message).toContain("[data-testid='user-query']");
     expect(notebookLmSelectors.message).toContain("[data-testid='chat-message-answer']");
+    expect(notebookLmSelectors.message).toContain(".from-user-message-inner-content");
+    expect(notebookLmSelectors.message).toContain(".to-user-message-inner-content");
   });
 
   test("extracts visible user and assistant messages from fixture DOM", () => {
@@ -42,5 +44,19 @@ describe("NotebookLM adapter", () => {
     ]);
     expect(messages[0].text).toBe("Summarize this source.");
     expect(messages[1].text).toBe("The source describes a local-only export workflow.");
+  });
+
+  test("extracts current NotebookLM user and model cards with rich structure", () => {
+    const messages = extractVisibleNotebookLmMessages(loadFixture("current-layout.html"));
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[0].text).toBe("На основе источника ответь кратко.");
+    expect(messages[1].text).toContain("Начало NotebookLM: ёж, Юникод, ₽, —");
+    expect(messages[1].markdown).toContain("| Элемент | Значение |");
+    expect(messages[1].markdown).toContain("1. Строка 1");
+    expect(messages[1].markdown).toContain("2. Строка 2");
+    expect(messages[1].markdown).not.toContain("Строка 1 1");
+    expect(messages[1].markdown).toContain("Конец проверки NotebookLM 2026");
+    expect(messages[1].text).not.toContain("Copy");
   });
 });

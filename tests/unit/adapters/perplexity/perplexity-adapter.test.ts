@@ -29,6 +29,7 @@ describe("Perplexity adapter", () => {
     expect(perplexitySelectors.message).toContain("[data-testid='answer']");
     expect(perplexitySelectors.message).toContain("[data-testid='thread-question']");
     expect(perplexitySelectors.message).toContain("[data-testid='thread-answer']");
+    expect(perplexitySelectors.message).toContain("[class~='group/query']");
   });
 
   test("extracts visible user and assistant messages from fixture DOM", () => {
@@ -48,15 +49,26 @@ describe("Perplexity adapter", () => {
   test("extracts visible messages from a current Perplexity-style thread layout", () => {
     const messages = extractVisiblePerplexityMessages(loadFixture("current-layout.html"));
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
-    expect(messages[0].text).toBe("How should HTML exports handle ChatGPT classes?");
-    expect(messages[1].text).toContain("clean semantic HTML");
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant"
+    ]);
+    expect(messages[0].text).toBe("Jelluvi live QA Perplexity 2026.");
+    expect(messages[1].text).toContain("Начало Perplexity: ёж, Юникод, ₽, —");
     expect(messages[1].codeBlocks).toEqual([
       {
-        code: "no internal class names",
-        language: undefined
+        code: "const perplexity = 42;",
+        language: "javascript"
       }
     ]);
+    expect(messages[2].text).toBe("Продолжи live QA Perplexity.");
+    expect(messages[3].markdown).toContain("| Элемент | Значение |");
+    expect(messages[3].markdown).toContain("1. Строка 1");
+    expect(messages[3].text).toContain("E = mc^2");
+    expect(messages[3].text).not.toContain("E=mc2E = mc^2");
+    expect(messages[3].text).toContain("Конец проверки Perplexity 2026");
   });
 
   test("extracts visible messages from the current Perplexity answer page layout", () => {

@@ -35,7 +35,11 @@ const REMOVABLE_SELECTORS = [
   "[data-jelluvi-canvas]",
   "[data-testid*='canvas' i]",
   "[data-jelluvi-source-list]",
-  ".sr-only"
+  ".sr-only",
+  ".cdk-visually-hidden",
+  ".screen-reader-only",
+  ".screen-reader-user-query-label",
+  ".visually-hidden"
 ].join(",");
 
 export interface CleanedChatGptNode {
@@ -60,11 +64,13 @@ export function cleanChatGptNode(messageElement: Element): CleanedChatGptNode {
   }
 
   const clonedElement = clone as Element;
+  const codeBlocks = extractCodeBlocks(messageElement);
 
+  normalizeMathMl(clonedElement);
   removeUiArtifacts(clonedElement);
+  removeRedundantCodeLanguageLabels(clonedElement, codeBlocks);
   sanitizeElementTree(clonedElement);
 
-  const codeBlocks = extractCodeBlocks(messageElement);
   const images = extractImageRefs(messageElement);
   const text = cleanText(renderPlainText(clonedElement, codeBlocks));
   const markdown = renderMarkdownFromElement(clonedElement, codeBlocks, images);
@@ -78,10 +84,70 @@ export function cleanChatGptNode(messageElement: Element): CleanedChatGptNode {
   };
 }
 
+function normalizeMathMl(root: Element): void {
+  root.querySelectorAll("math").forEach((mathElement) => {
+    const texAnnotation = Array.from(mathElement.querySelectorAll("annotation[encoding]")).find(
+      (annotation) =>
+        annotation.getAttribute("encoding")?.toLocaleLowerCase() === "application/x-tex"
+    );
+    const replacementText =
+      texAnnotation?.textContent?.trim() ||
+      mathElement.getAttribute("aria-label")?.trim() ||
+      mathElement.textContent?.trim() ||
+      "";
+
+    mathElement.replaceWith(mathElement.ownerDocument.createTextNode(replacementText));
+  });
+}
+
 function removeUiArtifacts(root: Element): void {
   root.querySelectorAll(REMOVABLE_SELECTORS).forEach((element) => {
     element.remove();
   });
+}
+
+function removeRedundantCodeLanguageLabels(
+  root: Element,
+  codeBlocks: readonly ExportedCodeBlock[]
+): void {
+  Array.from(root.querySelectorAll("pre")).forEach((preElement, index) => {
+    const language = codeBlocks[index]?.language;
+
+    if (!language) {
+      return;
+    }
+
+    let currentElement: Element | null = preElement;
+
+    while (currentElement && currentElement !== root) {
+      const candidate = currentElement.previousElementSibling;
+
+      if (candidate && isRedundantCodeLanguageLabel(candidate, language)) {
+        candidate.remove();
+        return;
+      }
+
+      currentElement = currentElement.parentElement;
+    }
+  });
+}
+
+function isRedundantCodeLanguageLabel(element: Element, language: string): boolean {
+  const tagName = element.tagName.toLocaleLowerCase();
+
+  if (!(["div", "header", "span"] as readonly string[]).includes(tagName)) {
+    return false;
+  }
+
+  if (element.querySelector("pre, code, table, ul, ol")) {
+    return false;
+  }
+
+  const label = cleanText(element.textContent ?? "")
+    .replace(/^language\s*:\s*/i, "")
+    .toLocaleLowerCase();
+
+  return label === language.trim().toLocaleLowerCase();
 }
 
 function sanitizeElementTree(root: Element): void {
@@ -327,8 +393,8 @@ function renderMarkdownInlineNode(
 }
 
 function renderMarkdownList(element: Element): string {
-  return Array.from(element.children)
-    .filter((child) => child.tagName.toLocaleLowerCase() === "li")
+  return Array.from(element.querySelectorAll("li"))
+    .filter((child) => child.closest("ol, ul") === element)
     .map((child, index) => {
       const marker = element.tagName.toLocaleLowerCase() === "ol" ? `${index + 1}.` : "-";
       return `${marker} ${cleanText(child.textContent ?? "")}`;

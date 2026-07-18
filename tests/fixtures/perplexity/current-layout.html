@@ -2,15 +2,65 @@
 <html>
   <body>
     <main>
-      <article data-testid="thread-question">
-        <div data-testid="query-content">How should HTML exports handle ChatGPT classes?</div>
-      </article>
-      <article data-testid="thread-answer">
-        <section data-testid="answer-content">
-          <p>They should render clean semantic HTML from normalized text and markdown.</p>
-          <pre><code>no internal class names</code></pre>
-        </section>
-      </article>
+      <div class="group/title">
+        <div class="group/query relative" role="heading">
+          <div><span>Jelluvi live QA Perplexity 2026.</span></div>
+        </div>
+      </div>
+      <div id="markdown-content-0">
+        <div class="prose" data-renderer="lm">
+          <p>Начало Perplexity: ёж, Юникод, ₽, —</p>
+          <pre><code class="language-javascript">const perplexity = 42;</code></pre>
+          <p>Конец Perplexity short</p>
+        </div>
+      </div>
+      <div class="group/title">
+        <div class="group/query relative">
+          <div><span>Продолжи live QA Perplexity.</span></div>
+        </div>
+      </div>
+      <div id="markdown-content-1">
+        <div class="prose" data-renderer="lm">
+          <table>
+            <thead>
+              <tr>
+                <th>Элемент</th>
+                <th>Значение</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Альфа</td>
+                <td>1</td>
+              </tr>
+              <tr>
+                <td>Бета</td>
+                <td>2</td>
+              </tr>
+            </tbody>
+          </table>
+          <ol>
+            <li>Строка 1</li>
+            <li>Строка 2</li>
+          </ol>
+          <p>
+            <span class="katex">
+              <span class="katex-mathml">
+                <math>
+                  <semantics>
+                    <mrow
+                      ><mi>E</mi><mo>=</mo><mi>m</mi><msup><mi>c</mi><mn>2</mn></msup></mrow
+                    >
+                    <annotation encoding="application/x-tex">E = mc^2</annotation>
+                  </semantics>
+                </math>
+              </span>
+              <span class="katex-html" aria-hidden="true">E=mc2</span>
+            </span>
+          </p>
+          <p>Конец проверки Perplexity 2026</p>
+        </div>
+      </div>
     </main>
   </body>
 </html>

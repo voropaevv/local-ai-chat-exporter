@@ -19,9 +19,21 @@ const NOTEBOOKLM_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
     selector: "[data-testid='user-query'], [data-test-id='user-query']"
   },
   {
+    authorLabel: "User",
+    contentSelector: ".message-text-content",
+    role: "user",
+    selector: ".from-user-message-inner-content"
+  },
+  {
     authorLabel: "NotebookLM",
     role: "assistant",
     selector: "[data-testid='chat-message-answer'], [data-test-id='chat-message-answer']"
+  },
+  {
+    authorLabel: "NotebookLM",
+    contentSelector: ".message-text-content",
+    role: "assistant",
+    selector: ".to-user-message-inner-content"
   }
 ];
 

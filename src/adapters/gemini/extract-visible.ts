@@ -15,11 +15,13 @@ import { geminiSelectors } from "./selectors";
 const GEMINI_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   {
     authorLabel: "User",
+    contentSelector: ".query-text",
     role: "user",
     selector: "[data-testid='user-query'], [data-test-id='user-query'], user-query"
   },
   {
     authorLabel: "Gemini",
+    contentSelector: "message-content, [data-message-content], .markdown",
     role: "assistant",
     selector:
       "[data-testid='model-response'], [data-test-id='model-response'], [data-testid='response'], [data-test-id='response'], model-response"
