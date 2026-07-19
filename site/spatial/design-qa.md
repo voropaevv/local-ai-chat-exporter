@@ -9,6 +9,7 @@
 - Mobile implementation capture: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-rounded-mobile.png`
 - Combined source/browser comparison: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-rounded-browser-comparison.png`
 - Multi-angle geometry evidence: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-true-3d-turntable.png`
+- Rotational-symmetry evidence: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/qa/mascot-rotational-symmetry-turntable.png`
 - Concept rationale: `/Users/msm4m-vv/Projects/local-ai-chat-exporter/site/spatial/concepts.md`
 
 The canonical mascot is the visual truth for the model repair. The three concept scenes are
@@ -101,8 +102,28 @@ they do not imply that one direction has been approved for production.
   combines the same source with the live browser render. A clean GLB re-import reports 2,306 body
   vertices, 3.427 depth, 30.225 volume, and zero non-manifold edges. The revised round body remains
   fully visible in `qa/mascot-rounded-mobile.png` at 390 × 844.
-- **Result:** No remaining P0/P1/P2 geometry issue. The different highlight placement is an accepted
-  physical-material translation from a flat illustration, not a missing model surface.
+- **Intermediate result:** The model became genuinely volumetric, but owner review correctly noted
+  that its depth loft still treated the unseen rear as a separately designed shape. Pass 6 supersedes
+  that assumption with an explicit circular-body model.
+
+### Pass 6 — rotational body symmetry
+
+- **P1 / reconstruction assumption:** A single front image does leave arbitrary rear details unknown,
+  but Jelluvi's body is not an arbitrary asymmetric object. The appropriate base hypothesis is axial
+  symmetry: the front half-profile determines a circular ring at each radial contour point, much as a
+  circle profile determines a sphere.
+- **Fix:** Replaced the front-to-back loft with a true surface of revolution. The canonical right-hand
+  contour from crown to lower center is used as the radial cross-section, including the softly waved
+  bottom profile. Ninety-six angular segments revolve that profile around the vertical axis. Only the
+  independently modeled eyes and pupils establish a front side; physical lower-accent pieces were
+  removed so they cannot introduce false body asymmetry.
+- **Post-fix evidence:** `qa/mascot-rotational-symmetry-turntable.png` combines the canonical source
+  with front, three-quarter, side, back, and top renders. The generated body has 4.642974 units of
+  width and 4.642974 units of depth, 39.178 cubic units of volume, zero non-manifold edges, and a
+  maximum ring-radius variance of 0.00000022 units.
+- **Result:** The mascot is now a true circular body rather than a guessed rear loft. The front source
+  still does not define hidden texture or material details, but it is sufficient to determine this
+  rotationally symmetric base geometry.
 
 ## Final fidelity surfaces
 
@@ -133,7 +154,8 @@ they do not imply that one direction has been approved for production.
 - Desktop and mobile screenshots were captured from the browser, not from source files.
 - Concept query states `keeper`, `cosmos`, and `current` all resolved to the correct heading and scene.
 - The rationale control expanded and collapsed, and the concept selector changed `aria-pressed`.
-- The rounded model loaded through the versioned GLB path and rendered with live lighting and motion.
+- The rotationally symmetric model loaded through the versioned GLB path and rendered with live
+  lighting and motion.
 - Browser logs contain only Vite connection and React development information; there are no errors or
   warnings in the final refreshed state.
 
@@ -145,5 +167,10 @@ they do not imply that one direction has been approved for production.
   performance pass before any release decision.
 - The three concepts remain selection studies. None has been integrated into the production landing
   page or any Cloudflare deployment path.
+- Tripo v3.1 and Meshy Smart Topology were inspected for a private image-to-3D comparison. Both
+  require authentication and a paid privacy entitlement before the canonical PNG can be used without
+  making the generated asset public. Rodin exposes a free-plan allowance for private assets but the
+  inspected browser session was logged out. No public upload, paid action, or cloud generation was
+  performed.
 
 final result: passed

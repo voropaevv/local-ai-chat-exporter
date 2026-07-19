@@ -1,8 +1,10 @@
-"""Build a genuinely volumetric, editable Jelluvi mascot without generative AI.
+"""Build a rotationally symmetric, editable Jelluvi mascot without generative AI.
 
 The canonical PNG remains the front-view silhouette reference only. The runtime model does not
-embed that raster as a flat face. Instead, the script lofts a closed jelly body through depth and
-builds the eyes, pupils, reflections, and lower accent as separate three-dimensional geometry.
+embed that raster as a flat face. Instead, the script takes the right-hand silhouette from crown to
+base as a radial cross-section and revolves it around the vertical axis. That makes every body ring
+truly circular while preserving the mascot's domed crown and softly waved base. Only the modeled
+eyes, pupils, and reflections define a front side.
 """
 
 from __future__ import annotations
@@ -26,28 +28,11 @@ BLEND_PATH = SOURCE_DIR / "jelluvi-mascot.blend"
 GLB_PATH = RUNTIME_DIR / "jelluvi-mascot.glb"
 
 RAY_COUNT = 192
+REVOLUTION_SEGMENTS = 96
+CROSS_SECTION_SAMPLE_STEP = 2
 ALPHA_THRESHOLD = 0.38
 SOURCE_CENTER_TOP_LEFT = (600.0, 650.0)
 MODEL_WIDTH = 4.7
-
-# The outline is widest at the middle ring. Front and back rings contract into rounded poles,
-# producing a closed volume rather than an extrusion with flat front and rear faces.
-LOFT_PROFILE = (
-    (-1.72, 0.22),
-    (-1.62, 0.42),
-    (-1.46, 0.62),
-    (-1.20, 0.79),
-    (-0.84, 0.91),
-    (-0.42, 0.98),
-    (0.00, 1.00),
-    (0.38, 0.98),
-    (0.75, 0.91),
-    (1.06, 0.78),
-    (1.30, 0.60),
-    (1.46, 0.36),
-)
-FRONT_POLE_Y = -1.82
-BACK_POLE_Y = 1.54
 
 
 def reset_scene() -> None:
@@ -200,10 +185,7 @@ def add_body_gradient(mesh: bpy.types.Mesh) -> None:
         local_z = -delta_x * sine + delta_z * cosine
         distance = (local_x / radius_x) ** 2 + (local_z / radius_z) ** 2
         falloff = max(0.0, 1.0 - distance)
-        frontness = max(
-            0.0,
-            min(1.0, (-vertex.y - 0.2) / (abs(FRONT_POLE_Y) - 0.2)),
-        )
+        frontness = max(0.0, min(1.0, (-vertex.y - 0.2) / (MODEL_WIDTH / 2.0 - 0.2)))
         return falloff * falloff * frontness
 
     for index, vertex in enumerate(mesh.vertices):
@@ -219,7 +201,7 @@ def add_body_gradient(mesh: bpy.types.Mesh) -> None:
         color = mix_color(color, highlight_cyan, highlight_strength)
 
         # The rear is intentionally a little darker so a rotation reads as actual depth.
-        rear_factor = 1.0 - max(0.0, vertex.co.y) / BACK_POLE_Y * 0.22
+        rear_factor = 1.0 - max(0.0, vertex.co.y) / (MODEL_WIDTH / 2.0) * 0.22
         color_layer.data[index].color = (
             color[0] * rear_factor,
             color[1] * rear_factor,
@@ -228,48 +210,84 @@ def add_body_gradient(mesh: bpy.types.Mesh) -> None:
         )
 
 
-def add_volumetric_body(
+def radial_cross_section(
     outline: list[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    """Convert the top-to-bottom right silhouette into a clean radius/z lathe profile."""
+
+    half_outline = outline[: RAY_COUNT // 2 + 1]
+    sampled = half_outline[::CROSS_SECTION_SAMPLE_STEP]
+    if sampled[-1] != half_outline[-1]:
+        sampled.append(half_outline[-1])
+
+    profile = [(abs(x), z) for x, z in sampled]
+    # Both endpoints lie on the vertical axis. Forcing the radius to zero removes tiny raster
+    # sampling offsets and gives the surface a single crown and base pole.
+    profile[0] = (0.0, profile[0][1])
+    profile[-1] = (0.0, profile[-1][1])
+    if max(radius for radius, _ in profile) < MODEL_WIDTH * 0.45:
+        raise RuntimeError("Canonical cross-section is unexpectedly narrow")
+    return profile
+
+
+def radius_at_height(profile: list[tuple[float, float]], height: float) -> float:
+    """Return the outermost radial intersection for a horizontal slice."""
+
+    candidates: list[float] = []
+    for (first_radius, first_z), (second_radius, second_z) in zip(profile, profile[1:]):
+        minimum = min(first_z, second_z)
+        maximum = max(first_z, second_z)
+        if minimum <= height <= maximum and not math.isclose(first_z, second_z):
+            amount = (height - first_z) / (second_z - first_z)
+            candidates.append(first_radius + (second_radius - first_radius) * amount)
+    if not candidates:
+        raise RuntimeError(f"No body intersection at height {height:.3f}")
+    return max(candidates)
+
+
+def add_rotational_body(
+    profile: list[tuple[float, float]],
     material: bpy.types.Material,
     parent: bpy.types.Object,
 ) -> tuple[bpy.types.Object, float]:
-    point_count = len(outline)
-    vertices: list[tuple[float, float, float]] = [(0.0, FRONT_POLE_Y, 0.12)]
-    for depth, scale in LOFT_PROFILE:
-        vertices.extend((x * scale, depth, z * scale) for x, z in outline)
-    back_pole_index = len(vertices)
-    vertices.append((0.0, BACK_POLE_Y, 0.08))
+    vertices: list[tuple[float, float, float]] = [(0.0, 0.0, profile[0][1])]
+    for radius, z in profile[1:-1]:
+        for segment in range(REVOLUTION_SEGMENTS):
+            angle = segment * math.tau / REVOLUTION_SEGMENTS
+            vertices.append((radius * math.cos(angle), radius * math.sin(angle), z))
+    bottom_pole_index = len(vertices)
+    vertices.append((0.0, 0.0, profile[-1][1]))
 
     faces: list[tuple[int, ...]] = []
-    first_ring_start = 1
-    for index in range(point_count):
-        faces.append((0, first_ring_start + index, first_ring_start + (index + 1) % point_count))
+    for segment in range(REVOLUTION_SEGMENTS):
+        faces.append((0, 1 + (segment + 1) % REVOLUTION_SEGMENTS, 1 + segment))
 
-    for ring_index in range(len(LOFT_PROFILE) - 1):
-        current_start = 1 + ring_index * point_count
-        next_start = current_start + point_count
-        for index in range(point_count):
-            next_index = (index + 1) % point_count
+    ring_count = len(profile) - 2
+    for ring_index in range(ring_count - 1):
+        current_start = 1 + ring_index * REVOLUTION_SEGMENTS
+        next_start = current_start + REVOLUTION_SEGMENTS
+        for segment in range(REVOLUTION_SEGMENTS):
+            next_segment = (segment + 1) % REVOLUTION_SEGMENTS
             faces.append(
                 (
-                    current_start + index,
-                    next_start + index,
-                    next_start + next_index,
-                    current_start + next_index,
+                    current_start + segment,
+                    current_start + next_segment,
+                    next_start + next_segment,
+                    next_start + segment,
                 )
             )
 
-    last_ring_start = 1 + (len(LOFT_PROFILE) - 1) * point_count
-    for index in range(point_count):
+    last_ring_start = 1 + (ring_count - 1) * REVOLUTION_SEGMENTS
+    for segment in range(REVOLUTION_SEGMENTS):
         faces.append(
             (
-                last_ring_start + index,
-                back_pole_index,
-                last_ring_start + (index + 1) % point_count,
+                last_ring_start + segment,
+                last_ring_start + (segment + 1) % REVOLUTION_SEGMENTS,
+                bottom_pole_index,
             )
         )
 
-    mesh = bpy.data.meshes.new("Watertight volumetric jelly body")
+    mesh = bpy.data.meshes.new("Watertight rotational jelly body")
     mesh.from_pydata(vertices, [], faces)
     mesh.materials.append(material)
     mesh.update()
@@ -286,14 +304,27 @@ def add_volumetric_body(
     if volume < 1.0:
         raise RuntimeError(f"Body volume is unexpectedly small: {volume:.3f}")
 
+    maximum_radial_variance = 0.0
+    for ring_index in range(ring_count):
+        ring_start = 1 + ring_index * REVOLUTION_SEGMENTS
+        radii = [
+            math.hypot(mesh.vertices[ring_start + segment].co.x, mesh.vertices[ring_start + segment].co.y)
+            for segment in range(REVOLUTION_SEGMENTS)
+        ]
+        maximum_radial_variance = max(maximum_radial_variance, max(radii) - min(radii))
+    if maximum_radial_variance > 1e-5:
+        raise RuntimeError(f"Body lost rotational symmetry: {maximum_radial_variance:.8f}")
+
     add_body_gradient(mesh)
     for polygon in mesh.polygons:
         polygon.use_smooth = True
 
     body = bpy.data.objects.new("Body", mesh)
     body.parent = parent
-    body["geometry"] = "closed volumetric loft"
+    body["geometry"] = "surface of revolution from canonical radial cross-section"
     body["manifold"] = True
+    body["rotationally_symmetric"] = True
+    body["maximum_radial_variance"] = maximum_radial_variance
     body["volume"] = volume
     bpy.context.collection.objects.link(body)
 
@@ -308,13 +339,13 @@ def add_volumetric_body(
         x, y, z = basis_point.co
         normalized_height = (z - floor) / height
         squash.data[index].co = (
-            x * (1.07 - normalized_height * 0.02),
-            y * 1.06,
+            x * (1.06 - normalized_height * 0.01),
+            y * (1.06 - normalized_height * 0.01),
             floor + (z - floor) * 0.84,
         )
         stretch.data[index].co = (
             x * (0.96 + normalized_height * 0.01),
-            y * 0.96,
+            y * (0.96 + normalized_height * 0.01),
             floor + (z - floor) * 1.10,
         )
 
@@ -419,142 +450,47 @@ def add_face_geometry(
     white: bpy.types.Material,
     pupil: bpy.types.Material,
     shine: bpy.types.Material,
+    profile: list[tuple[float, float]],
 ) -> None:
     for side, x in (("L", -0.73), ("R", 0.73)):
+        eye_z = 0.36
+        body_radius = radius_at_height(profile, eye_z)
+        surface_y = -math.sqrt(body_radius * body_radius - x * x)
+        rotation_z = math.asin(x / body_radius)
         eye = add_superellipsoid(
             f"Eye.{side}",
-            (x, -1.625, 0.36),
+            (x, surface_y - 0.035, eye_z),
             0.36,
             0.69,
             0.24,
             white,
             parent,
             exponent=3.6,
+            rotation=(0.0, 0.0, rotation_z),
         )
         eye["role"] = "volumetric eye"
         pupil_object = add_superellipsoid(
             f"Pupil.{side}",
-            (x, -1.765, 0.31),
+            (x, surface_y - 0.18, 0.31),
             0.18,
             0.39,
             0.14,
             pupil,
             parent,
             exponent=4.0,
+            rotation=(0.0, 0.0, rotation_z),
         )
         pupil_object["look_axis"] = "x,z"
         add_superellipsoid(
             f"PupilHighlight.{side}",
-            (x - 0.055, -1.845, 0.48),
+            (x - 0.055, surface_y - 0.265, 0.48),
             0.058,
             0.065,
             0.045,
             shine,
             parent,
             exponent=3.0,
-        )
-
-
-def catmull_rom_point(
-    first: Vector,
-    second: Vector,
-    third: Vector,
-    fourth: Vector,
-    amount: float,
-) -> Vector:
-    squared = amount * amount
-    cubed = squared * amount
-    return 0.5 * (
-        (2.0 * second)
-        + (-first + third) * amount
-        + (2.0 * first - 5.0 * second + 4.0 * third - fourth) * squared
-        + (-first + 3.0 * second - 3.0 * third + fourth) * cubed
-    )
-
-
-def add_ribbon_mesh(
-    name: str,
-    control_points: list[tuple[float, float, float]],
-    material: bpy.types.Material,
-    parent: bpy.types.Object,
-) -> bpy.types.Object:
-    points = [Vector(point) for point in control_points]
-    padded = [points[0], *points, points[-1]]
-    samples: list[Vector] = []
-    for index in range(1, len(padded) - 2):
-        for step in range(8):
-            samples.append(
-                catmull_rom_point(
-                    padded[index - 1],
-                    padded[index],
-                    padded[index + 1],
-                    padded[index + 2],
-                    step / 8.0,
-                )
-            )
-    samples.append(points[-1])
-
-    vertices: list[tuple[float, float, float]] = []
-    for index, point in enumerate(samples):
-        edge_amount = abs(index / max(1, len(samples) - 1) - 0.5) * 2.0
-        half_width = 0.055 + edge_amount * 0.085
-        vertices.append((point.x, point.y - 0.018, point.z + half_width))
-        vertices.append((point.x, point.y + 0.018, point.z - half_width))
-    faces = [
-        (index * 2, index * 2 + 1, index * 2 + 3, index * 2 + 2)
-        for index in range(len(samples) - 1)
-    ]
-
-    mesh = bpy.data.meshes.new(f"{name} geometry")
-    mesh.from_pydata(vertices, [], faces)
-    mesh.materials.append(material)
-    mesh.update()
-    ribbon = bpy.data.objects.new(name, mesh)
-    ribbon.parent = parent
-    bpy.context.collection.objects.link(ribbon)
-    bpy.context.view_layer.objects.active = ribbon
-    ribbon.select_set(True)
-    solidify = ribbon.modifiers.new(name="Physical ribbon depth", type="SOLIDIFY")
-    solidify.thickness = 0.035
-    solidify.offset = 0.0
-    bevel = ribbon.modifiers.new(name="Rounded ribbon edge", type="BEVEL")
-    bevel.width = 0.035
-    bevel.segments = 4
-    bpy.ops.object.modifier_apply(modifier=solidify.name)
-    bpy.ops.object.modifier_apply(modifier=bevel.name)
-    for polygon in ribbon.data.polygons:
-        polygon.use_smooth = True
-    return ribbon
-
-
-def add_surface_details(
-    parent: bpy.types.Object,
-    accent: bpy.types.Material,
-) -> None:
-    band_points = [
-        (-1.92, -0.72, -1.04),
-        (-1.60, -0.84, -1.13),
-        (-1.16, -0.95, -1.34),
-        (-0.58, -1.03, -1.48),
-        (0.00, -1.06, -1.45),
-        (0.58, -1.03, -1.48),
-        (1.16, -0.95, -1.34),
-        (1.60, -0.84, -1.13),
-        (1.92, -0.72, -1.04),
-    ]
-    lower_band = add_ribbon_mesh("LowerAccent.Band", band_points, accent, parent)
-    lower_band["role"] = "three-dimensional lower accent"
-    for side, x, angle in (("L", -1.78, -0.46), ("R", 1.78, 0.46)):
-        add_superellipsoid(
-            f"LowerAccent.{side}",
-            (x, -0.76, -1.02),
-            0.41,
-            0.20,
-            0.06,
-            accent,
-            parent,
-            exponent=3.2,
-            rotation=(0.0, angle, 0.0),
+            rotation=(0.0, 0.0, rotation_z),
         )
 
 
@@ -618,6 +554,7 @@ def render_turntable(camera: bpy.types.Object) -> None:
         "three-quarter": (5.8, -7.2, 0.35),
         "side": (8.4, 0.0, 0.32),
         "back": (0.0, 8.2, 0.25),
+        "top": (0.2, 0.0, 8.6),
     }
     for name, location in views.items():
         camera.location = location
@@ -660,25 +597,16 @@ def build_mascot() -> None:
         emission=(0.78, 0.96, 1.0, 1.0),
         emission_strength=0.3,
     )
-    accent = principled_material(
-        "Lower Accent",
-        (0.02, 0.43, 1.0, 1.0),
-        roughness=0.18,
-        coat=0.7,
-        emission=(0.0, 0.16, 0.72, 1.0),
-        emission_strength=0.08,
-    )
-
     root = bpy.data.objects.new("JelluviMascot", None)
     root["behavior_contract"] = "idle,look,absorb,process,export,success,error"
     root["visual_truth"] = "assets/brand/jelluvi.png"
-    root["generation_method"] = "closed volumetric loft + modeled facial geometry; no generative AI"
+    root["generation_method"] = "surface of revolution + modeled facial geometry; no generative AI"
     root["model_type"] = "true three-dimensional character"
     bpy.context.collection.objects.link(root)
 
-    body, volume = add_volumetric_body(outline, jelly, root)
-    add_face_geometry(root, eye_white, pupil, shine)
-    add_surface_details(root, accent)
+    profile = radial_cross_section(outline)
+    body, volume = add_rotational_body(profile, jelly, root)
+    add_face_geometry(root, eye_white, pupil, shine, profile)
 
     root["body_volume"] = volume
     root["body_vertex_count"] = len(body.data.vertices)
@@ -701,12 +629,14 @@ def build_mascot() -> None:
     render_turntable(camera)
     bpy.ops.wm.save_as_mainfile(filepath=str(BLEND_PATH))
 
-    print(f"Sampled {len(outline)} silhouette points from {CANONICAL_MASCOT}")
+    print(f"Sampled {len(profile)} radial cross-section points from {CANONICAL_MASCOT}")
     print(f"Verified closed body volume: {volume:.3f} cubic units")
     print(f"Verified physical body depth: {body.dimensions.y:.3f} units")
+    print(f"Verified width/depth equality: {body.dimensions.x:.6f}/{body.dimensions.y:.6f}")
+    print(f"Verified maximum ring-radius variance: {body['maximum_radial_variance']:.8f}")
     print(f"Saved editable mascot to {BLEND_PATH}")
     print(f"Saved browser mascot to {GLB_PATH}")
-    print(f"Saved four-angle turntable to {QA_DIR}")
+    print(f"Saved five-angle turntable to {QA_DIR}")
 
 
 build_mascot()

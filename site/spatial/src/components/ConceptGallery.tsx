@@ -171,7 +171,7 @@ function PreparedMascot({
   reducedMotion: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=3");
+  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=4");
   const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
   const basePosition = useMemo(() => new THREE.Vector3(...position), [position]);
 
@@ -595,4 +595,4 @@ export default function ConceptGallery() {
   );
 }
 
-useGLTF.preload("/models/jelluvi-mascot.glb?v=3");
+useGLTF.preload("/models/jelluvi-mascot.glb?v=4");

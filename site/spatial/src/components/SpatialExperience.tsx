@@ -301,7 +301,7 @@ function JelluviMascot({
   modeRef: RefObject<MascotMode>;
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=3");
+  const gltf = useGLTF("/models/jelluvi-mascot.glb?v=4");
   const { viewport } = useThree();
   const model = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
   const bodyMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
@@ -716,4 +716,4 @@ export default function SpatialExperience() {
   );
 }
 
-useGLTF.preload("/models/jelluvi-mascot.glb?v=3");
+useGLTF.preload("/models/jelluvi-mascot.glb?v=4");
