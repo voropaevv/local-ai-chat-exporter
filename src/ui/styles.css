@@ -928,11 +928,8 @@ h3 {
   gap: 7px;
 }
 
-.format-meta-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-end;
+.bundle-format-row {
+  display: block;
 }
 
 .snapshot-action {
@@ -959,9 +956,14 @@ h3 {
 }
 
 .zip-toggle {
-  justify-self: start;
+  width: 100%;
   min-width: 0;
-  padding-inline: 9px;
+  justify-content: flex-start;
+  padding-inline: 12px;
+}
+
+.zip-toggle .switch-track {
+  margin-left: auto;
 }
 
 .format-button,

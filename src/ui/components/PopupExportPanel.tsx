@@ -44,12 +44,12 @@ export function PopupExportPanel({
           />
         ))}
       </div>
-      <div className="format-meta-row">
+      <div className="bundle-format-row">
         <label className="zip-toggle">
           <span className="format-button__icon" aria-hidden="true">
             <FileArchive size={16} strokeWidth={2.2} />
           </span>
-          <span>ZIP</span>
+          <span>Bundle as ZIP</span>
           <input
             checked={options.outputMode === "zip"}
             onChange={(event) =>
