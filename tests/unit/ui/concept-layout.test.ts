@@ -33,9 +33,12 @@ describe("concept-inspired popup and settings layout", () => {
     expect(exportPanelSource).toContain("Preview");
     expect(exportPanelSource).toContain("ZIP");
     expect(exportPanelSource).toContain("<span>Export</span>");
-    expect(exportPanelSource).toContain("MORE_FORMATS");
+    expect(exportPanelSource).toContain("POPUP_EXPORT_FORMATS");
     expect(exportPanelSource).toContain("format.toUpperCase()");
     expect(exportPanelSource).toContain("FileArchive");
+    expect(exportPanelSource).not.toContain("More");
+    expect(exportPanelSource).not.toContain("Less");
+    expect(exportPanelSource).not.toContain("aria-expanded");
     expect(exportPanelSource).not.toContain("InfoTip");
     expect(exportPanelSource).not.toContain(">Output<");
   });

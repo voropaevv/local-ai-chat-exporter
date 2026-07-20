@@ -2,7 +2,6 @@ import {
   Braces,
   FileArchive,
   FileCode,
-  FileJson,
   FileText,
   FileType,
   Moon,
@@ -48,6 +47,7 @@ import {
 } from "./export-settings-storage";
 import { DEFAULT_FILENAME_TEMPLATE, createFilenamePreview } from "./filename-template";
 import { formatCount } from "./pluralize";
+import { POPUP_EXPORT_FORMATS, POPUP_FORMAT_ICONS } from "./popup-format-options";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
 import {
   buildBatchExportRequest,
@@ -62,26 +62,6 @@ import {
   type ThemePreference
 } from "./theme-preference";
 
-const DEFAULT_FORMATS = [
-  "md",
-  "pdf",
-  "json",
-  "txt",
-  "html",
-  "docx",
-  "csv",
-  "png"
-] as const satisfies readonly StoredPopupFileFormat[];
-const FORMAT_ICONS = {
-  csv: Braces,
-  docx: FileText,
-  html: FileCode,
-  json: FileJson,
-  md: FileText,
-  pdf: FileText,
-  png: FileType,
-  txt: FileText
-} as const;
 const FILENAME_PATTERN_PRESETS = [
   {
     label: "Default",
@@ -345,7 +325,7 @@ export function OptionsApp() {
 
       <SettingsCard icon={FileText} title="Export">
         <div className="settings-format-row" role="group" aria-label="Export formats">
-          {DEFAULT_FORMATS.map((format) => (
+          {POPUP_EXPORT_FORMATS.map((format) => (
             <FormatSettingButton
               active={isFormatActive(exportSettings, format)}
               format={format}
@@ -570,12 +550,12 @@ function SegmentedButtons<T extends string>({ items, onChange, value }: Segmente
 
 interface FormatSettingButtonProps {
   readonly active: boolean;
-  readonly format: (typeof DEFAULT_FORMATS)[number];
+  readonly format: StoredPopupFileFormat;
   readonly onClick: () => void;
 }
 
 function FormatSettingButton({ active, format, onClick }: FormatSettingButtonProps) {
-  const Icon = FORMAT_ICONS[format];
+  const Icon = POPUP_FORMAT_ICONS[format];
 
   return (
     <button
