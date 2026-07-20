@@ -31,7 +31,8 @@ describe("concept-inspired popup and settings layout", () => {
     expect(exportPanelSource).toContain("Export");
     expect(exportPanelSource).toContain("Copy MD");
     expect(exportPanelSource).toContain("Preview");
-    expect(exportPanelSource).toContain("ZIP");
+    expect(exportPanelSource).toContain("Bundle as ZIP");
+    expect(exportPanelSource).toContain("bundle-format-row");
     expect(exportPanelSource).toContain("<span>Export</span>");
     expect(exportPanelSource).toContain("POPUP_EXPORT_FORMATS");
     expect(exportPanelSource).toContain("format.toUpperCase()");

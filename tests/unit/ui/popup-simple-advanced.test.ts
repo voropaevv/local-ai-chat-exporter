@@ -35,7 +35,7 @@ describe("popup and settings UX source", () => {
     expect(quickActionSource).toContain("Download");
     expect(quickActionSource).toContain("Copy MD");
     expect(quickActionSource).toContain("Preview");
-    expect(quickActionSource).toContain("ZIP");
+    expect(quickActionSource).toContain("Bundle as ZIP");
     expect(quickActionSource).toContain("<span>Export</span>");
     expect(formatOptionsSource).toContain('"html",');
     expect(formatOptionsSource).toContain('"docx",');
@@ -81,6 +81,8 @@ describe("popup and settings UX source", () => {
     expect(styles).not.toContain(".advanced-drawer");
     expect(styles).not.toContain(".advanced-options-stack");
     expect(styles).toContain(".format-rail");
+    expect(styles).toContain(".bundle-format-row");
+    expect(styles).toContain(".zip-toggle .switch-track");
     expect(styles).toContain(".output-action-grid");
     expect(styles).toContain(".concept-action span");
     expect(styles).toContain("white-space: nowrap;");
