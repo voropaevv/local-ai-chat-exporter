@@ -1,31 +1,8 @@
-import {
-  Braces,
-  ChevronDown,
-  Copy,
-  Download,
-  Eye,
-  FileArchive,
-  FileCode,
-  FileText,
-  FileType
-} from "lucide-preact";
-import { useState } from "preact/hooks";
+import { Copy, Download, Eye, FileArchive } from "lucide-preact";
 
 import type { ExportFormat } from "../../core/schema";
+import { POPUP_EXPORT_FORMATS, POPUP_FORMAT_ICONS } from "../popup-format-options";
 import type { PopupFileFormat, PopupOptionsState, PopupOutputMode } from "../state/popup-state";
-
-const QUICK_FORMATS = ["md", "pdf", "json", "txt"] as const satisfies readonly PopupFileFormat[];
-const MORE_FORMATS = ["html", "docx", "csv", "png"] as const satisfies readonly PopupFileFormat[];
-const FORMAT_ICONS = {
-  csv: Braces,
-  docx: FileText,
-  html: FileCode,
-  json: Braces,
-  md: FileCode,
-  pdf: FileText,
-  png: FileType,
-  txt: FileType
-} as const;
 
 interface PopupExportPanelProps {
   readonly disabled: boolean;
@@ -48,18 +25,13 @@ export function PopupExportPanel({
   onOutputModeChange,
   options
 }: PopupExportPanelProps) {
-  const [showMoreFormats, setShowMoreFormats] = useState(false);
-  const selectedMoreFormatCount = MORE_FORMATS.filter((format) =>
-    isFormatActive(options, format)
-  ).length;
-
   return (
     <section className="concept-panel export-panel" aria-labelledby="export-title">
       <h2 className="sr-only" id="export-title">
         Export
       </h2>
       <div className="format-rail" role="group" aria-label="Export formats">
-        {QUICK_FORMATS.map((format) => (
+        {POPUP_EXPORT_FORMATS.map((format) => (
           <FormatButton
             active={isFormatActive(options, format)}
             format={format}
@@ -71,37 +43,8 @@ export function PopupExportPanel({
             }
           />
         ))}
-        {showMoreFormats
-          ? MORE_FORMATS.map((format) => (
-              <FormatButton
-                active={isFormatActive(options, format)}
-                format={format}
-                key={format}
-                onClick={() =>
-                  options.outputMode === "zip"
-                    ? onBundleFormatToggle(format)
-                    : onFormatToggle(format as ExportFormat)
-                }
-              />
-            ))
-          : null}
       </div>
       <div className="format-meta-row">
-        <button
-          aria-expanded={showMoreFormats}
-          className="more-formats-button"
-          onClick={() => setShowMoreFormats((visible) => !visible)}
-          type="button"
-        >
-          <ChevronDown
-            className={showMoreFormats ? "more-formats-button__icon--open" : undefined}
-            size={15}
-            strokeWidth={2.2}
-          />
-          {showMoreFormats
-            ? "Less"
-            : `More${selectedMoreFormatCount > 0 ? ` · ${selectedMoreFormatCount}` : ""}`}
-        </button>
         <label className="zip-toggle">
           <span className="format-button__icon" aria-hidden="true">
             <FileArchive size={16} strokeWidth={2.2} />
@@ -157,7 +100,7 @@ interface FormatButtonProps {
 }
 
 function FormatButton({ active, format, onClick }: FormatButtonProps) {
-  const Icon = FORMAT_ICONS[format];
+  const Icon = POPUP_FORMAT_ICONS[format];
 
   return (
     <button

@@ -28,6 +28,7 @@ describe("popup and settings UX source", () => {
 
   test("primary popup exposes one-click actions and all supported local formats", () => {
     const quickActionSource = readSource("src/ui/components/PopupExportPanel.tsx");
+    const formatOptionsSource = readSource("src/ui/popup-format-options.ts");
     const popupSource = readSource("src/ui/PopupApp.tsx");
     const previewSource = readSource("src/ui/PreviewApp.tsx");
 
@@ -36,7 +37,12 @@ describe("popup and settings UX source", () => {
     expect(quickActionSource).toContain("Preview");
     expect(quickActionSource).toContain("ZIP");
     expect(quickActionSource).toContain("<span>Export</span>");
-    expect(quickActionSource).toContain('["html", "docx", "csv", "png"]');
+    expect(formatOptionsSource).toContain('"html",');
+    expect(formatOptionsSource).toContain('"docx",');
+    expect(formatOptionsSource).toContain('"csv",');
+    expect(formatOptionsSource).toContain('"png"');
+    expect(quickActionSource).not.toContain("More");
+    expect(quickActionSource).not.toContain("Less");
     expect(quickActionSource).not.toContain("Open PDF");
     expect(quickActionSource).not.toContain("<BatchExport");
     expect(popupSource).not.toContain("PDF generation fell back to PDF-ready HTML");
