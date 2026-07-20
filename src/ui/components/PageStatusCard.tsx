@@ -20,8 +20,9 @@ export function PageStatusCard({
   sourceUrl
 }: PageStatusCardProps) {
   const status = getPageStatus(scanStatus, sourceSupported, platformLabel, activeTabStatus);
-  const pageLabel = status.tone === "success" ? status.label : formatPageHost(sourceUrl);
-  const accessibleStatus = status.tone === "success" ? "Supported" : status.label;
+  const pageLabel = formatPageHost(sourceUrl);
+  const accessibleStatus =
+    status.tone === "success" ? `${status.label}, supported` : status.label;
 
   return (
     <section
@@ -49,13 +50,7 @@ export function PageStatusCard({
           ) : (
             <Check size={17} strokeWidth={2.8} />
           )}
-          {status.tone === "success" ? (
-            <span className="sr-only">Supported</span>
-          ) : status.tone === "neutral" ? (
-            <span className="sr-only">Checking</span>
-          ) : (
-            status.label
-          )}
+          <span>{status.label}</span>
         </span>
       )}
     </section>

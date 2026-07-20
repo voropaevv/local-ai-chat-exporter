@@ -833,12 +833,6 @@ h3 {
   color: var(--color-success);
 }
 
-.ready-pill--success:has(.sr-only) {
-  width: 28px;
-  justify-content: center;
-  padding: 0;
-}
-
 .status-spinner {
   animation: status-spin 900ms linear infinite;
 }
