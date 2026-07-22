@@ -27,7 +27,10 @@ export type ContentRequestResult =
 
 export interface ContentRequestHandlerDependencies {
   readonly getCurrentUrl: () => string;
-  readonly observeConversationChanges?: (onChange: () => void) => () => void;
+  readonly observeConversationChanges?: (
+    onChange: () => void,
+    baselineMessages: ConversationExport["messages"]
+  ) => () => void;
   readonly scanCurrentConversationExport: (options?: {
     readonly signal?: AbortSignal;
   }) => Promise<ConversationExport>;
@@ -83,7 +86,7 @@ export function createContentRequestHandler(
       scanSequence += 1;
       stopObservingConversationChanges = dependencies.observeConversationChanges?.(() => {
         cachedConversationDirty = true;
-      });
+      }, conversation.messages);
 
       return summarizeConversation(conversation, scanId);
     } finally {
