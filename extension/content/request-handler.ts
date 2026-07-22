@@ -47,7 +47,10 @@ export interface ContentRequestHandlerDependencies {
     files: readonly RenderedFile<RenderedBytes>[]
   ) => Promise<DownloadResult>;
   readonly getCurrentUrl: () => string;
-  readonly observeConversationChanges?: (onChange: () => void) => () => void;
+  readonly observeConversationChanges?: (
+    onChange: () => void,
+    baselineMessages: ConversationExport["messages"]
+  ) => () => void;
   readonly renderConversationFiles: (
     conversation: ConversationExport,
     options?: Partial<ExportOptions>
@@ -107,7 +110,7 @@ export function createContentRequestHandler(
       scanSequence += 1;
       stopObservingConversationChanges = dependencies.observeConversationChanges?.(() => {
         cachedConversationDirty = true;
-      });
+      }, conversation.messages);
 
       return summarizeConversation(conversation, scanId);
     } finally {
