@@ -47,11 +47,59 @@ function makeConversation(overrides: Partial<ConversationExport> = {}): Conversa
 }
 
 describe("ConversationExport validation", () => {
+  test("accepts a legacy schema 1.0 export whose messages predate attachments", () => {
+    const legacyExport = JSON.parse(JSON.stringify(makeConversation())) as unknown;
+
+    expect(
+      (legacyExport as { messages: readonly Record<string, unknown>[] }).messages.every(
+        (message) => !Object.hasOwn(message, "attachments")
+      )
+    ).toBe(true);
+    expect(validateConversationExport(legacyExport).ok).toBe(true);
+  });
+
   test("accepts a valid schema object", () => {
-    const result = validateConversationExport(makeConversation());
+    const result = validateConversationExport(
+      makeConversation({
+        messages: [
+          makeMessage({
+            attachments: [
+              {
+                id: "attachment-1",
+                kind: "file",
+                mimeType: "text/markdown",
+                name: "notes.md",
+                sizeBytes: 42
+              }
+            ]
+          })
+        ]
+      })
+    );
 
     expect(result.ok).toBe(true);
     expect(result.ok ? result.value.messageCount : 0).toBe(1);
+  });
+
+  test("rejects malformed attachment records", () => {
+    const result = validateConversationExport(
+      makeConversation({
+        messages: [
+          {
+            ...makeMessage(),
+            attachments: [{ kind: "archive", name: 42 }]
+          } as unknown as ExportedMessage
+        ]
+      })
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? [] : result.errors).toEqual(
+      expect.arrayContaining([
+        "messages[0].attachments[0].kind must be a supported attachment kind",
+        "messages[0].attachments[0].name must be a string"
+      ])
+    );
   });
 
   test("reports precise errors for invalid schema fields", () => {

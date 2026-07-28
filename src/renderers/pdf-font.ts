@@ -24,6 +24,12 @@ export interface PdfEmbeddedFont {
   readonly glyphs: readonly PdfFontGlyph[];
 }
 
+export interface PdfEncodedTextRun {
+  readonly encodedText: string;
+  readonly font: PdfFont;
+  readonly width: number;
+}
+
 interface FontTable {
   readonly length: number;
   readonly offset: number;
@@ -41,23 +47,45 @@ export class PdfFontRegistry {
     regular: new Map<number, number>()
   };
 
-  encodeText(font: PdfFont, value: string): string {
-    const program = getFontProgram(font);
-    const usedGlyphs = this.usedGlyphs[font];
-    const encoded: string[] = [];
+  encodeTextRuns(font: PdfFont, value: string): readonly PdfEncodedTextRun[] {
+    const runs: Array<{
+      encoded: string[];
+      font: PdfFont;
+      width: number;
+    }> = [];
 
     for (const character of normalizePdfText(value)) {
       const requestedCodePoint = character.codePointAt(0) ?? 0xfffd;
+      const resolvedFont = resolveFontForCodePoint(font, requestedCodePoint);
+      const program = getFontProgram(resolvedFont);
       const resolved = program.resolveGlyph(requestedCodePoint);
+      const usedGlyphs = this.usedGlyphs[resolvedFont];
 
       if (!usedGlyphs.has(resolved.glyphId)) {
         usedGlyphs.set(resolved.glyphId, resolved.unicodeCodePoint);
       }
 
-      encoded.push(resolved.glyphId.toString(16).padStart(4, "0"));
+      const encodedGlyph = resolved.glyphId.toString(16).padStart(4, "0");
+      const width = program.getScaledAdvanceWidth(resolved.glyphId);
+      const currentRun = runs[runs.length - 1];
+
+      if (currentRun?.font === resolvedFont) {
+        currentRun.encoded.push(encodedGlyph);
+        currentRun.width += width;
+      } else {
+        runs.push({
+          encoded: [encodedGlyph],
+          font: resolvedFont,
+          width
+        });
+      }
     }
 
-    return encoded.join("");
+    return runs.map((run) => ({
+      encodedText: run.encoded.join(""),
+      font: run.font,
+      width: run.width
+    }));
   }
 
   hasUsedGlyphs(font: PdfFont): boolean {
@@ -166,6 +194,10 @@ class TrueTypeFontProgram {
     return Math.max(1, this.scaleMetric(advanceWidth));
   }
 
+  hasGlyph(codePoint: number): boolean {
+    return this.glyphForCodePoint(codePoint) !== 0;
+  }
+
   resolveGlyph(codePoint: number): { readonly glyphId: number; readonly unicodeCodePoint: number } {
     const glyphId = this.glyphForCodePoint(codePoint);
 
@@ -206,6 +238,18 @@ class TrueTypeFontProgram {
   private scaleMetric(value: number): number {
     return Math.round((value * 1000) / this.unitsPerEm);
   }
+}
+
+function resolveFontForCodePoint(font: PdfFont, codePoint: number): PdfFont {
+  if (getFontProgram(font).hasGlyph(codePoint)) {
+    return font;
+  }
+
+  if (font !== "mono" && getFontProgram("mono").hasGlyph(codePoint)) {
+    return "mono";
+  }
+
+  return font;
 }
 
 let regularFont: TrueTypeFontProgram | undefined;

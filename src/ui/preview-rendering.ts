@@ -5,6 +5,7 @@ import {
 } from "../core/export-options";
 import type { ConversationExport } from "../core/schema";
 import { renderHtml, renderMarkdown, type RenderedFile } from "../renderers";
+import type { HtmlTheme } from "../renderers/presentation";
 import { formatCount } from "./pluralize";
 
 export const PREVIEW_MISSING_CACHE_MESSAGE =
@@ -25,7 +26,8 @@ export type PreviewRenderState =
 
 export function createPreviewRenderState(
   conversation: ConversationExport | undefined,
-  options: Partial<ExportOptions> = {}
+  options: Partial<ExportOptions> = {},
+  previewOptions: { readonly theme?: HtmlTheme } = {}
 ): PreviewRenderState {
   if (conversation === undefined) {
     return {
@@ -53,7 +55,10 @@ export function createPreviewRenderState(
 
   return {
     conversation: preparedConversation,
-    html: renderHtml(preparedConversation, rendererOptions),
+    html: renderHtml(preparedConversation, {
+      ...rendererOptions,
+      theme: previewOptions.theme ?? "system"
+    }),
     markdown: renderMarkdown(preparedConversation, rendererOptions),
     status: "ready",
     statusMessage: formatCount(preparedConversation.messageCount, "message")

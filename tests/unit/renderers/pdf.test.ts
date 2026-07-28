@@ -164,6 +164,133 @@ describe("renderPdf", () => {
     expect(text).not.toContain("????");
   });
 
+  test("preserves mathematical relations in headings, paragraphs, and table cells", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown:
+              "## Условия ≤ ≥ ≠\n\nПорог предложения ≥$120k, верхняя граница ≤$180k и значение ≠0.\n\n| Проверка | Значение |\n| --- | --- |\n| Диапазон | ≥$120k, ≤$180k, ≠0 |",
+            text: "Условия ≤ ≥ ≠. Порог предложения ≥$120k, верхняя граница ≤$180k и значение ≠0."
+          })
+        ]
+      })
+    );
+    const body = textFromBytes(rendered.bytes);
+    const text = extractPdfText(rendered.bytes);
+
+    expect(body).toContain("/BaseFont /NotoSansMono-Regular");
+    expect(text.match(/≥/gu)).toHaveLength(3);
+    expect(text.match(/≤/gu)).toHaveLength(3);
+    expect(text.match(/≠/gu)).toHaveLength(3);
+    expect(text).not.toContain("�");
+  });
+
+  test("uses readable dates and attachment labels without redundant role or complete status", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            attachments: [
+              {
+                description: "ZIP archive",
+                kind: "file",
+                name: "reference-assets.zip",
+                sizeBytes: 2_400_000
+              }
+            ],
+            createdAt: "2026-05-31T10:22:00.000Z"
+          })
+        ]
+      })
+    );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain("Exported: 31 May 2026, 10:20 UTC");
+    expect(text).toContain("Created: 31 May 2026, 10:22 UTC");
+    expect(text).toContain("Attachments");
+    expect(text).toContain("reference-assets.zip");
+    expect(text).toContain("2.4 MB");
+    expect(text).not.toContain("Role:");
+    expect(text).not.toContain("Completeness:");
+    expect(text).not.toContain("Capture status:");
+  });
+
+  test("preserves ordered-list numbering, including a non-default start marker", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: "3. Third step\n4. Fourth step\n\n- Separate bullet",
+            text: "Third step. Fourth step. Separate bullet."
+          })
+        ]
+      })
+    );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain("3. Third step");
+    expect(text).toContain("4. Fourth step");
+    expect(text).toContain("- Separate bullet");
+  });
+
+  test("keeps thematic separators on the current page and reserves page breaks for an explicit command", () => {
+    const thematic = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: "Before separator.\n\n---\n\nAfter separator.",
+            text: "Before separator. After separator."
+          })
+        ]
+      })
+    );
+    const explicitBreak = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: "Before page break.\n\n\\pagebreak\n\nAfter page break.",
+            text: "Before page break. After page break."
+          })
+        ]
+      })
+    );
+
+    expect(textFromBytes(thematic.bytes).match(/\/Type \/Page\b/gu)).toHaveLength(1);
+    expect(extractPdfText(thematic.bytes)).toContain("Before separator.");
+    expect(extractPdfText(thematic.bytes)).toContain("After separator.");
+    expect(textFromBytes(explicitBreak.bytes).match(/\/Type \/Page\b/gu)).toHaveLength(2);
+  });
+
+  test("preserves nested list hierarchy and continuation lines", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown:
+              "- Parent introduction\n  continued parent detail\n  3. Nested third\n     continued nested detail\n  4. Nested fourth\n  trailing parent detail\n- Second parent",
+            text: "Parent introduction. Nested third. Nested fourth. Second parent."
+          })
+        ]
+      })
+    );
+    const body = textFromBytes(rendered.bytes);
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain("- Parent introduction continued parent detail");
+    expect(text).toContain("3. Nested third continued nested detail");
+    expect(text).toContain("4. Nested fourth");
+    expect(text).toContain("trailing parent detail");
+    expect(text).toContain("- Second parent");
+    expect(body).toMatch(/\b66 [\d.]+ Td\b/u);
+    expect(body).toMatch(/\b82 [\d.]+ Td\b/u);
+  });
+
   test("omits the monospaced font when the conversation has no code", () => {
     const rendered = renderPdf(
       makeConversation({

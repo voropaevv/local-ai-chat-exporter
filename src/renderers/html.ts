@@ -1,8 +1,10 @@
 import type {
   ConversationExport,
+  ExportedAttachmentRef,
   ExportedCodeBlock,
   ExportedImageRef,
-  ExportedMessage
+  ExportedMessage,
+  ExportedSourceRef
 } from "../core/schema";
 import {
   isSafeExternalImageUrl,
@@ -10,54 +12,289 @@ import {
   sanitizeConversationImagesForOutput
 } from "../core/image-safety";
 import { formatSourceKindLabel } from "./advanced-content";
+import {
+  escapeAttribute,
+  escapeHtml,
+  formatAttachmentLabel,
+  formatDisplayDateTime,
+  formatFileSize,
+  getMessageAttachments,
+  renderInlineMarkdown,
+  renderSemanticMarkdown,
+  safeHref,
+  shouldShowCaptureStatus,
+  type HtmlTheme
+} from "./presentation";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
-const HTML_CSS = `:root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-body { margin: 0; color: #1f2328; background: #ffffff; line-height: 1.55; }
-main { max-width: 920px; margin: 0 auto; padding: 32px 20px 48px; }
-header { border-bottom: 1px solid #d8dee4; margin-bottom: 28px; padding-bottom: 20px; }
-h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 12px; }
-h2 { font-size: 1.25rem; margin: 0 0 12px; }
-p { margin: 0 0 12px; }
-a { color: #0969da; }
-.meta { display: grid; gap: 6px; margin: 16px 0; }
-.meta div { overflow-wrap: anywhere; }
-.warnings { border: 1px solid #f0c36d; background: #fff8c5; padding: 12px 16px; margin: 16px 0; }
-.message { border-top: 1px solid #d8dee4; padding: 22px 0; }
-.message-meta { color: #57606a; font-size: 0.92rem; margin-bottom: 12px; }
-.image-refs { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
-.image-refs h3 { font-size: 0.95rem; margin: 0 0 8px; }
-.image-refs ul { margin: 0; padding-left: 20px; }
-.image-refs li { overflow-wrap: anywhere; }
-.image-refs img { display: block; height: auto; max-width: min(100%, 640px); }
-.advanced-section { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
-.advanced-section h3 { font-size: 0.95rem; margin: 0 0 8px; }
+export interface HtmlRendererOptions extends RendererOptions {
+  readonly theme?: HtmlTheme;
+}
+
+const HTML_CSS = `:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --page: #f7faff;
+  --surface: #ffffff;
+  --surface-muted: #f1f7fe;
+  --surface-raised: #ffffff;
+  --border: #d7e2ef;
+  --text: #172554;
+  --muted: #64748b;
+  --accent: #005fef;
+  --accent-soft: #e6f7ff;
+  --link: #005fef;
+  --user: #edf5ff;
+  --user-border: #c6dcf7;
+  --code: #eef4fb;
+  --warning: #8a5100;
+  --warning-soft: rgba(245, 158, 11, 0.13);
+  --shadow: rgba(13, 27, 77, 0.08);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0b1220;
+  --surface: #151e2e;
+  --surface-muted: #1a2232;
+  --surface-raised: #182235;
+  --border: #2a3447;
+  --text: #f8fafc;
+  --muted: #9aa5b7;
+  --accent: #39d9ff;
+  --accent-soft: rgba(0, 198, 255, 0.12);
+  --link: #66ddff;
+  --user: #202b3f;
+  --user-border: #34415a;
+  --code: #101827;
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.12);
+  --shadow: rgba(0, 0, 0, 0.22);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --page: #0b1220;
+    --surface: #151e2e;
+    --surface-muted: #1a2232;
+    --surface-raised: #182235;
+    --border: #2a3447;
+    --text: #f8fafc;
+    --muted: #9aa5b7;
+    --accent: #39d9ff;
+    --accent-soft: rgba(0, 198, 255, 0.12);
+    --link: #66ddff;
+    --user: #202b3f;
+    --user-border: #34415a;
+    --code: #101827;
+    --warning: #fbbf24;
+    --warning-soft: rgba(251, 191, 36, 0.12);
+    --shadow: rgba(0, 0, 0, 0.22);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; color: var(--text); background: var(--page); line-height: 1.62; }
+main { max-width: 960px; margin: 0 auto; padding: 36px 24px 56px; }
+.conversation-header {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 24px;
+  background: var(--surface);
+  box-shadow: 0 16px 42px var(--shadow);
+}
+h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 2.4rem); line-height: 1.15; letter-spacing: -0.025em; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.meta-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+.meta-item strong { color: var(--text); font-weight: 700; }
+.meta-item a { max-width: min(420px, 60vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capture-status {
+  border: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border));
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.capture-status strong { color: inherit; }
+.capture-status ul { margin: 8px 0 0; padding-left: 20px; }
+.messages { display: grid; gap: 0; margin-top: 30px; }
+.message { min-width: 0; padding: 26px 0; }
+.message + .message { border-top: 1px solid var(--border); }
+.message--user {
+  width: min(82%, 760px);
+  margin: 8px 0 24px auto;
+  border: 1px solid var(--user-border);
+  border-radius: 22px;
+  padding: 20px;
+  background: var(--user);
+}
+.message--user + .message { border-top: 0; }
+.message-header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.message-number {
+  display: inline-grid;
+  min-width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.message h2 { margin: 0; font-size: 1rem; line-height: 1.3; }
+.message-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: -6px 0 14px 35px; color: var(--muted); font-size: 0.82rem; }
+.message-body { min-width: 0; font-size: 1rem; }
+.message-body > :first-child { margin-top: 0; }
+.message-body > :last-child { margin-bottom: 0; }
+.message-body p { margin: 0 0 1em; }
+.message-body h3, .message-body h4, .message-body h5, .message-body h6 {
+  margin: 1.45em 0 0.55em;
+  line-height: 1.28;
+  letter-spacing: -0.012em;
+}
+.message-body h3 { font-size: 1.38rem; }
+.message-body h4 { font-size: 1.18rem; }
+.message-body h5, .message-body h6 { font-size: 1.02rem; }
+.message-body ul, .message-body ol { margin: 0.65em 0 1.05em; padding-left: 1.5em; }
+.message-body li { margin: 0.3em 0; padding-left: 0.18em; }
+.message-body blockquote {
+  margin: 1em 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  padding: 10px 14px;
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+.message-body blockquote > :last-child { margin-bottom: 0; }
+.message-body hr { height: 1px; margin: 1.5em 0; border: 0; background: var(--border); }
+a { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 0.16em; overflow-wrap: anywhere; }
+a:hover { text-decoration-thickness: 2px; }
+strong { color: var(--text); font-weight: 760; }
+pre {
+  max-width: 100%;
+  margin: 1em 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--code);
+}
+code {
+  border-radius: 5px;
+  padding: 0.12em 0.32em;
+  background: var(--code);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+}
+pre code { border-radius: 0; padding: 0; background: transparent; font-size: 0.88rem; }
+table { display: block; width: 100%; margin: 1em 0; overflow-x: auto; border-collapse: collapse; }
+th, td { border: 1px solid var(--border); padding: 8px 11px; text-align: left; vertical-align: top; }
+th { background: var(--surface-muted); font-weight: 740; }
+.attachment-grid, .media-grid, .source-grid { display: grid; gap: 10px; margin: 0 0 16px; }
+.attachment-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.attachment-card, .media-card, .source-card {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: 0 7px 18px var(--shadow);
+}
+.attachment-card { grid-template-columns: 44px minmax(0, 1fr); gap: 11px; align-items: center; padding: 11px; }
+.attachment-card:hover, a.media-card:hover, .source-card:hover { border-color: var(--accent); text-decoration: none; }
+.attachment-icon {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.attachment-icon, .media-icon { font-size: 0.68rem; font-weight: 820; letter-spacing: 0.035em; line-height: 1; }
+.attachment-copy, .media-copy, .source-copy { display: grid; min-width: 0; gap: 2px; }
+.attachment-copy strong, .media-copy strong, .source-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-copy span, .media-copy span, .source-copy span { color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
+.attachment-open-link { width: fit-content; margin-top: 3px; font-size: 0.82rem; font-weight: 700; }
+.attachment-warning { grid-column: 1 / -1; margin: 0; color: var(--warning); font-size: 0.82rem; }
+.website-preview {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: min(480px, 56vw);
+  min-height: 260px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+.media-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.media-card { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; align-items: center; padding: 11px 12px; }
+.media-icon { display: inline-grid; width: 38px; height: 38px; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.source-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); margin-top: 18px; }
+.source-card { gap: 9px; padding: 13px 14px; }
+.source-card-header { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; }
+.source-kind { flex: 0 0 auto; border-radius: 999px; padding: 3px 7px; background: var(--accent-soft); color: var(--accent); font-size: 0.68rem; font-weight: 760; text-transform: uppercase; }
+.source-snippet { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 0.84rem; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.advanced-section { margin-top: 16px; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--surface-muted); }
+.advanced-section h3 { margin: 0 0 8px; font-size: 0.92rem; }
 .advanced-section ul { margin: 0; padding-left: 20px; }
-.advanced-section li { overflow-wrap: anywhere; }
-pre { background: #f6f8fa; border: 1px solid #d8dee4; overflow: auto; padding: 12px; }
-code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
-table { border-collapse: collapse; display: block; margin: 12px 0; overflow-x: auto; width: 100%; }
-th, td { border: 1px solid #d8dee4; padding: 6px 10px; text-align: left; }
-footer { border-top: 1px solid #d8dee4; color: #57606a; font-size: 0.9rem; margin-top: 28px; padding-top: 16px; }
+.inline-media-link { display: inline-flex; align-items: center; gap: 5px; }
+footer { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 16px; color: var(--muted); font-size: 0.82rem; }
+@media (max-width: 640px) {
+  main { padding: 18px 12px 36px; }
+  .conversation-header { border-radius: 14px; padding: 18px; }
+  .message--user { width: 94%; border-radius: 18px; padding: 16px; }
+  .attachment-grid, .media-grid, .source-grid { grid-template-columns: 1fr; }
+}
 @media print {
-  body { color: #000000; }
+  :root, :root[data-theme="dark"] {
+    color-scheme: light;
+    --page: #ffffff;
+    --surface: #ffffff;
+    --surface-muted: #f6f8fa;
+    --surface-raised: #ffffff;
+    --border: #d8dee4;
+    --text: #000000;
+    --muted: #4b5563;
+    --accent: #000000;
+    --accent-soft: #f6f8fa;
+    --link: #000000;
+    --user: #f6f8fa;
+    --user-border: #d8dee4;
+    --code: #f6f8fa;
+    --shadow: transparent;
+  }
   main { max-width: none; padding: 0; }
+  .conversation-header, .attachment-card, .media-card, .source-card { box-shadow: none; }
+  .message, pre, table, .attachment-card, .media-card, .source-card { break-inside: avoid; }
   a { color: #000000; text-decoration: underline; }
-  .message { break-inside: avoid; }
-  pre, table { break-inside: avoid; }
+  .website-preview { display: none; }
 }`;
 
 export function renderHtml(
   conversation: ConversationExport,
-  options: RendererOptions = {}
+  options: HtmlRendererOptions = {}
 ): RenderedFile {
   const safeConversation = sanitizeConversationImagesForOutput(conversation);
   const title = normalizeSingleLine(safeConversation.title ?? "Untitled conversation");
-  const warnings = collectWarnings(safeConversation);
-  const warningsSection = renderWarningsSection(warnings);
+  const themeAttribute =
+    options.theme === "dark" || options.theme === "light" ? ` data-theme="${options.theme}"` : "";
   const messages = safeConversation.messages.map(renderMessage).join("\n");
+
   const html = `<!doctype html>
-<html lang="en">
+<html lang="en"${themeAttribute}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -68,21 +305,11 @@ ${HTML_CSS}
 </head>
 <body>
   <main>
-    <header>
-      <h1>${escapeHtml(title)}</h1>
-      <p>This export was generated locally by extension.</p>
-      <section class="meta" aria-label="Export metadata">
-        <div><strong>Platform:</strong> ${escapeHtml(safeConversation.platformLabel)}</div>
-        <div><strong>Source:</strong> <a href="${safeHref(safeConversation.sourceUrl)}" rel="noreferrer">${escapeHtml(
-          safeConversation.sourceUrl
-        )}</a></div>
-        <div><strong>Exported:</strong> ${escapeHtml(safeConversation.exportedAt)}</div>
-        <div><strong>Messages:</strong> ${safeConversation.messageCount}</div>
-        <div><strong>Completeness:</strong> ${escapeHtml(safeConversation.completeness.status)}</div>
-      </section>${warningsSection}
-    </header>
+${renderHeader(safeConversation, title, options)}
+    <section class="messages" aria-label="Conversation">
 ${messages}
-    <footer>This file was generated locally by extension from content visible in the current conversation.</footer>
+    </section>
+    <footer>Generated locally by Jelluvi from content visible in this conversation.</footer>
   </main>
 </body>
 </html>
@@ -91,84 +318,221 @@ ${messages}
   return createRenderedFile(safeConversation, "html", "text/html;charset=utf-8", html, options);
 }
 
-function renderWarningsSection(warnings: readonly string[]): string {
-  if (warnings.length === 0) {
+function renderHeader(
+  conversation: ConversationExport,
+  title: string,
+  options: HtmlRendererOptions
+): string {
+  const metadata = options.includeMetadata === false ? "" : renderMetadata(conversation);
+  const captureStatus = renderCaptureStatus(conversation);
+
+  return `    <header class="conversation-header">
+      <h1>${escapeHtml(title)}</h1>${metadata}${captureStatus}
+    </header>`;
+}
+
+function renderMetadata(conversation: ConversationExport): string {
+  const sourceHref =
+    conversation.sourceUrl.trim().length > 0 ? safeHref(conversation.sourceUrl) : undefined;
+  const source =
+    sourceHref === undefined
+      ? ""
+      : `<span class="meta-item"><strong>Source</strong> <a href="${sourceHref}" rel="noopener noreferrer" target="_blank">${escapeHtml(
+          displayHost(conversation.sourceUrl)
+        )}</a></span>`;
+
+  return `
+      <section class="meta" aria-label="Export metadata">
+        <span class="meta-item"><strong>Platform</strong> ${escapeHtml(conversation.platformLabel)}</span>
+        <span class="meta-item"><strong>Exported</strong> <time datetime="${escapeAttribute(
+          conversation.exportedAt
+        )}">${escapeHtml(formatDisplayDateTime(conversation.exportedAt))}</time></span>
+        <span class="meta-item"><strong>Messages</strong> ${conversation.messageCount}</span>${source}
+      </section>`;
+}
+
+function renderCaptureStatus(conversation: ConversationExport): string {
+  if (!shouldShowCaptureStatus(conversation)) {
     return "";
   }
 
+  const warnings = [
+    ...conversation.completeness.warnings,
+    ...conversation.completeness.platformWarnings
+  ];
+  const status = formatCaptureStatus(conversation.completeness.status);
+  const warningList =
+    warnings.length === 0
+      ? ""
+      : `<ul>${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>`;
+
   return `
-      <section class="warnings" aria-label="Completeness warnings">
-        <strong>Warnings</strong>
-        <ul>
-${warnings.map((warning) => `          <li>${escapeHtml(warning)}</li>`).join("\n")}
-        </ul>
+      <section class="capture-status" aria-label="Capture status">
+        <strong>${escapeHtml(status)}</strong>${warningList}
       </section>`;
 }
 
 function renderMessage(message: ExportedMessage): string {
-  const messageMeta = renderMessageMeta(message);
+  const role = normalizeRoleClass(message.role);
+  const meta = renderMessageMeta(message);
+  const attachments = renderAttachments(getMessageAttachments(message));
 
-  return `    <article class="message">
-      <h2>${message.index + 1}. ${escapeHtml(normalizeSingleLine(message.authorLabel))}</h2>
-      <div class="message-meta">${escapeHtml(messageMeta)}</div>
-      <div class="message-body">${renderMessageBody(message)}</div>
-    </article>`;
+  return `      <article class="message message--${role}">
+        <header class="message-header">
+          <span class="message-number" aria-label="Message ${message.index + 1}">${message.index + 1}</span>
+          <h2>${escapeHtml(normalizeSingleLine(message.authorLabel))}</h2>
+        </header>${meta}
+        ${attachments}
+        <div class="message-body">${renderMessageBody(message)}</div>
+      </article>`;
 }
 
 function renderMessageMeta(message: ExportedMessage): string {
-  const parts = [`Role: ${message.role}`];
+  const parts: string[] = [];
 
-  if (message.model !== undefined) {
-    parts.push(`Model: ${message.model}`);
+  if (message.model !== undefined && message.model.trim().length > 0) {
+    parts.push(`<span>${escapeHtml(message.model)}</span>`);
   }
 
-  if (message.createdAt !== undefined) {
-    parts.push(`Created: ${message.createdAt}`);
+  if (message.createdAt !== undefined && message.createdAt.trim().length > 0) {
+    parts.push(
+      `<time datetime="${escapeAttribute(message.createdAt)}">${escapeHtml(
+        formatDisplayDateTime(message.createdAt)
+      )}</time>`
+    );
   }
 
-  return parts.join(" - ");
+  return parts.length === 0 ? "" : `<div class="message-meta">${parts.join("")}</div>`;
 }
 
 function renderMessageBody(message: ExportedMessage): string {
-  const imageRefs = renderImageRefs(message.images);
-  const advancedContent = renderAdvancedSections(message);
   let body: string;
 
   if (message.markdown !== undefined && message.markdown.trim().length > 0) {
-    body = markdownToHtml(message.markdown, message.codeBlocks);
+    body = renderSemanticMarkdown(message.markdown);
   } else {
-    body = textToHtml(message.text, message.codeBlocks);
+    body = renderPlainText(message.text);
   }
 
-  return `${body}${imageRefs}${advancedContent}`;
+  if (message.codeBlocks.length > 0 && !containsFence(message.markdown ?? "")) {
+    body += message.codeBlocks.map(renderExportedCodeBlock).join("");
+  }
+
+  return `${body}${renderImages(message.images)}${renderSources(message.sources ?? [])}${renderCanvas(
+    message
+  )}${renderThinking(message)}`;
 }
 
-function renderAdvancedSections(message: ExportedMessage): string {
-  return [
-    renderSourcesSection(message),
-    renderCanvasSection(message),
-    renderThinkingSection(message)
-  ].join("");
-}
-
-function renderSourcesSection(message: ExportedMessage): string {
-  const sources = message.sources ?? [];
-
-  if (sources.length === 0) {
+function renderAttachments(attachments: readonly ExportedAttachmentRef[]): string {
+  if (attachments.length === 0) {
     return "";
   }
 
-  return `<section class="advanced-section" aria-label="Sources"><h3>Sources</h3><ul>${sources
-    .map(
-      (source) =>
-        `<li>${escapeHtml(formatSourceKindLabel(source.kind))}: <a href="${safeHref(
-          source.url
-        )}" rel="noreferrer">${escapeHtml(source.title)}</a>${source.snippet ? ` - ${escapeHtml(source.snippet)}` : ""}</li>`
-    )
-    .join("")}</ul></section>`;
+  return `<section class="attachment-grid" aria-label="Attachments">${attachments
+    .map(renderAttachment)
+    .join("")}</section>`;
 }
 
-function renderCanvasSection(message: ExportedMessage): string {
+function renderAttachment(attachment: ExportedAttachmentRef): string {
+  const href = attachment.url === undefined ? undefined : safeHref(attachment.url);
+  const hasPreview =
+    attachment.kind === "website" &&
+    attachment.previewHtml !== undefined &&
+    attachment.previewHtml.trim().length > 0;
+  const tag = href === undefined || hasPreview ? "div" : "a";
+  const linkAttributes =
+    tag === "a" ? ` href="${href}" rel="noopener noreferrer" target="_blank"` : "";
+  const detailParts = [
+    formatAttachmentLabel(attachment),
+    formatFileSize(attachment.sizeBytes)
+  ].filter((part): part is string => part !== undefined && part.length > 0);
+  const warning =
+    attachment.warning === undefined || attachment.warning.trim().length === 0
+      ? ""
+      : `<p class="attachment-warning">${escapeHtml(attachment.warning.trim())}</p>`;
+  const preview =
+    hasPreview && attachment.previewHtml !== undefined
+      ? `<iframe class="website-preview" loading="lazy" sandbox="" srcdoc="${escapeAttribute(
+          sanitizeStaticPreviewHtml(attachment.previewHtml)
+        )}" title="${escapeAttribute(`${attachment.name} preview`)}"></iframe>`
+      : "";
+  const openLink =
+    hasPreview && href !== undefined
+      ? `<a class="attachment-open-link" href="${href}" rel="noopener noreferrer" target="_blank">Open website</a>`
+      : "";
+
+  return `<${tag} class="attachment-card attachment-card--${attachment.kind}"${linkAttributes}>
+    <span aria-hidden="true" class="attachment-icon">${escapeHtml(attachmentBadge(attachment))}</span>
+    <span class="attachment-copy"><strong>${escapeHtml(attachment.name)}</strong><span>${escapeHtml(
+      detailParts.join(" · ")
+    )}</span>${openLink}</span>${warning}${preview}
+  </${tag}>`;
+}
+
+function renderImages(images: readonly ExportedImageRef[]): string {
+  const visibleImages = deduplicateImages(images).filter((image) => !isLikelySourceIcon(image));
+
+  if (visibleImages.length === 0) {
+    return "";
+  }
+
+  return `<section class="media-grid" aria-label="Images">${visibleImages
+    .map(renderImageCard)
+    .join("")}</section>`;
+}
+
+function renderImageCard(image: ExportedImageRef): string {
+  const label = image.alt?.trim() || "Image";
+  const source = image.src ?? image.localFilename;
+  const href =
+    source !== undefined && isSafeExternalImageUrl(source) ? safeHref(source) : undefined;
+  const dimensions =
+    image.width === undefined || image.height === undefined
+      ? ""
+      : `${image.width} × ${image.height}`;
+  const detail =
+    image.omittedReason === "embedded_image_omitted"
+      ? "Embedded image omitted from the standalone file"
+      : dimensions || renderImageReferenceText(image);
+  const tag = href === undefined ? "div" : "a";
+  const attributes =
+    href === undefined ? "" : ` href="${href}" rel="noopener noreferrer" target="_blank"`;
+
+  return `<${tag} class="media-card"${attributes}><span aria-hidden="true" class="media-icon">IMG</span><span class="media-copy"><strong>${escapeHtml(
+    label
+  )}</strong><span>${escapeHtml(detail)}</span></span></${tag}>`;
+}
+
+function renderSources(sources: readonly ExportedSourceRef[]): string {
+  const uniqueSources = deduplicateSources(sources);
+
+  if (uniqueSources.length === 0) {
+    return "";
+  }
+
+  return `<section class="source-grid" aria-label="Sources">${uniqueSources
+    .map((source) => {
+      const href = safeHref(source.url);
+      const host = displayHost(source.url);
+      const title =
+        source.title.trim().length > 0 && !/^\d+$/u.test(source.title.trim())
+          ? source.title.trim()
+          : host;
+      const snippet = compactSnippet(source.snippet);
+      const tag = href === undefined ? "div" : "a";
+      const attributes =
+        href === undefined ? "" : ` href="${href}" rel="noopener noreferrer" target="_blank"`;
+
+      return `<${tag} class="source-card"${attributes}><span class="source-card-header"><span class="source-copy"><strong>${escapeHtml(
+        title
+      )}</strong><span>${escapeHtml(host)}</span></span><span class="source-kind">${escapeHtml(
+        formatSourceKindLabel(source.kind)
+      )}</span></span>${snippet === undefined ? "" : `<span class="source-snippet">${escapeHtml(snippet)}</span>`}</${tag}>`;
+    })
+    .join("")}</section>`;
+}
+
+function renderCanvas(message: ExportedMessage): string {
   const canvases = message.canvas ?? [];
 
   if (canvases.length === 0) {
@@ -177,264 +541,216 @@ function renderCanvasSection(message: ExportedMessage): string {
 
   return `<section class="advanced-section" aria-label="Canvas"><h3>Canvas</h3><ul>${canvases
     .map((canvas) => {
+      const href = canvas.url === undefined ? undefined : safeHref(canvas.url);
       const title = escapeHtml(canvas.title ?? "Canvas");
       const link =
-        canvas.url !== undefined
-          ? ` <a href="${safeHref(canvas.url)}" rel="noreferrer">Open canvas</a>`
-          : "";
+        href === undefined
+          ? title
+          : `<a href="${href}" rel="noopener noreferrer" target="_blank">${title}</a>`;
       const body = [canvas.text, canvas.warning]
-        .filter((part): part is string => part !== undefined && part.length > 0)
-        .map(escapeHtml)
+        .filter((part): part is string => part !== undefined && part.trim().length > 0)
         .join(" ");
 
-      return `<li>${title}${link}${body.length > 0 ? ` - ${body}` : ""}</li>`;
+      return `<li>${link}${body.length > 0 ? ` — ${escapeHtml(body)}` : ""}</li>`;
     })
     .join("")}</ul></section>`;
 }
 
-function renderThinkingSection(message: ExportedMessage): string {
+function renderThinking(message: ExportedMessage): string {
   const blocks = message.thinkingBlocks ?? [];
 
   if (blocks.length === 0) {
     return "";
   }
 
-  return `<section class="advanced-section" aria-label="Visible thinking or reasoning"><h3>Visible thinking / reasoning</h3><ul>${blocks
+  return `<section class="advanced-section" aria-label="Visible reasoning"><h3>Visible reasoning</h3><ul>${blocks
     .map((block) => {
-      const title = block.title !== undefined ? `${block.title}: ` : "";
-      return `<li>${escapeHtml(`${title}${block.text}`)}</li>`;
+      const title =
+        block.title === undefined || block.title.trim().length === 0
+          ? ""
+          : `<strong>${escapeHtml(block.title.trim())}</strong> — `;
+      return `<li>${title}${escapeHtml(block.text)}</li>`;
     })
     .join("")}</ul></section>`;
 }
 
-function markdownToHtml(markdown: string, codeBlocks: readonly ExportedCodeBlock[]): string {
-  const normalized = markdown.replace(/\r\n?/g, "\n").trim();
-  const lines = normalized.split("\n");
-  const blocks: string[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    if (lines[index].trim() === "") {
-      index += 1;
-      continue;
-    }
-
-    if (lines[index].startsWith("```")) {
-      const parsed = parseFencedCode(lines, index);
-      blocks.push(renderCodeBlock(parsed.language, parsed.code));
-      index = parsed.nextIndex;
-      continue;
-    }
-
-    if (isTableStart(lines, index)) {
-      const parsed = parseTable(lines, index);
-      blocks.push(parsed.html);
-      index = parsed.nextIndex;
-      continue;
-    }
-
-    const paragraph: string[] = [];
-
-    while (
-      index < lines.length &&
-      lines[index].trim() !== "" &&
-      !lines[index].startsWith("```") &&
-      !isTableStart(lines, index)
-    ) {
-      paragraph.push(lines[index]);
-      index += 1;
-    }
-
-    blocks.push(`<p>${renderInlineMarkdown(paragraph.join("\n"))}</p>`);
-  }
-
-  if (codeBlocks.length > 0 && !containsFence(normalized)) {
-    blocks.push(
-      ...codeBlocks.map((codeBlock) => renderCodeBlock(codeBlock.language, codeBlock.code))
-    );
-  }
-
-  return blocks.join("");
-}
-
-function textToHtml(text: string, codeBlocks: readonly ExportedCodeBlock[]): string {
-  const blocks = text
-    .replace(/\r\n?/g, "\n")
+function renderPlainText(text: string): string {
+  return text
+    .replace(/\r\n?/gu, "\n")
     .trim()
-    .split(/\n{2,}/)
+    .split(/\n{2,}/u)
     .filter((paragraph) => paragraph.trim().length > 0)
-    .map((paragraph) => `<p>${escapeHtml(paragraph.trim()).replace(/\n/g, "<br>")}</p>`);
-
-  blocks.push(
-    ...codeBlocks.map((codeBlock) => renderCodeBlock(codeBlock.language, codeBlock.code))
-  );
-
-  return blocks.join("");
-}
-
-function renderImageRefs(images: readonly ExportedImageRef[]): string {
-  if (images.length === 0) {
-    return "";
-  }
-
-  return `<section class="image-refs" aria-label="Image references"><h3>Images</h3><ul>${images
-    .map((image) => `<li>${renderImageRef(image)}</li>`)
-    .join("")}</ul></section>`;
-}
-
-function renderImageRef(image: ExportedImageRef): string {
-  const label = escapeHtml(image.alt?.trim() || "Image");
-  const source = image.src ?? image.localFilename;
-  const dimensions = renderDimensions(image);
-
-  if (source !== undefined && isSafeExternalImageUrl(source)) {
-    return `${label}: <a href="${safeHref(source)}" rel="noreferrer">${escapeHtml(
-      source
-    )}</a>${dimensions}`;
-  }
-
-  return escapeHtml(renderImageReferenceText(image));
-}
-
-function renderDimensions(image: ExportedImageRef): string {
-  if (image.width === undefined || image.height === undefined) {
-    return "";
-  }
-
-  return ` (${image.width}x${image.height})`;
-}
-
-function parseFencedCode(
-  lines: readonly string[],
-  startIndex: number
-): { readonly language: string | undefined; readonly code: string; readonly nextIndex: number } {
-  const openingFence = lines[startIndex];
-  const language = openingFence.replace(/^```/, "").trim() || undefined;
-  const codeLines: string[] = [];
-  let index = startIndex + 1;
-
-  while (index < lines.length && !lines[index].startsWith("```")) {
-    codeLines.push(lines[index]);
-    index += 1;
-  }
-
-  return {
-    language,
-    code: codeLines.join("\n"),
-    nextIndex: index < lines.length ? index + 1 : index
-  };
-}
-
-function renderCodeBlock(language: string | undefined, code: string): string {
-  const classAttribute =
-    language === undefined || language.trim().length === 0
-      ? ""
-      : ` class="language-${escapeAttribute(language.replace(/[^A-Za-z0-9_-]/g, ""))}"`;
-
-  return `<pre><code${classAttribute}>${escapeHtml(code.replace(/\r\n?/g, "\n").replace(/\n*$/g, ""))}</code></pre>`;
-}
-
-function isTableStart(lines: readonly string[], index: number): boolean {
-  return lines[index]?.trim().startsWith("|") === true && isTableDivider(lines[index + 1]);
-}
-
-function isTableDivider(line: string | undefined): boolean {
-  if (line === undefined || !line.trim().startsWith("|")) {
-    return false;
-  }
-
-  return parseTableRow(line).every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")));
-}
-
-function parseTable(
-  lines: readonly string[],
-  startIndex: number
-): { readonly html: string; readonly nextIndex: number } {
-  const header = parseTableRow(lines[startIndex]);
-  const bodyRows: string[][] = [];
-  let index = startIndex + 2;
-
-  while (index < lines.length && lines[index].trim().startsWith("|")) {
-    bodyRows.push(parseTableRow(lines[index]));
-    index += 1;
-  }
-
-  const headerHtml = header.map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`).join("");
-  const bodyHtml = bodyRows
     .map(
-      (row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join("")}</tr>`
+      (paragraph) =>
+        `<p>${renderInlineMarkdown(escapeMarkdownCharacters(paragraph.trim()).replace(/\n/gu, "  \n"))}</p>`
     )
     .join("");
-
-  return {
-    html: `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`,
-    nextIndex: index
-  };
 }
 
-function parseTableRow(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim());
-}
-
-function renderInlineMarkdown(input: string): string {
-  const linkPattern = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g;
-  let output = "";
-  let lastIndex = 0;
-  let match = linkPattern.exec(input);
-
-  while (match !== null) {
-    output += escapeHtml(input.slice(lastIndex, match.index));
-    output += `<a href="${safeHref(match[2])}" rel="noreferrer">${escapeHtml(match[1])}</a>`;
-    lastIndex = match.index + match[0].length;
-    match = linkPattern.exec(input);
-  }
-
-  output += escapeHtml(input.slice(lastIndex));
-
-  return output;
+function renderExportedCodeBlock(codeBlock: ExportedCodeBlock): string {
+  const language =
+    codeBlock.language === undefined
+      ? ""
+      : ` class="language-${escapeAttribute(codeBlock.language.replace(/[^A-Za-z0-9_-]/gu, ""))}"`;
+  return `<pre><code${language}>${escapeHtml(
+    codeBlock.code.replace(/\r\n?/gu, "\n").replace(/\n*$/gu, "")
+  )}</code></pre>`;
 }
 
 function containsFence(markdown: string): boolean {
-  return /^```/m.test(markdown);
+  return /^(\s*)(`{3,}|~{3,})/mu.test(markdown);
+}
+
+function deduplicateSources(sources: readonly ExportedSourceRef[]): readonly ExportedSourceRef[] {
+  const seen = new Set<string>();
+
+  return sources.filter((source) => {
+    const key = `${source.kind}:${canonicalUrl(source.url)}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function deduplicateImages(images: readonly ExportedImageRef[]): readonly ExportedImageRef[] {
+  const seen = new Set<string>();
+
+  return images.filter((image) => {
+    const key =
+      image.hash ??
+      image.src ??
+      image.localFilename ??
+      `${image.alt ?? ""}:${image.width ?? ""}:${image.height ?? ""}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function isLikelySourceIcon(image: ExportedImageRef): boolean {
+  const source = image.src?.toLocaleLowerCase() ?? "";
+  const alt = image.alt?.toLocaleLowerCase() ?? "";
+  const squareAndSmall =
+    image.width !== undefined &&
+    image.height !== undefined &&
+    image.width === image.height &&
+    image.width <= 128;
+
+  return (
+    source.includes("google.com/s2/favicons") ||
+    /(?:^|[/_.-])favicons?(?:[./?_-]|$)/u.test(source) ||
+    (squareAndSmall && /\b(source|citation|website|favicon|logo)\b/u.test(alt))
+  );
+}
+
+function compactSnippet(snippet: string | undefined): string | undefined {
+  if (snippet === undefined) {
+    return undefined;
+  }
+
+  const compact = snippet.replace(/\s+/gu, " ").trim();
+
+  if (compact.length === 0) {
+    return undefined;
+  }
+
+  return compact.length > 220 ? `${compact.slice(0, 217).trimEnd()}…` : compact;
+}
+
+function canonicalUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return value;
+  }
+}
+
+function displayHost(value: string): string {
+  try {
+    return new URL(value).hostname.replace(/^www\./u, "") || value;
+  } catch {
+    return value;
+  }
+}
+
+function formatCaptureStatus(status: ConversationExport["completeness"]["status"]): string {
+  switch (status) {
+    case "probably_complete":
+      return "Capture is probably complete";
+    case "partial":
+      return "Capture may be incomplete";
+    case "unknown":
+      return "Capture status is unknown";
+    default:
+      return "Capture notes";
+  }
+}
+
+function normalizeRoleClass(role: ExportedMessage["role"]): string {
+  return ["assistant", "other", "system", "tool", "user"].includes(role) ? role : "other";
 }
 
 function normalizeSingleLine(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return value.replace(/\s+/gu, " ").trim();
 }
 
-function collectWarnings(conversation: ConversationExport): readonly string[] {
-  return [...conversation.completeness.warnings, ...conversation.completeness.platformWarnings];
+function escapeMarkdownCharacters(value: string): string {
+  return value.replace(/([\\`*_[\]~])/gu, "\\$1");
 }
 
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+function sanitizeStaticPreviewHtml(input: string): string {
+  const boundedInput = input.slice(0, MAX_STATIC_PREVIEW_SOURCE_HTML);
+  const sanitized = boundedInput
+    .replace(/<\s*(script|iframe|object|embed|base|link|form)\b[\s\S]*?<\s*\/\s*\1\s*>/giu, "")
+    .replace(/<\s*(script|iframe|object|embed|base|link|form)\b[^>]*\/?>/giu, "")
+    .replace(/<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/giu, "")
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu, "")
+    .replace(
+      /\s+(?:(?:xlink:)?href|src|srcset|action|formaction|poster|background|manifest|ping|data)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu,
+      ""
+    )
+    .replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu, "")
+    .replace(/@import\s+[^;]+;?/giu, "")
+    .replace(/url\(\s*(['"]?)[\s\S]*?\1\s*\)/giu, "none")
+    .replace(/\b(?:javascript|data|https?):[^\s"'<>)]*/giu, "");
+  const policy =
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
+  const protectedHtml = `<meta http-equiv="Content-Security-Policy" content="${policy}">${sanitized}`;
+  const truncationNotice = "<p>Preview truncated by Jelluvi.</p>";
+
+  return protectedHtml.length > MAX_STATIC_PREVIEW_HTML
+    ? `${protectedHtml.slice(0, MAX_STATIC_PREVIEW_HTML - truncationNotice.length)}${truncationNotice}`
+    : protectedHtml;
 }
 
-function escapeAttribute(input: string): string {
-  return escapeHtml(input);
-}
-
-function safeHref(input: string): string {
-  return isSafeHrefValue(input) ? escapeAttribute(input) : "#";
-}
-
-function isSafeHrefValue(input: string): boolean {
-  try {
-    const parsed = new URL(input);
-    return (
-      parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:"
-    );
-  } catch {
-    return false;
+function attachmentBadge(attachment: ExportedAttachmentRef): string {
+  switch (attachment.kind) {
+    case "image":
+      return "IMG";
+    case "website":
+      return "WEB";
+    case "other":
+      return "FILE";
+    case "file": {
+      const extension = attachment.name.split(".").pop()?.toLocaleUpperCase();
+      return extension !== undefined &&
+        extension !== attachment.name.toLocaleUpperCase() &&
+        /^[A-Z0-9]{1,5}$/u.test(extension)
+        ? extension
+        : "FILE";
+    }
   }
 }
+
+const MAX_STATIC_PREVIEW_HTML = 250_000;
+const MAX_STATIC_PREVIEW_SOURCE_HTML = 1_000_000;

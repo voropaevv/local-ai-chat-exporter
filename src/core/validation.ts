@@ -2,11 +2,13 @@ import {
   isChatPlatform,
   isChatRole,
   isCompletenessStatus,
+  type ExportedAttachmentKind,
   type ExportedSourceKind,
   type ConversationExport
 } from "./schema";
 
 const SOURCE_KINDS = new Set<ExportedSourceKind>(["citation", "deep_research", "web_search"]);
+const ATTACHMENT_KINDS = new Set<ExportedAttachmentKind>(["file", "website", "image", "other"]);
 
 export type ValidationResult<T> =
   | {
@@ -85,6 +87,10 @@ function validateMessage(input: unknown, path: string, errors: string[]): void {
   validateArray(input.codeBlocks, `${path}.codeBlocks`, validateCodeBlock, errors);
   validateArray(input.images, `${path}.images`, validateImageRef, errors);
 
+  if (input.attachments !== undefined) {
+    validateArray(input.attachments, `${path}.attachments`, validateAttachmentRef, errors);
+  }
+
   if (input.sources !== undefined) {
     validateArray(input.sources, `${path}.sources`, validateSourceRef, errors);
   }
@@ -100,6 +106,28 @@ function validateMessage(input: unknown, path: string, errors: string[]): void {
   if (!isRecord(input.metadata)) {
     errors.push(`${path}.metadata must be a record`);
   }
+}
+
+function validateAttachmentRef(input: unknown, path: string, errors: string[]): void {
+  if (!isRecord(input)) {
+    errors.push(`${path} must be a record`);
+    return;
+  }
+
+  requireOptionalString(input, "id", errors, path);
+  if (
+    typeof input.kind !== "string" ||
+    !ATTACHMENT_KINDS.has(input.kind as ExportedAttachmentKind)
+  ) {
+    errors.push(`${path}.kind must be a supported attachment kind`);
+  }
+  requireString(input, "name", errors, path);
+  requireOptionalString(input, "description", errors, path);
+  requireOptionalString(input, "mimeType", errors, path);
+  requireOptionalNumber(input, "sizeBytes", errors, path);
+  requireOptionalString(input, "url", errors, path);
+  requireOptionalString(input, "previewHtml", errors, path);
+  requireOptionalString(input, "warning", errors, path);
 }
 
 function validateSourceRef(input: unknown, path: string, errors: string[]): void {

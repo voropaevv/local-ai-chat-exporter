@@ -53,6 +53,27 @@ export function sanitizeMessageImagesForOutput(message: ExportedMessage): Export
       code: omitDataImagePayloads(codeBlock.code)
     })),
     images: message.images.map(sanitizeImageRefForOutput),
+    ...(message.attachments !== undefined
+      ? {
+          attachments: message.attachments.map((attachment) => ({
+            ...attachment,
+            name: omitDataImagePayloads(attachment.name),
+            ...(attachment.description !== undefined
+              ? { description: omitDataImagePayloads(attachment.description) }
+              : {}),
+            ...(attachment.mimeType !== undefined
+              ? { mimeType: omitDataImagePayloads(attachment.mimeType) }
+              : {}),
+            ...(attachment.url !== undefined ? { url: omitDataImagePayloads(attachment.url) } : {}),
+            ...(attachment.previewHtml !== undefined
+              ? { previewHtml: omitDataImagePayloads(attachment.previewHtml) }
+              : {}),
+            ...(attachment.warning !== undefined
+              ? { warning: omitDataImagePayloads(attachment.warning) }
+              : {})
+          }))
+        }
+      : {}),
     metadata: sanitizeUnknownDataImagePayloads(message.metadata) as Readonly<
       Record<string, unknown>
     >

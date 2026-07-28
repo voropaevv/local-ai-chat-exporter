@@ -25,11 +25,17 @@ import { createPreviewRenderState } from "./preview-rendering";
 import {
   applyPreviewMessageSelection,
   buildPreviewSelectionOptions,
+  createPreviewMessageSummary,
   togglePreviewMessageSelection,
   type PreviewSelectionState
 } from "./preview-selection";
 import { readStoredRedactionSettings } from "./redaction-storage";
-import { applyThemePreference, readThemePreference } from "./theme-preference";
+import {
+  applyThemePreference,
+  readThemePreference,
+  resolveThemePreference,
+  type ResolvedThemePreference
+} from "./theme-preference";
 
 type PreviewLoadState =
   | { readonly status: "loading" }
@@ -42,6 +48,7 @@ export function PreviewApp() {
   const [actionStatus, setActionStatus] = useState("");
   const [exportSettings, setExportSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
   const [projectLabel, setProjectLabel] = useState("");
+  const [previewTheme, setPreviewTheme] = useState<ResolvedThemePreference>("light");
   const [rangeEndIndex, setRangeEndIndex] = useState(1);
   const [rangeStartIndex, setRangeStartIndex] = useState(1);
   const [redaction, setRedaction] = useState<RedactionSettings>(DEFAULT_REDACTION_SETTINGS);
@@ -54,7 +61,9 @@ export function PreviewApp() {
   useEffect(() => {
     let cancelled = false;
 
-    applyThemePreference(readThemePreference());
+    const themePreference = readThemePreference();
+    applyThemePreference(themePreference);
+    setPreviewTheme(resolveThemePreference(themePreference));
 
     Promise.all([readStoredExportSettings(), readStoredRedactionSettings()])
       .then(([storedExportSettings, storedRedaction]) => {
@@ -145,8 +154,8 @@ export function PreviewApp() {
     ]
   );
   const renderState = useMemo(
-    () => createPreviewRenderState(selectableConversation, exportOptions),
-    [exportOptions, selectableConversation]
+    () => createPreviewRenderState(selectableConversation, exportOptions, { theme: previewTheme }),
+    [exportOptions, previewTheme, selectableConversation]
   );
   const loading = loadState.status === "loading" || !settingsReady;
   const isReady = !loading && loadState.status === "ready" && renderState.status === "ready";
@@ -262,9 +271,7 @@ export function PreviewApp() {
           <div>
             <p className="brand-kicker">Jelluvi</p>
             <h1>{sourceConversation?.title ?? "Preview"}</h1>
-            <p className="muted">
-              {loading ? "Loading…" : renderState.statusMessage}
-            </p>
+            <p className="muted">{loading ? "Loading…" : renderState.statusMessage}</p>
           </div>
         </div>
         <div className="preview-toolbar" aria-label="Preview actions">
@@ -352,6 +359,19 @@ export function PreviewApp() {
             <option value="assistant_only">Assistant</option>
             <option value="range">Range</option>
           </select>
+          <label className="check-row preview-reasoning-control">
+            <input
+              checked={exportSettings.includeReasoning}
+              onChange={(event) =>
+                setExportSettings((current) => ({
+                  ...current,
+                  includeReasoning: event.currentTarget.checked
+                }))
+              }
+              type="checkbox"
+            />
+            <span>Include visible reasoning</span>
+          </label>
           {scope === "range" ? (
             <div className="preview-range-controls">
               <label>
@@ -399,7 +419,7 @@ export function PreviewApp() {
       ) : renderState.status === "ready" ? (
         <iframe
           className="preview-frame"
-          sandbox=""
+          sandbox="allow-popups allow-popups-to-escape-sandbox"
           srcDoc={renderState.html.bytes}
           title="Conversation preview"
         />
@@ -470,7 +490,7 @@ function MessageSelector({ conversation, onChange, selectedMessageIds }: Message
                 <strong>
                   {message.index + 1}. {message.authorLabel}
                 </strong>
-                <span>{compactMessageText(message.text)}</span>
+                <span>{createPreviewMessageSummary(message)}</span>
               </span>
             </label>
           </li>
@@ -560,11 +580,6 @@ function parseTags(value: string): readonly string[] {
     .split(",")
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
-}
-
-function compactMessageText(value: string): string {
-  const compact = value.replace(/\s+/gu, " ").trim();
-  return compact.length > 96 ? `${compact.slice(0, 93)}…` : compact;
 }
 
 function clampRangeValue(value: number, messageCount: number): number {

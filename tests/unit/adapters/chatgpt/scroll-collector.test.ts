@@ -1,5 +1,5 @@
 import { JSDOM } from "jsdom";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { findChatGptScrollContainer } from "../../../../src/adapters/chatgpt/scroll-container";
 import { collectChatGptConversation } from "../../../../src/adapters/chatgpt/scroll-collector";
@@ -129,6 +129,243 @@ describe("collectChatGptConversation", () => {
     expect(result.completeness.firstMessagePreview).toBe("First user message");
     expect(result.completeness.lastMessagePreview).toBe("Final assistant message");
     expect(container.scrollTop).toBe(1000);
+  });
+
+  test("uses an 85 percent viewport step by default", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 400, scrollTop: 0 });
+    renderMessages(container, ["m1|user|First user message"]);
+    const scrollPixels: number[] = [];
+
+    await collectChatGptConversation({
+      document,
+      maxSteps: 1,
+      scrollBy: (element, pixels) => {
+        scrollPixels.push(pixels);
+        element.scrollTop += pixels;
+      },
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(scrollPixels).toEqual([85]);
+  });
+
+  test("keeps distinct attachment-only turns when both have stable ids", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+    const result = await collectChatGptConversation({
+      document,
+      extractMessages: () => [
+        {
+          attachments: [{ kind: "file", name: "one.md" }],
+          authorLabel: "User",
+          codeBlocks: [],
+          id: "attachment-turn-1",
+          images: [],
+          index: 0,
+          metadata: {},
+          role: "user",
+          text: ""
+        },
+        {
+          attachments: [{ kind: "file", name: "two.md" }],
+          authorLabel: "User",
+          codeBlocks: [],
+          id: "attachment-turn-2",
+          images: [],
+          index: 1,
+          metadata: {},
+          role: "user",
+          text: ""
+        }
+      ],
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual([
+      "attachment-turn-1",
+      "attachment-turn-2"
+    ]);
+  });
+
+  test("does not deeply re-extract stable message ids already collected", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 300, scrollTop: 0 });
+    renderMessages(container, ["stable-message|assistant|Stable answer"]);
+    const messageElement = container.querySelector("[data-message-author-role]");
+
+    if (!messageElement) {
+      throw new Error("fixture missing stable message");
+    }
+
+    const cloneSpy = vi.spyOn(messageElement, "cloneNode");
+
+    try {
+      const result = await collectChatGptConversation({
+        document,
+        maxSteps: 2,
+        scrollContainer: container,
+        waitForDomSettle: () => Promise.resolve()
+      });
+
+      expect(result.messages.map((message) => message.id)).toEqual(["stable-message"]);
+      expect(result.duplicateCount).toBe(2);
+      expect(cloneSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      cloneSpy.mockRestore();
+    }
+  });
+
+  test("re-extracts and replaces a stable message when its visible revision changes", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 300, scrollTop: 0 });
+    renderMessages(container, ["stable-message|assistant|Partial answer"]);
+    const messageElement = container.querySelector("[data-message-author-role]");
+
+    if (!messageElement) {
+      throw new Error("fixture missing stable message");
+    }
+
+    const cloneSpy = vi.spyOn(messageElement, "cloneNode");
+    let hydrated = false;
+
+    try {
+      const result = await collectChatGptConversation({
+        document,
+        maxSteps: 2,
+        scrollBy: (element, pixels) => {
+          element.scrollTop += pixels;
+
+          if (!hydrated) {
+            hydrated = true;
+            messageElement.innerHTML = `
+              <div class="markdown"><p>Complete answer with the loaded result.</p></div>
+              <section data-jelluvi-advanced-kind="activity">
+                <h3>Activity</h3>
+                <p>Loaded the final attachment metadata.</p>
+              </section>
+            `;
+          }
+        },
+        scrollContainer: container,
+        waitForDomSettle: () => Promise.resolve()
+      });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]).toMatchObject({
+        id: "stable-message",
+        text: "Complete answer with the loaded result.",
+        thinkingBlocks: [
+          {
+            text: "Loaded the final attachment metadata.",
+            title: "Activity"
+          }
+        ]
+      });
+      expect(cloneSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      cloneSpy.mockRestore();
+    }
+  });
+
+  test("waits for DOM quiet but never longer than the 300 ms hard cap", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+      renderMessages(container, ["m1|user|First user message"]);
+      let settled = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      for (let elapsed = 60; elapsed <= 240; elapsed += 60) {
+        await vi.advanceTimersByTimeAsync(60);
+        container.append(document.createElement("span"));
+        await Promise.resolve();
+        expect(settled).toBe(false);
+      }
+
+      await vi.advanceTimersByTimeAsync(59);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual(["m1"]);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("cancels an adaptive DOM wait without waiting for its timeout", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+      const controller = new AbortController();
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+      renderMessages(container, ["m1|user|First user message"]);
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container,
+        signal: controller.signal
+      });
+
+      controller.abort();
+      const result = await resultPromise;
+
+      expect(result.aborted).toBe(true);
+      expect(result.warnings).toContain("Scan was cancelled.");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("supports cancellation with AbortSignal", async () => {

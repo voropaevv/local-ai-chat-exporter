@@ -50,6 +50,9 @@ describe("popup and settings UX source", () => {
     expect(popupSource).not.toContain("AdvancedExportOptions");
     expect(previewSource).toContain("handleOpenPdf");
     expect(previewSource).toContain("MessageSelector");
+    expect(previewSource).toContain("Include visible reasoning");
+    expect(previewSource).toContain("includeReasoning: event.currentTarget.checked");
+    expect(previewSource).toContain('sandbox="allow-popups allow-popups-to-escape-sandbox"');
     expect(previewSource).toContain("saveLocalLibraryRecord");
   });
 

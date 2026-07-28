@@ -11,11 +11,15 @@ Original SHA256 values:
 - `NotoSans-Bold.ttf`: `c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a`
 - `NotoSansMono-Regular.ttf`: `d9e2b23d19f8230be7146f409a52b1d23117e635e28f2e2892cf91b7382f325b`
 
-The bundled files retain common Latin, Greek, Cyrillic, punctuation, currency, arrows, mathematical
-operators, geometric shapes, and the replacement character. They are produced with FontTools using
-this Unicode selection:
+The bundled files retain the glyphs available in their source fonts for common Latin, Greek,
+Cyrillic, punctuation, currency, arrows, mathematical operators, geometric shapes, and the
+replacement character. They are produced with FontTools using this Unicode selection:
 
 `U+0020-024F,U+0300-052F,U+1E00-1EFF,U+2000-206F,U+20A0-20CF,U+2100-214F,U+2190-22FF,U+25A0-25FF,U+FFFD`
+
+The selection is an upper bound: it cannot add glyphs missing from an original font. PDF text uses
+the bundled monospace font as a per-glyph fallback when Regular or Bold lacks a selected symbol, so
+operators such as `≤`, `≥`, and `≠` remain intact instead of becoming replacement characters.
 
 The subsets retain layout features, names, symbol and legacy cmaps, and the recommended/notdef
 glyphs. Hinting is removed because PDF viewers render the vector outlines directly. Each subset is
