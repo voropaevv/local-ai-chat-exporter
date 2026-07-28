@@ -1,31 +1,50 @@
 import type { ExportedImageRef } from "../../core/schema";
+import { CHATGPT_ATTACHMENT_SELECTORS } from "./extract-attachments";
 
-export function extractImageRefs(root: Element): readonly ExportedImageRef[] {
-  return Array.from(root.querySelectorAll("img"))
-    .map((image) => {
-      const src = image.getAttribute("src")?.trim() || image.currentSrc.trim() || undefined;
-      const width =
-        parsePositiveInteger(image.getAttribute("width")) ?? parseDimension(image.width);
-      const height =
-        parsePositiveInteger(image.getAttribute("height")) ?? parseDimension(image.height);
-      const alt = image.getAttribute("alt")?.trim() || undefined;
+export interface ExtractImageRefsOptions {
+  readonly chatGptSpecificFiltering?: boolean;
+}
 
-      return {
-        element: image,
-        ...(alt ? { alt } : {}),
-        ...(src?.startsWith("data:") ? { dataUri: src } : {}),
-        ...(src && !src.startsWith("data:") ? { src } : {}),
-        ...(width ? { width } : {}),
-        ...(height ? { height } : {})
-      };
-    })
-    .filter((imageRef) => isContentImage(imageRef))
+export function extractImageRefs(
+  root: Element,
+  options: ExtractImageRefsOptions = {}
+): readonly ExportedImageRef[] {
+  return collectCandidateImageRefs(root)
+    .filter((imageRef) => isContentImage(imageRef, options))
     .map(toExportedImageRef);
+}
+
+export function removeNonContentImageElements(
+  root: Element,
+  options: ExtractImageRefsOptions = {}
+): void {
+  collectCandidateImageRefs(root)
+    .filter((imageRef) => !isContentImage(imageRef, options))
+    .forEach((imageRef) => imageRef.element.remove());
 }
 
 type CandidateImageRef = ExportedImageRef & {
   readonly element: HTMLImageElement;
 };
+
+function collectCandidateImageRefs(root: Element): readonly CandidateImageRef[] {
+  return Array.from(root.querySelectorAll("img")).map((image) => {
+    const src = image.getAttribute("src")?.trim() || image.currentSrc.trim() || undefined;
+    const width = parsePositiveInteger(image.getAttribute("width")) ?? parseDimension(image.width);
+    const height =
+      parsePositiveInteger(image.getAttribute("height")) ?? parseDimension(image.height);
+    const alt = image.getAttribute("alt")?.trim() || undefined;
+
+    return {
+      element: image,
+      ...(alt ? { alt } : {}),
+      ...(src?.startsWith("data:") ? { dataUri: src } : {}),
+      ...(src && !src.startsWith("data:") ? { src } : {}),
+      ...(width ? { width } : {}),
+      ...(height ? { height } : {})
+    };
+  });
+}
 
 function toExportedImageRef(image: CandidateImageRef): ExportedImageRef {
   return {
@@ -70,12 +89,40 @@ function isVisibleElement(element: Element): boolean {
   return true;
 }
 
-function isContentImage(image: CandidateImageRef): boolean {
+function isContentImage(image: CandidateImageRef, options: ExtractImageRefsOptions): boolean {
   if (!isVisibleElement(image.element)) {
     return false;
   }
 
   if (isInsideUiControl(image.element)) {
+    return false;
+  }
+
+  if (options.chatGptSpecificFiltering === true) {
+    if (
+      isCitationDecoration(image.element) ||
+      image.element.closest(CHATGPT_ATTACHMENT_SELECTORS)
+    ) {
+      return false;
+    }
+
+    if (
+      image.element.closest(
+        [
+          "[data-jelluvi-participant]",
+          "[data-participant-name]",
+          "[data-testid*='participant' i]",
+          "[data-testid*='author-badge' i]",
+          "[data-testid*='message-author' i]",
+          "[aria-label*='sent by' i]"
+        ].join(",")
+      )
+    ) {
+      return false;
+    }
+  }
+
+  if (isFaviconUrl(image.src)) {
     return false;
   }
 
@@ -88,6 +135,38 @@ function isContentImage(image: CandidateImageRef): boolean {
   }
 
   return Boolean(image.src ?? image.dataUri);
+}
+
+function isCitationDecoration(element: Element): boolean {
+  return (
+    element.closest(
+      [
+        "sup",
+        "[data-source-id]",
+        "[data-citation-id]",
+        "[data-testid*='citation' i]",
+        "[data-testid*='source' i]",
+        "a[aria-label*='source' i]",
+        "a[aria-label*='citation' i]"
+      ].join(",")
+    ) !== null
+  );
+}
+
+function isFaviconUrl(src: string | undefined): boolean {
+  if (src === undefined) {
+    return false;
+  }
+
+  try {
+    const url = new URL(src);
+    return (
+      /(?:^|\.)google\.[^/]+$/iu.test(url.hostname) &&
+      (url.pathname.includes("/s2/favicons") || url.pathname.includes("/favicon"))
+    );
+  } catch {
+    return /\bfavicon(?:s)?\b/iu.test(src);
+  }
 }
 
 function isInsideUiControl(element: Element): boolean {
@@ -146,7 +225,6 @@ function hasStrongContentSignal(image: CandidateImageRef): boolean {
 
   return (
     image.element.closest("figure, [data-testid*='image' i], [data-testid*='attachment' i]") !==
-      null ||
-    /\b(diagram|chart|photo|image|screenshot|attachment|uploaded)\b/.test(alt)
+      null || /\b(diagram|chart|photo|image|screenshot|attachment|uploaded)\b/.test(alt)
   );
 }

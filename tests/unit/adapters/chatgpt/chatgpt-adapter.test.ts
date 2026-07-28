@@ -130,14 +130,6 @@ describe("extractVisibleChatGptMessages", () => {
     expect(assistant.sources).toEqual([
       {
         id: "dr-citation-1",
-        kind: "citation",
-        snippet:
-          "Genome-wide evidence supports a cautious interpretation 1 while current web results show updated guidance.",
-        title: "1",
-        url: "https://example.org/genome-paper"
-      },
-      {
-        id: "deep-source-1",
         kind: "deep_research",
         snippet: "Genome Paper Peer-reviewed source for the Deep Research report.",
         title: "Genome Paper",
@@ -163,6 +155,230 @@ describe("extractVisibleChatGptMessages", () => {
         url: "https://chatgpt.com/canvas/local-canvas",
         warning:
           "Canvas content was detected but could not be extracted from the current DOM. Open the canvas link or capture it manually."
+      }
+    ]);
+  });
+
+  test("extracts file cards separately from user text and keeps attachment-only messages", () => {
+    const messages = extractVisibleChatGptMessages(loadFixture("attachments-and-artifact.html"));
+
+    expect(messages).toHaveLength(4);
+    expect(messages[0].text).toBe("Find the most relevant roles from the attached files.");
+    expect(messages[0].text).not.toContain("Zip Archive");
+    expect(messages[0].text).not.toContain("VladOS");
+    expect(messages[0].images).toEqual([]);
+    expect(messages[0].attachments).toEqual([
+      {
+        description: "Markdown file",
+        id: "file-md",
+        kind: "file",
+        mimeType: "text/markdown",
+        name: "Pasted markdown(16).md",
+        sizeBytes: 2048
+      },
+      {
+        description: "Zip Archive",
+        id: "file-zip",
+        kind: "file",
+        mimeType: "application/zip",
+        name: "Archive(4).zip",
+        sizeBytes: 1_572_864
+      }
+    ]);
+
+    expect(messages[1]).toMatchObject({
+      attachments: [
+        {
+          id: "file-only",
+          kind: "file",
+          mimeType: "text/plain",
+          name: "notes.txt"
+        }
+      ],
+      id: "attachment-only",
+      text: ""
+    });
+
+    expect(messages[2].attachments).toHaveLength(1);
+    const [artifact] = messages[2].attachments ?? [];
+    expect(artifact).toMatchObject({
+      id: "artifact-html",
+      kind: "website",
+      mimeType: "text/html",
+      name: "dashboard.html"
+    });
+    expect(artifact?.previewHtml).toContain("<h1>Local dashboard</h1>");
+    expect(artifact?.previewHtml).toContain("Portable content");
+    expect(artifact?.previewHtml).not.toContain("<script");
+    expect(artifact?.previewHtml).not.toContain("onload");
+    expect(artifact?.previewHtml).not.toContain("https://tracker.example");
+    expect(artifact?.previewHtml).not.toContain('href="https://example.com"');
+
+    expect(messages[3].attachments?.[0]).toMatchObject({
+      id: "artifact-remote",
+      kind: "website",
+      name: "remote-dashboard.html",
+      url: "https://example.com/remote-dashboard",
+      warning:
+        "The embedded preview could not be captured as a portable local snapshot. Open the original conversation to view it."
+    });
+    expect(messages[3].attachments?.[0]?.previewHtml).toBeUndefined();
+  });
+
+  test("hard-bounds captured local artifact HTML", () => {
+    const longBody = "x".repeat(300_000);
+    const document = new JSDOM(
+      `<article data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant" data-message-id="bounded-artifact"></div>
+        <section data-file-name="bounded.html" data-testid="artifact-card">
+          <iframe srcdoc="<main>${longBody}</main>"></iframe>
+        </section>
+      </article>`,
+      { url: "https://chatgpt.com/c/bounded-artifact" }
+    ).window.document;
+    const [message] = extractVisibleChatGptMessages(document);
+
+    expect(message.attachments?.[0]?.previewHtml?.length).toBeLessThanOrEqual(250_000);
+  });
+
+  test("captures and sanitizes an accessible same-origin HTTPS iframe document", () => {
+    const document = new JSDOM(
+      `<article data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant" data-message-id="same-origin-artifact"></div>
+        <section data-file-name="same-origin.html" data-testid="artifact-card">
+          <iframe src="https://chatgpt.com/backend-api/files/same-origin.html"></iframe>
+        </section>
+      </article>`,
+      { url: "https://chatgpt.com/c/same-origin-artifact" }
+    ).window.document;
+    const iframe = document.querySelector<HTMLIFrameElement>("iframe");
+
+    if (iframe === null) {
+      throw new Error("fixture missing same-origin iframe");
+    }
+
+    const iframeDocument = new JSDOM(
+      `<!doctype html><html><body>
+        <h1>Same-origin dashboard</h1>
+        <script>window.evil()</script>
+        <img src="https://tracker.example/pixel.png">
+      </body></html>`,
+      { url: iframe.src }
+    ).window.document;
+
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      value: iframeDocument
+    });
+
+    const [message] = extractVisibleChatGptMessages(document);
+    const [attachment] = message.attachments ?? [];
+
+    expect(attachment).toMatchObject({
+      kind: "website",
+      name: "same-origin.html",
+      url: "https://chatgpt.com/backend-api/files/same-origin.html"
+    });
+    expect(attachment.previewHtml).toContain("Same-origin dashboard");
+    expect(attachment.previewHtml).not.toContain("<script");
+    expect(attachment.previewHtml).not.toContain("tracker.example");
+    expect(attachment.warning).toBeUndefined();
+  });
+
+  test("falls back to a portable warning when iframe document access is denied", () => {
+    const document = new JSDOM(
+      `<article data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant" data-message-id="cross-origin-artifact"></div>
+        <section data-file-name="cross-origin.html" data-testid="artifact-card">
+          <iframe src="https://artifacts.example/cross-origin.html"></iframe>
+        </section>
+      </article>`,
+      { url: "https://chatgpt.com/c/cross-origin-artifact" }
+    ).window.document;
+    const iframe = document.querySelector<HTMLIFrameElement>("iframe");
+
+    if (iframe === null) {
+      throw new Error("fixture missing cross-origin iframe");
+    }
+
+    Object.defineProperty(iframe, "contentDocument", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Blocked by same-origin policy", "SecurityError");
+      }
+    });
+
+    const [message] = extractVisibleChatGptMessages(document);
+    const [attachment] = message.attachments ?? [];
+
+    expect(attachment.previewHtml).toBeUndefined();
+    expect(attachment.warning).toBe(
+      "The embedded preview could not be captured as a portable local snapshot. Open the original conversation to view it."
+    );
+  });
+
+  test("preserves rich Markdown and captures only visible turn-linked activity", () => {
+    const [message] = extractVisibleChatGptMessages(
+      loadFixture("current-rich-sources-activity.html")
+    );
+
+    expect(message.markdown).toContain("## Summary");
+    expect(message.markdown).toContain("**Applied AI:**");
+    expect(message.markdown).toContain("*high priority*");
+    expect(message.markdown).toContain("- **First:** preserve the list.");
+    expect(message.markdown).toContain("  1. Nested one");
+    expect(message.markdown).toContain("> Keep this visible quote.");
+    expect(message.markdown).toContain(
+      "[jobs.ashbyhq.com +1](https://jobs.ashbyhq.com/example/role?utm_source=chatgpt.com#details)"
+    );
+    expect(message.markdown).not.toContain("Image: [Image]");
+    expect(message.images).toEqual([]);
+    expect(message.sources).toHaveLength(1);
+    expect(message.sources?.[0]).toMatchObject({
+      id: "source-inline",
+      kind: "deep_research",
+      title: "Example AI Role",
+      url: "https://jobs.ashbyhq.com/example/role"
+    });
+    expect(message.sources?.[0]?.snippet?.length).toBeLessThanOrEqual(280);
+    expect(message.thinkingBlocks).toEqual([
+      {
+        text: "Inspected project files and compared source quality.",
+        title: "Activity"
+      }
+    ]);
+    expect(message.thinkingBlocks?.[0]?.text).not.toContain("hidden reasoning");
+    expect(message.text).not.toContain("A concise source card");
+    expect(message.text).not.toContain("Worked for 54m");
+    expect(message.markdown).not.toContain("Worked for 54m");
+  });
+
+  test("does not turn a regular answer list item into a source snippet", () => {
+    const document = new JSDOM(
+      `<article data-testid="conversation-turn-source">
+        <div data-message-author-role="assistant" data-message-id="answer-source">
+          <ul>
+            <li>
+              Keep this answer text separate from the source.
+              <a
+                aria-label="Example source"
+                data-source-id="inline-source"
+                href="https://example.com/inline-source"
+              >Example source</a>
+            </li>
+          </ul>
+        </div>
+      </article>`,
+      { url: "https://chatgpt.com/c/source-snippet" }
+    ).window.document;
+    const [message] = extractVisibleChatGptMessages(document);
+
+    expect(message.sources).toEqual([
+      {
+        id: "inline-source",
+        kind: "citation",
+        title: "Example source",
+        url: "https://example.com/inline-source"
       }
     ]);
   });

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <main>
+      <article data-testid="conversation-turn-10">
+        <div data-message-author-role="assistant" data-message-id="assistant-current-rich">
+          <div class="markdown">
+            <h2>Summary</h2>
+            <p>
+              <strong>Applied AI:</strong> The role is <em>high priority</em>
+              <span data-testid="citation-pill">
+                <a
+                  aria-label="jobs.ashbyhq.com +1"
+                  data-source-id="source-inline"
+                  href="https://jobs.ashbyhq.com/example/role?utm_source=chatgpt.com#details"
+                >
+                  <img
+                    alt="Image"
+                    height="128"
+                    src="https://www.google.com/s2/favicons?domain=https://jobs.ashbyhq.com&amp;sz=128"
+                    width="128"
+                  />
+                  jobs.ashbyhq.com +1
+                </a>
+              </span>
+              .
+            </p>
+            <ul>
+              <li><strong>First:</strong> preserve the list.</li>
+              <li>
+                Second item
+                <ol>
+                  <li>Nested one</li>
+                  <li>Nested two</li>
+                </ol>
+              </li>
+            </ul>
+            <blockquote><p>Keep this visible quote.</p></blockquote>
+          </div>
+          <button
+            aria-controls="activity-panel"
+            aria-expanded="true"
+            data-testid="activity-trigger"
+            type="button"
+          >
+            Worked for 54m
+          </button>
+
+          <section data-testid="sources">
+            <ol>
+              <li data-testid="source-card">
+                <a
+                  data-jelluvi-source-kind="deep_research"
+                  data-source-id="source-card"
+                  href="https://jobs.ashbyhq.com/example/role?utm_source=chatgpt.com"
+                >
+                  Example AI Role
+                </a>
+                <p>
+                  A concise source card followed by deliberately repeated context that must remain
+                  bounded. This text is long enough to verify that source snippets cannot expand
+                  into a full response or a giant concatenated table. A concise source card followed
+                  by deliberately repeated context that must remain bounded. This text is long
+                  enough to verify that source snippets cannot expand into a full response or a
+                  giant concatenated table.
+                </p>
+              </li>
+            </ol>
+          </section>
+        </div>
+      </article>
+
+      <aside aria-label="Activity" data-testid="activity-panel" id="activity-panel">
+        <h2>Activity</h2>
+        <p>Inspected project files and compared source quality.</p>
+      </aside>
+
+      <aside
+        aria-label="Activity"
+        data-message-id="assistant-current-rich"
+        data-testid="activity-hidden"
+        style="display: none"
+      >
+        <p>This hidden reasoning must not be exported.</p>
+      </aside>
+    </main>
+  </body>
+</html>

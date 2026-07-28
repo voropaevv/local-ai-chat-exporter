@@ -15,8 +15,9 @@ import {
 
 const DEFAULT_MAX_STEPS = 1500;
 const DEFAULT_MAX_STALLS = 8;
-const DEFAULT_SCROLL_STEP_RATIO = 0.7;
-const DEFAULT_SETTLE_DELAY_MS = 400;
+const DEFAULT_SCROLL_STEP_RATIO = 0.85;
+const DEFAULT_DOM_QUIET_MS = 80;
+const DEFAULT_DOM_SETTLE_MAX_MS = 300;
 
 export interface ChatGptScrollCollectorOptions {
   readonly document?: Document;
@@ -52,7 +53,10 @@ export async function collectChatGptConversation(
   const maxStalls = options.maxStalls ?? DEFAULT_MAX_STALLS;
   const scrollStepRatio = options.scrollStepRatio ?? DEFAULT_SCROLL_STEP_RATIO;
   const waitForDomSettle =
-    options.waitForDomSettle ?? createDelayWait(options.settleDelayMs ?? DEFAULT_SETTLE_DELAY_MS);
+    options.waitForDomSettle ??
+    (options.settleDelayMs !== undefined
+      ? createDelayWait(options.settleDelayMs)
+      : createDomQuietWait(container));
   const scrollBy = options.scrollBy ?? scrollDownBy;
   const originalScrollTop = getScrollTop(container);
   const messages: ExportedMessage[] = [];
@@ -156,21 +160,59 @@ function collectStepMessages(
   messages: ExportedMessage[],
   dedupeState: DedupeState
 ): number {
-  const visibleMessages = extractMessages?.(root) ?? extractVisibleChatGptMessages(root);
-  let duplicateCount = 0;
+  let prefilteredDuplicateCount = 0;
+  const stepRevisions = new Map<string, string>();
+  const visibleMessages =
+    extractMessages?.(root) ??
+    extractVisibleChatGptMessages(root, {
+      knownStableMessageRevisions: dedupeState.revisions,
+      onExcludedStableMessage: () => {
+        prefilteredDuplicateCount += 1;
+      },
+      onStableMessageRevision: (messageId, revision) => {
+        stepRevisions.set(messageId, revision);
+      }
+    });
+  let duplicateCount = prefilteredDuplicateCount;
 
   for (const message of visibleMessages) {
     const idKey = message.id.trim();
     const fingerprint = getMessageFingerprint(message);
 
-    if (dedupeState.ids.has(idKey) || dedupeState.fingerprints.has(fingerprint)) {
+    if (idKey.length > 0) {
+      const existingIndex = dedupeState.messageIndexesById.get(idKey);
+
+      if (existingIndex !== undefined) {
+        if (dedupeState.messageFingerprintsById.get(idKey) === fingerprint) {
+          duplicateCount += 1;
+        } else {
+          messages[existingIndex] = { ...message, index: existingIndex };
+          dedupeState.messageFingerprintsById.set(idKey, fingerprint);
+        }
+
+        const revision = stepRevisions.get(idKey);
+        if (revision !== undefined) {
+          dedupeState.revisions.set(idKey, revision);
+        }
+        continue;
+      }
+
+      const messageIndex = messages.length;
+      dedupeState.messageFingerprintsById.set(idKey, fingerprint);
+      dedupeState.messageIndexesById.set(idKey, messageIndex);
+      const revision = stepRevisions.get(idKey);
+      if (revision !== undefined) {
+        dedupeState.revisions.set(idKey, revision);
+      }
+      messages.push({ ...message, index: messageIndex });
+      continue;
+    }
+
+    if (dedupeState.fingerprints.has(fingerprint)) {
       duplicateCount += 1;
       continue;
     }
 
-    if (idKey.length > 0) {
-      dedupeState.ids.add(idKey);
-    }
     dedupeState.fingerprints.add(fingerprint);
     messages.push({ ...message, index: messages.length });
   }
@@ -180,18 +222,36 @@ function collectStepMessages(
 
 interface DedupeState {
   readonly fingerprints: Set<string>;
-  readonly ids: Set<string>;
+  readonly messageFingerprintsById: Map<string, string>;
+  readonly messageIndexesById: Map<string, number>;
+  readonly revisions: Map<string, string>;
 }
 
 function createDedupeState(): DedupeState {
   return {
     fingerprints: new Set<string>(),
-    ids: new Set<string>()
+    messageFingerprintsById: new Map<string, string>(),
+    messageIndexesById: new Map<string, number>(),
+    revisions: new Map<string, string>()
   };
 }
 
 function getMessageFingerprint(message: ExportedMessage): string {
-  return `${message.role}:${stableHash(message.text)}`;
+  return `${message.role}:${stableHash(
+    JSON.stringify({
+      attachments: message.attachments ?? [],
+      canvas: message.canvas ?? [],
+      codeBlocks: message.codeBlocks,
+      createdAt: message.createdAt,
+      images: message.images,
+      markdown: message.markdown,
+      model: message.model,
+      participant: message.participant,
+      sources: message.sources ?? [],
+      text: message.text,
+      thinkingBlocks: message.thinkingBlocks ?? []
+    })
+  )}`;
 }
 
 function createDelayWait(delayMs: number): (signal?: AbortSignal) => Promise<void> {
@@ -201,7 +261,103 @@ function createDelayWait(delayMs: number): (signal?: AbortSignal) => Promise<voi
     }
 
     return new Promise((resolve) => {
-      globalThis.setTimeout(resolve, delayMs);
+      let finished = false;
+      const finish = () => {
+        if (finished) {
+          return;
+        }
+
+        finished = true;
+        globalThis.clearTimeout(timeout);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timeout = globalThis.setTimeout(finish, delayMs);
+
+      signal?.addEventListener("abort", finish, { once: true });
+    });
+  };
+}
+
+function createDomQuietWait(
+  container: Element,
+  quietMs = DEFAULT_DOM_QUIET_MS,
+  maximumMs = DEFAULT_DOM_SETTLE_MAX_MS
+): (signal?: AbortSignal) => Promise<void> {
+  const ownerWindow = container.ownerDocument?.defaultView;
+  const Observer =
+    ownerWindow?.MutationObserver ??
+    (typeof globalThis.MutationObserver === "undefined" ? undefined : globalThis.MutationObserver);
+  const requestFrame = ownerWindow?.requestAnimationFrame?.bind(ownerWindow);
+  const cancelFrame = ownerWindow?.cancelAnimationFrame?.bind(ownerWindow);
+
+  return (signal?: AbortSignal) => {
+    if (signal?.aborted) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let animationFrame: number | undefined;
+      let fallbackFrameTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+      let finished = false;
+      let observer: MutationObserver | undefined;
+      let quietTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+      const finish = () => {
+        if (finished) {
+          return;
+        }
+
+        finished = true;
+        observer?.disconnect();
+        if (animationFrame !== undefined) {
+          cancelFrame?.(animationFrame);
+        }
+        if (fallbackFrameTimer !== undefined) {
+          globalThis.clearTimeout(fallbackFrameTimer);
+        }
+        globalThis.clearTimeout(maximumTimer);
+        if (quietTimer !== undefined) {
+          globalThis.clearTimeout(quietTimer);
+        }
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+
+      const scheduleQuietWindow = () => {
+        if (quietTimer !== undefined) {
+          globalThis.clearTimeout(quietTimer);
+        }
+        quietTimer = globalThis.setTimeout(finish, quietMs);
+      };
+
+      const beginObservation = () => {
+        if (finished) {
+          return;
+        }
+
+        if (Observer !== undefined) {
+          observer = new Observer(scheduleQuietWindow);
+          observer.observe(container, {
+            characterData: true,
+            childList: true,
+            subtree: true
+          });
+        }
+
+        scheduleQuietWindow();
+      };
+
+      const maximumTimer = globalThis.setTimeout(finish, maximumMs);
+      signal?.addEventListener("abort", finish, { once: true });
+
+      if (signal?.aborted) {
+        finish();
+      } else if (requestFrame !== undefined) {
+        animationFrame = requestFrame(beginObservation);
+      } else {
+        fallbackFrameTimer = globalThis.setTimeout(beginObservation, 0);
+      }
     });
   };
 }

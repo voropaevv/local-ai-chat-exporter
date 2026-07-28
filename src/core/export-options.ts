@@ -181,6 +181,37 @@ function prepareMessage(
       prepareCodeBlock(codeBlock, options.redaction)
     ),
     images: message.images.map((image) => prepareImageRef(image, options.redaction)),
+    ...(message.attachments !== undefined
+      ? {
+          attachments: message.attachments.map((attachment) => ({
+            ...(attachment.id !== undefined
+              ? { id: redactIfNeeded(attachment.id, options.redaction) }
+              : {}),
+            kind: attachment.kind,
+            name: redactIfNeeded(attachment.name, options.redaction),
+            ...(attachment.description !== undefined
+              ? { description: redactIfNeeded(attachment.description, options.redaction) }
+              : {}),
+            ...(attachment.mimeType !== undefined
+              ? { mimeType: redactIfNeeded(attachment.mimeType, options.redaction) }
+              : {}),
+            ...(attachment.sizeBytes !== undefined ? { sizeBytes: attachment.sizeBytes } : {}),
+            ...(attachment.url !== undefined
+              ? { url: redactIfNeeded(attachment.url, options.redaction) }
+              : {}),
+            ...(attachment.previewHtml !== undefined
+              ? {
+                  previewHtml: omitDataImagePayloads(
+                    redactIfNeeded(attachment.previewHtml, options.redaction)
+                  )
+                }
+              : {}),
+            ...(attachment.warning !== undefined
+              ? { warning: redactIfNeeded(attachment.warning, options.redaction) }
+              : {})
+          }))
+        }
+      : {}),
     ...(options.includeMetadata && message.participant !== undefined
       ? { participant: redactIfNeeded(message.participant, options.redaction) }
       : {}),

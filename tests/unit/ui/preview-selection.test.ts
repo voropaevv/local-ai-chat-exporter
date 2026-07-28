@@ -5,6 +5,7 @@ import type { ConversationExport } from "../../../src/core/schema";
 import {
   applyPreviewMessageSelection,
   buildPreviewSelectionOptions,
+  createPreviewMessageSummary,
   togglePreviewMessageSelection
 } from "../../../src/ui/preview-selection";
 
@@ -55,6 +56,35 @@ describe("Preview message selection", () => {
         scope: "range"
       })
     ).toEqual({ range: { endIndex: 2, startIndex: 1 }, scope: "range" });
+  });
+
+  test("summarizes the message body before attached files", () => {
+    const message = {
+      ...makeMessage(
+        "user-with-files",
+        0,
+        "user",
+        "project.zip\nZip archive\nPlease review every attached file."
+      ),
+      attachments: [
+        {
+          description: "Zip archive",
+          kind: "file" as const,
+          name: "project.zip"
+        }
+      ],
+      markdown: "project.zip\n\nZip archive\n\nPlease review **every attached file**."
+    };
+
+    expect(createPreviewMessageSummary(message)).toBe("Please review every attached file.");
+    expect(
+      createPreviewMessageSummary({
+        ...message,
+        markdown: "",
+        text: "",
+        attachments: [...message.attachments, { kind: "website" as const, name: "Dashboard" }]
+      })
+    ).toBe("2 attachments: project.zip, Dashboard");
   });
 });
 

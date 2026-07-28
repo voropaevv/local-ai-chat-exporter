@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <main>
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="user" data-message-id="user-with-files">
+          <div data-testid="attachments-list">
+            <div
+              data-attachment-id="file-md"
+              data-file-name="Pasted markdown(16).md"
+              data-mime-type="text/markdown"
+              data-size-bytes="2048"
+              data-testid="file-attachment"
+            >
+              <span data-testid="filename">Pasted markdown(16).md</span>
+              <span data-testid="file-type">Markdown file</span>
+            </div>
+            <div
+              data-attachment-id="file-zip"
+              data-file-name="Archive(4).zip"
+              data-mime-type="application/zip"
+              data-testid="file-attachment"
+            >
+              <span data-testid="filename">Archive(4).zip</span>
+              <span data-testid="file-type">Zip Archive</span>
+              <span>1.5 MB</span>
+            </div>
+          </div>
+          <div data-jelluvi-message-body>
+            <p>Find the most relevant roles from the attached files.</p>
+          </div>
+          <div data-testid="author-badge">
+            <img alt="Image" src="https://example.com/vlados.png" width="32" height="32" />
+            <span>VladOS</span>
+          </div>
+        </div>
+      </article>
+
+      <article data-testid="conversation-turn-2">
+        <div data-message-author-role="user" data-message-id="attachment-only">
+          <div
+            data-attachment-id="file-only"
+            data-file-name="notes.txt"
+            data-mime-type="text/plain"
+            data-testid="file-attachment"
+          >
+            <span data-testid="filename">notes.txt</span>
+            <span data-testid="file-type">Text file</span>
+          </div>
+        </div>
+      </article>
+
+      <article data-testid="conversation-turn-3">
+        <div data-message-author-role="assistant" data-message-id="assistant-artifact">
+          <div class="markdown">
+            <p>The generated dashboard is attached below.</p>
+          </div>
+        </div>
+        <section
+          data-artifact-id="artifact-html"
+          data-file-name="dashboard.html"
+          data-mime-type="text/html"
+          data-testid="artifact-card"
+        >
+          <iframe
+            title="Dashboard preview"
+            srcdoc="<!doctype html><html><head><style>.card { color: red; background-image: url('https://tracker.example/image.png'); }</style><script>window.evil = true</script></head><body onload='evil()'><h1>Local dashboard</h1><img src='https://tracker.example/pixel.png'><a href='https://example.com'>Remote link</a><p style='color: blue'>Portable content</p></body></html>"
+          ></iframe>
+        </section>
+      </article>
+
+      <article data-testid="conversation-turn-4">
+        <div data-message-author-role="assistant" data-message-id="assistant-remote-artifact"></div>
+        <section
+          data-artifact-id="artifact-remote"
+          data-file-name="remote-dashboard.html"
+          data-mime-type="text/html"
+          data-testid="artifact-card"
+        >
+          <iframe src="https://example.com/remote-dashboard" title="Remote dashboard"></iframe>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>

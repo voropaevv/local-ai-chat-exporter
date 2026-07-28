@@ -1,15 +1,46 @@
 import type { ExportedCodeBlock, ExportedImageRef } from "../../core/schema";
 import { isSafeExternalImageUrl, renderImageReferenceText } from "../../core/image-safety";
 import { cleanText } from "../../utils/text";
+import { CHATGPT_ATTACHMENT_SELECTORS } from "./extract-attachments";
+import { CHATGPT_ACTIVITY_SELECTORS } from "./extract-advanced";
 import { extractCodeBlocks } from "./extract-code";
-import { extractImageRefs } from "./extract-images";
+import { extractImageRefs, removeNonContentImageElements } from "./extract-images";
 import { isSafeHref, normalizeInlineText, renderMarkdownLink } from "./extract-links";
 import { extractChatGptTables, tableElementToMarkdown } from "./extract-tables";
 
 const ELEMENT_NODE = 1;
 const TEXT_NODE = 3;
 
-const REMOVABLE_SELECTORS = [
+const CHATGPT_IDENTITY_SELECTORS = [
+  "[data-jelluvi-participant]",
+  "[data-participant-name]",
+  "[data-testid*='participant' i]",
+  "[data-testid*='author-badge' i]",
+  "[data-testid*='message-author' i]",
+  "[aria-label*='sent by' i]"
+].join(",");
+
+const CHATGPT_SOURCE_TRAY_SELECTORS = [
+  "[data-jelluvi-source-list]",
+  "[data-testid='sources']",
+  "[data-testid='source-list']",
+  "[data-testid*='sources-panel' i]",
+  "[data-testid*='sources-drawer' i]",
+  "[aria-label='Sources']",
+  "[aria-label*='Sources panel' i]"
+].join(",");
+
+const CHATGPT_SOURCE_DECORATION_IMAGE_SELECTORS = [
+  "sup img",
+  "[data-source-id] img",
+  "[data-citation-id] img",
+  "[data-testid*='citation' i] img",
+  "[data-testid*='source' i] img",
+  "a[aria-label*='source' i] img",
+  "a[aria-label*='citation' i] img"
+].join(",");
+
+const GENERIC_REMOVABLE_SELECTORS = [
   "button",
   "svg",
   "script",
@@ -34,12 +65,20 @@ const REMOVABLE_SELECTORS = [
   "[data-testid*='thought' i]",
   "[data-jelluvi-canvas]",
   "[data-testid*='canvas' i]",
-  "[data-jelluvi-source-list]",
   ".sr-only",
   ".cdk-visually-hidden",
   ".screen-reader-only",
   ".screen-reader-user-query-label",
   ".visually-hidden"
+].join(",");
+
+const CHATGPT_REMOVABLE_SELECTORS = [
+  "iframe",
+  CHATGPT_ACTIVITY_SELECTORS,
+  CHATGPT_ATTACHMENT_SELECTORS,
+  CHATGPT_IDENTITY_SELECTORS,
+  CHATGPT_SOURCE_DECORATION_IMAGE_SELECTORS,
+  CHATGPT_SOURCE_TRAY_SELECTORS
 ].join(",");
 
 export interface CleanedChatGptNode {
@@ -50,7 +89,14 @@ export interface CleanedChatGptNode {
   readonly text: string;
 }
 
-export function cleanChatGptNode(messageElement: Element): CleanedChatGptNode {
+export interface CleanChatGptNodeOptions {
+  readonly chatGptSpecificCleanup?: boolean;
+}
+
+export function cleanChatGptNode(
+  messageElement: Element,
+  options: CleanChatGptNodeOptions = {}
+): CleanedChatGptNode {
   const clone = messageElement.cloneNode(true);
 
   if (clone.nodeType !== 1) {
@@ -65,13 +111,18 @@ export function cleanChatGptNode(messageElement: Element): CleanedChatGptNode {
 
   const clonedElement = clone as Element;
   const codeBlocks = extractCodeBlocks(messageElement);
+  const imageOptions = {
+    chatGptSpecificFiltering: options.chatGptSpecificCleanup === true
+  };
 
+  copyResolvedImageMetadata(messageElement, clonedElement);
   normalizeMathMl(clonedElement);
-  removeUiArtifacts(clonedElement);
+  removeUiArtifacts(clonedElement, options);
+  removeNonContentImageElements(clonedElement, imageOptions);
   removeRedundantCodeLanguageLabels(clonedElement, codeBlocks);
+  const images = extractImageRefs(clonedElement, imageOptions);
   sanitizeElementTree(clonedElement);
 
-  const images = extractImageRefs(messageElement);
   const text = cleanText(renderPlainText(clonedElement, codeBlocks));
   const markdown = renderMarkdownFromElement(clonedElement, codeBlocks, images);
 
@@ -82,6 +133,38 @@ export function cleanChatGptNode(messageElement: Element): CleanedChatGptNode {
     markdown,
     text
   };
+}
+
+function copyResolvedImageMetadata(sourceRoot: Element, clonedRoot: Element): void {
+  const sourceImages = Array.from(sourceRoot.querySelectorAll("img"));
+  const clonedImages = Array.from(clonedRoot.querySelectorAll("img"));
+
+  clonedImages.forEach((clonedImage, index) => {
+    const sourceImage = sourceImages[index];
+
+    if (sourceImage === undefined) {
+      return;
+    }
+
+    const resolvedSource =
+      sourceImage.getAttribute("src")?.trim() || sourceImage.currentSrc.trim() || undefined;
+
+    if (!clonedImage.getAttribute("src")?.trim() && resolvedSource !== undefined) {
+      clonedImage.setAttribute("src", resolvedSource);
+    }
+
+    for (const dimension of ["width", "height"] as const) {
+      const resolvedDimension = sourceImage[dimension];
+
+      if (
+        clonedImage.getAttribute(dimension) === null &&
+        Number.isFinite(resolvedDimension) &&
+        resolvedDimension > 0
+      ) {
+        clonedImage.setAttribute(dimension, Math.round(resolvedDimension).toString());
+      }
+    }
+  });
 }
 
 function normalizeMathMl(root: Element): void {
@@ -100,8 +183,13 @@ function normalizeMathMl(root: Element): void {
   });
 }
 
-function removeUiArtifacts(root: Element): void {
-  root.querySelectorAll(REMOVABLE_SELECTORS).forEach((element) => {
+function removeUiArtifacts(root: Element, options: CleanChatGptNodeOptions): void {
+  const selectors =
+    options.chatGptSpecificCleanup === true
+      ? `${GENERIC_REMOVABLE_SELECTORS},${CHATGPT_REMOVABLE_SELECTORS}`
+      : GENERIC_REMOVABLE_SELECTORS;
+
+  root.querySelectorAll(selectors).forEach((element) => {
     element.remove();
   });
 }
@@ -303,6 +391,12 @@ function renderMarkdownBlockNode(
     return renderMarkdownInlineChildren(element, images, state);
   }
 
+  if (/^h[1-6]$/.test(tagName)) {
+    const depth = Number.parseInt(tagName.slice(1), 10);
+    const heading = renderMarkdownInlineChildren(element, images, state);
+    return heading.length > 0 ? `${"#".repeat(depth)} ${heading}` : "";
+  }
+
   if (tagName === "br") {
     return "\n";
   }
@@ -324,7 +418,22 @@ function renderMarkdownBlockNode(
   }
 
   if (tagName === "ul" || tagName === "ol") {
-    return renderMarkdownList(element);
+    return renderMarkdownList(element, images, state);
+  }
+
+  if (tagName === "blockquote") {
+    const body = Array.from(element.childNodes)
+      .map((child) => renderMarkdownBlockNode(child, codeBlocks, images, state))
+      .filter(Boolean)
+      .join("\n\n");
+    return body
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n");
+  }
+
+  if (tagName === "hr") {
+    return "---";
   }
 
   if (isInlineElement(tagName)) {
@@ -373,14 +482,26 @@ function renderMarkdownInlineNode(
   }
 
   if (tagName === "a") {
-    return renderMarkdownLink(
-      renderMarkdownInlineChildren(element, images, state),
-      element.getAttribute("href")
-    );
+    return renderMarkdownLink(renderAnchorLabel(element), element.getAttribute("href"));
   }
 
   if (tagName === "code") {
     return renderInlineCode(element.textContent ?? "");
+  }
+
+  if (tagName === "strong" || tagName === "b") {
+    const content = renderMarkdownInlineChildren(element, images, state);
+    return content.length > 0 ? `**${content}**` : "";
+  }
+
+  if (tagName === "em" || tagName === "i") {
+    const content = renderMarkdownInlineChildren(element, images, state);
+    return content.length > 0 ? `*${content}*` : "";
+  }
+
+  if (tagName === "del" || tagName === "s") {
+    const content = renderMarkdownInlineChildren(element, images, state);
+    return content.length > 0 ? `~~${content}~~` : "";
   }
 
   if (tagName === "img") {
@@ -392,14 +513,82 @@ function renderMarkdownInlineNode(
   return renderMarkdownInlineChildren(element, images, state);
 }
 
-function renderMarkdownList(element: Element): string {
+function renderMarkdownList(
+  element: Element,
+  images: readonly ExportedImageRef[],
+  state: { imageIndex: number },
+  depth = 0
+): string {
   return Array.from(element.querySelectorAll("li"))
     .filter((child) => child.closest("ol, ul") === element)
-    .map((child, index) => {
+    .flatMap((child, index) => {
       const marker = element.tagName.toLocaleLowerCase() === "ol" ? `${index + 1}.` : "-";
-      return `${marker} ${cleanText(child.textContent ?? "")}`;
+      const content = renderMarkdownListItemContent(child, images, state);
+      const indentation = "  ".repeat(depth);
+      const lines = [`${indentation}${marker} ${content}`.trimEnd()];
+
+      Array.from(child.children)
+        .filter((nested) => {
+          const tagName = nested.tagName.toLocaleLowerCase();
+          return tagName === "ul" || tagName === "ol";
+        })
+        .forEach((nested) => {
+          lines.push(renderMarkdownList(nested, images, state, depth + 1));
+        });
+
+      return lines;
     })
     .join("\n");
+}
+
+function renderMarkdownListItemContent(
+  element: Element,
+  images: readonly ExportedImageRef[],
+  state: { imageIndex: number }
+): string {
+  return Array.from(element.childNodes)
+    .filter((child) => {
+      if (child.nodeType !== ELEMENT_NODE) {
+        return true;
+      }
+
+      const tagName = (child as Element).tagName.toLocaleLowerCase();
+      return tagName !== "ul" && tagName !== "ol";
+    })
+    .map((child) => {
+      if (
+        child.nodeType === ELEMENT_NODE &&
+        (child as Element).tagName.toLocaleLowerCase() === "p"
+      ) {
+        return renderMarkdownInlineChildren(child as Element, images, state);
+      }
+
+      return renderMarkdownInlineNode(child, images, state);
+    })
+    .join("")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function renderAnchorLabel(element: Element): string {
+  const text = normalizeInlineText(element.textContent ?? "");
+
+  if (text.length > 0) {
+    return text;
+  }
+
+  const ariaLabel = normalizeInlineText(element.getAttribute("aria-label") ?? "");
+  if (ariaLabel.length > 0) {
+    return ariaLabel;
+  }
+
+  const href = element.getAttribute("href");
+
+  try {
+    return href === null ? "" : new URL(href).hostname;
+  } catch {
+    return "";
+  }
 }
 
 function renderMarkdownCodeBlock(codeBlock: ExportedCodeBlock): string {

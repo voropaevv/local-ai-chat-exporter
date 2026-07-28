@@ -85,4 +85,16 @@ describe("preview rendering", () => {
     expect(rendered.markdown.bytes).not.toContain("Hello from cached prompt");
     expect(rendered.markdown.bytes).toContain("Cached answer");
   });
+
+  test("passes the resolved theme into the isolated Preview document", () => {
+    const rendered = createPreviewRenderState(makeConversation(), {}, { theme: "dark" });
+
+    expect(rendered.status).toBe("ready");
+    if (rendered.status !== "ready") {
+      throw new Error("expected ready preview state");
+    }
+
+    expect(rendered.html.bytes).toContain('<html lang="en" data-theme="dark">');
+    expect(rendered.html.bytes).toContain(':root[data-theme="dark"]');
+  });
 });

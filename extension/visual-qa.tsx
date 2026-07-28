@@ -24,6 +24,22 @@ const conversation: ConversationExport = {
   messageCount: 4,
   messages: [
     {
+      attachments: [
+        {
+          description: "Markdown document",
+          kind: "file",
+          mimeType: "text/markdown",
+          name: "launch-brief.md",
+          sizeBytes: 18_420
+        },
+        {
+          description: "ZIP archive",
+          kind: "file",
+          mimeType: "application/zip",
+          name: "reference-assets.zip",
+          sizeBytes: 3_480_000
+        }
+      ],
       authorLabel: "User",
       codeBlocks: [],
       id: "qa-user-1",
@@ -31,7 +47,7 @@ const conversation: ConversationExport = {
       index: 0,
       metadata: {},
       role: "user",
-      text: "Create a concise launch checklist for Jelluvi."
+      text: "Create a concise launch checklist for Jelluvi using the attached brief and reference assets."
     },
     {
       authorLabel: "ChatGPT",
@@ -40,12 +56,36 @@ const conversation: ConversationExport = {
       images: [],
       index: 1,
       markdown:
-        "Start with reliability: verify capture completeness, local exports, and recovery states.",
+        "## Launch priorities\n\nStart with **reliability** and preserve the conversation structure:\n\n- Verify capture completeness without duplicate scans.\n- Keep attached files visually distinct from the message body.\n- Render [Jelluvi documentation](https://example.com/jelluvi/docs) as a readable source link.\n\n> The export remains local and self-contained.",
       metadata: {},
       role: "assistant",
-      text: "Start with reliability: verify capture completeness, local exports, and recovery states."
+      sources: [
+        {
+          kind: "citation",
+          snippet: "Local export, preview, and recovery guidance for the Jelluvi release.",
+          title: "Jelluvi documentation",
+          url: "https://example.com/jelluvi/docs"
+        }
+      ],
+      text: "Launch priorities. Start with reliability and preserve the conversation structure. Verify capture completeness without duplicate scans.",
+      thinkingBlocks: [
+        {
+          text: "Checked the brief, grouped the release gates, and removed repeated steps.",
+          title: "Planning the checklist"
+        }
+      ]
     },
     {
+      attachments: [
+        {
+          description: "Interactive HTML report",
+          kind: "website",
+          name: "release-dashboard.html",
+          previewHtml:
+            '<!doctype html><html><head><meta charset="utf-8"><style>:root{color-scheme:dark}body{margin:0;padding:28px;background:Canvas;color:CanvasText;font-family:system-ui}h1{margin:0 0 8px;font-size:28px}p{color:GrayText}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px}.card{border:1px solid GrayText;border-radius:14px;padding:18px;background:color-mix(in srgb,CanvasText 5%,Canvas)}.value{font-size:26px;font-weight:750;color:AccentColor}</style></head><body><h1>Release dashboard</h1><p>Static, self-contained artifact preview</p><div class="cards"><div class="card"><div class="value">86</div>messages</div><div class="card"><div class="value">8</div>formats</div><div class="card"><div class="value">0</div>remote calls</div></div></body></html>',
+          url: "https://example.com/jelluvi/release-dashboard"
+        }
+      ],
       authorLabel: "User",
       codeBlocks: [],
       id: "qa-user-2",
@@ -53,7 +93,7 @@ const conversation: ConversationExport = {
       index: 2,
       metadata: {},
       role: "user",
-      text: "Include the final visual and privacy checks."
+      text: "Include the final visual and privacy checks, and keep the attached dashboard visible in Preview."
     },
     {
       authorLabel: "ChatGPT",
@@ -62,10 +102,10 @@ const conversation: ConversationExport = {
       images: [],
       index: 3,
       markdown:
-        "The checklist is ready for review.\n\n```sh\npnpm check\n```\n\nNo transcript upload is required.",
+        "## Final checks\n\n1. Compare the dark and light Preview states.\n2. Confirm user prompts, files, sources, and code remain readable.\n3. Run the release checks:\n\n```sh\npnpm check\n```\n\nNo transcript upload is required.",
       metadata: {},
       role: "assistant",
-      text: "The checklist is ready for review. pnpm check. No transcript upload is required."
+      text: "Final checks. Compare dark and light Preview states, confirm rich content remains readable, then run pnpm check."
     }
   ],
   platform: "chatgpt",

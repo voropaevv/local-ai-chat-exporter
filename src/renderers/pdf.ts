@@ -13,6 +13,12 @@ import { formatCanvasPlain, formatSourcePlain, formatThinkingPlain } from "./adv
 import { renderHtml } from "./html";
 import { normalizePdfText, PdfFontRegistry, type PdfEmbeddedFont, type PdfFont } from "./pdf-font";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettings } from "./pdf-settings";
+import {
+  formatAttachmentLabel,
+  formatDisplayDateTime,
+  formatFileSize,
+  shouldShowCaptureStatus
+} from "./presentation";
 import type { RenderedFile, RendererOptions } from "./types";
 
 interface PdfTheme {
@@ -46,13 +52,40 @@ interface PdfDocument {
 }
 
 interface PdfBlock {
-  readonly kind: "paragraph" | "heading" | "list" | "code" | "table" | "page-break";
-  readonly items?: readonly string[];
+  readonly kind:
+    | "paragraph"
+    | "heading"
+    | "list"
+    | "code"
+    | "table"
+    | "thematic-break"
+    | "page-break";
   readonly language?: string;
   readonly level?: number;
+  readonly list?: PdfListBlock;
   readonly rows?: readonly (readonly string[])[];
   readonly text?: string;
 }
+
+interface PdfListBlock {
+  readonly items: readonly PdfListItem[];
+  readonly ordered: boolean;
+  readonly start?: number;
+}
+
+interface PdfListItem {
+  readonly parts: readonly PdfListItemPart[];
+}
+
+type PdfListItemPart =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+    }
+  | {
+      readonly kind: "list";
+      readonly list: PdfListBlock;
+    };
 
 type PdfByteGenerator = (
   conversation: ConversationExport,
@@ -140,9 +173,11 @@ function renderLocalPdfBytes(
       ...(conversation.sourceUrl.trim().length > 0
         ? [["Source", conversation.sourceUrl] as const]
         : []),
-      ["Exported", conversation.exportedAt],
+      ["Exported", formatDisplayDateTime(conversation.exportedAt)],
       ["Messages", String(conversation.messageCount)],
-      ["Completeness", conversation.completeness.status]
+      ...(shouldShowCaptureStatus(conversation)
+        ? [["Capture status", conversation.completeness.status.replace(/_/gu, " ")] as const]
+        : [])
     ]);
   }
 
@@ -178,13 +213,10 @@ function renderPdfReadyHtmlFallback(
 ): RenderedFile<string> {
   const fallback = renderHtml(conversation, options);
   const reason = error instanceof Error ? error.message : "Unknown PDF generation failure.";
-  const warning = `<p><strong>PDF generation failed locally.</strong> Falling back to PDF-ready HTML. No conversation content was uploaded or sent to a server. Reason: ${escapeHtml(reason)}</p>`;
+  const warning = `<section class="capture-status" aria-label="PDF fallback"><strong>PDF generation failed locally.</strong> Falling back to PDF-ready HTML. No conversation content was uploaded or sent to a server. Reason: ${escapeHtml(reason)}</section>`;
 
   return {
-    bytes: fallback.bytes.replace(
-      "<p>This export was generated locally by extension.</p>",
-      `<p>This export was generated locally by extension.</p>\n        ${warning}`
-    ),
+    bytes: fallback.bytes.replace("</header>", `${warning}\n    </header>`),
     encoding: "utf-8",
     filename: ensureHtmlExtension(
       renderFilenameTemplate(options.filenameTemplate ?? "", {
@@ -203,13 +235,33 @@ function renderPdfReadyHtmlFallback(
 function renderMessage(layout: PdfLayout, message: ExportedMessage): void {
   layout.keepWithNext();
   layout.heading(`${message.index + 1}. ${normalizeSingleLine(message.authorLabel)}`, 2);
-  layout.note(
-    [
-      `Role: ${message.role}`,
-      ...(message.model !== undefined ? [`Model: ${message.model}`] : []),
-      ...(message.createdAt !== undefined ? [`Created: ${message.createdAt}`] : [])
-    ].join(" - ")
-  );
+  const messageDetails = [
+    ...(message.model !== undefined ? [`Model: ${message.model}`] : []),
+    ...(message.createdAt !== undefined
+      ? [`Created: ${formatDisplayDateTime(message.createdAt)}`]
+      : [])
+  ];
+
+  if (messageDetails.length > 0) {
+    layout.note(messageDetails.join(" - "));
+  }
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    layout.heading("Attachments", 3);
+    layout.list(
+      message.attachments!.map((attachment) => {
+        const details = [
+          formatAttachmentLabel(attachment),
+          formatFileSize(attachment.sizeBytes),
+          attachment.url,
+          attachment.warning
+        ].filter((value): value is string => value !== undefined && value.length > 0);
+
+        return `${attachment.name}${details.length > 0 ? ` - ${details.join(" - ")}` : ""}`;
+      }),
+      false
+    );
+  }
 
   for (const block of parseMessageBlocks(message)) {
     renderBlock(layout, block);
@@ -246,8 +298,14 @@ function renderBlock(layout: PdfLayout, block: PdfBlock): void {
     case "heading":
       layout.heading(block.text ?? "", block.level ?? 3);
       return;
-    case "list":
-      layout.list(block.items ?? [], false);
+    case "list": {
+      if (block.list !== undefined) {
+        layout.nestedList(block.list);
+      }
+      return;
+    }
+    case "thematic-break":
+      layout.thematicBreak();
       return;
     case "page-break":
       layout.pageBreak();
@@ -306,7 +364,13 @@ function parseMarkdownBlocks(
       continue;
     }
 
-    if (line.trim() === "---" || line.trim() === "\\pagebreak") {
+    if (line.trim() === "---") {
+      blocks.push({ kind: "thematic-break" });
+      index += 1;
+      continue;
+    }
+
+    if (line.trim() === "\\pagebreak") {
       blocks.push({ kind: "page-break" });
       index += 1;
       continue;
@@ -339,14 +403,12 @@ function parseMarkdownBlocks(
     }
 
     if (isListItem(line)) {
-      const items: string[] = [];
+      const firstMarker = parsePdfListMarker(line);
+      const ordered = firstMarker?.ordered ?? false;
+      const parsed = parsePdfList(lines, index, ordered);
 
-      while (index < lines.length && isListItem(lines[index])) {
-        items.push(stripInlineMarkdown(lines[index].replace(/^\s*(?:[-*]|\d+[.)])\s+/u, "")));
-        index += 1;
-      }
-
-      blocks.push({ items, kind: "list" });
+      blocks.push({ kind: "list", list: parsed.list });
+      index = parsed.nextIndex;
       continue;
     }
 
@@ -381,6 +443,75 @@ function parseMarkdownBlocks(
   }
 
   return blocks;
+}
+
+function parsePdfList(
+  lines: readonly string[],
+  startIndex: number,
+  ordered: boolean,
+  baseIndent = parsePdfListMarker(lines[startIndex])?.indent ?? 0
+): { readonly list: PdfListBlock; readonly nextIndex: number } {
+  const items: PdfListItem[] = [];
+  let index = startIndex;
+  let start = 1;
+
+  while (index < lines.length) {
+    const marker = parsePdfListMarker(lines[index]);
+
+    if (marker === undefined || marker.ordered !== ordered || marker.indent !== baseIndent) {
+      break;
+    }
+
+    if (items.length === 0 && marker.start !== undefined) {
+      start = marker.start;
+    }
+
+    let paragraphLines = [marker.body];
+    const parts: PdfListItemPart[] = [];
+    index += 1;
+
+    while (index < lines.length && lines[index].trim().length > 0) {
+      const nestedMarker = parsePdfListMarker(lines[index]);
+
+      if (nestedMarker !== undefined) {
+        if (nestedMarker.indent <= baseIndent) {
+          break;
+        }
+
+        flushPdfListItemText(parts, paragraphLines);
+        paragraphLines = [];
+        const nested = parsePdfList(lines, index, nestedMarker.ordered, nestedMarker.indent);
+        parts.push({ kind: "list", list: nested.list });
+        index = nested.nextIndex;
+        continue;
+      }
+
+      if (countPdfIndent(lines[index]) <= baseIndent) {
+        break;
+      }
+
+      paragraphLines.push(lines[index].trim());
+      index += 1;
+    }
+
+    flushPdfListItemText(parts, paragraphLines);
+    items.push({ parts });
+  }
+
+  return {
+    list: {
+      items,
+      ordered,
+      ...(ordered && start !== 1 ? { start } : {})
+    },
+    nextIndex: index
+  };
+}
+
+function flushPdfListItemText(parts: PdfListItemPart[], lines: readonly string[]): void {
+  if (lines.length > 0) {
+    parts.push({ kind: "text", text: stripInlineMarkdown(lines.join(" ")) });
+  }
 }
 
 class PdfLayout {
@@ -460,9 +591,9 @@ class PdfLayout {
     this.space(4);
   }
 
-  list(items: readonly string[], ordered: boolean): void {
+  list(items: readonly string[], ordered: boolean, start = 1): void {
     items.forEach((item, index) => {
-      this.drawWrappedText(`${ordered ? `${index + 1}.` : "-"} ${item}`, {
+      this.drawWrappedText(`${ordered ? `${start + index}.` : "-"} ${item}`, {
         color: this.theme.text,
         font: "regular",
         indent: 12,
@@ -470,6 +601,24 @@ class PdfLayout {
       });
     });
     this.space(4);
+  }
+
+  nestedList(list: PdfListBlock): void {
+    this.renderNestedList(list, 0);
+    this.space(4);
+  }
+
+  thematicBreak(): void {
+    this.ensureSpace(16);
+    this.y -= 8;
+    this.strokeLine(
+      this.margin,
+      this.y,
+      this.margin + this.contentWidth,
+      this.y,
+      this.theme.border
+    );
+    this.y -= 8;
   }
 
   code(code: string, language: string | undefined): void {
@@ -620,11 +769,15 @@ class PdfLayout {
     size: number,
     color: PdfColor
   ): void {
-    const encodedText = this.fonts.encodeText(font, text);
+    const runs = this.fonts.encodeTextRuns(font, text);
+    let currentX = x;
 
-    this.currentPage.commands.push(
-      `BT ${colorOperator(color, "fill")} /${fontResource(font)} ${formatNumber(size)} Tf ${formatNumber(x)} ${formatNumber(y)} Td <${encodedText}> Tj ET`
-    );
+    runs.forEach((run) => {
+      this.currentPage.commands.push(
+        `BT ${colorOperator(color, "fill")} /${fontResource(run.font)} ${formatNumber(size)} Tf ${formatNumber(currentX)} ${formatNumber(y)} Td <${run.encodedText}> Tj ET`
+      );
+      currentX += (run.width * size) / 1000;
+    });
   }
 
   private fillRect(x: number, y: number, width: number, height: number, color: PdfColor): void {
@@ -637,6 +790,54 @@ class PdfLayout {
     this.currentPage.commands.push(
       `q ${colorOperator(color, "stroke")} ${formatNumber(x)} ${formatNumber(y)} ${formatNumber(width)} ${formatNumber(height)} re S Q`
     );
+  }
+
+  private strokeLine(
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    color: PdfColor
+  ): void {
+    this.currentPage.commands.push(
+      `q ${colorOperator(color, "stroke")} 0.8 w ${formatNumber(startX)} ${formatNumber(startY)} m ${formatNumber(endX)} ${formatNumber(endY)} l S Q`
+    );
+  }
+
+  private renderNestedList(list: PdfListBlock, depth: number): void {
+    const markerIndent = 12 + depth * 16;
+    const continuationIndent = markerIndent + 14;
+    const start = list.start ?? 1;
+
+    list.items.forEach((item, itemIndex) => {
+      let markerRendered = false;
+
+      item.parts.forEach((part) => {
+        if (part.kind === "list") {
+          if (!markerRendered) {
+            this.drawWrappedText(list.ordered ? `${start + itemIndex}.` : "-", {
+              color: this.theme.text,
+              font: "regular",
+              indent: markerIndent,
+              size: this.settings.fontSizePt
+            });
+            markerRendered = true;
+          }
+
+          this.renderNestedList(part.list, depth + 1);
+          return;
+        }
+
+        const marker = list.ordered ? `${start + itemIndex}.` : "-";
+        this.drawWrappedText(`${markerRendered ? "" : `${marker} `}${part.text}`, {
+          color: this.theme.text,
+          font: "regular",
+          indent: markerRendered ? continuationIndent : markerIndent,
+          size: this.settings.fontSizePt
+        });
+        markerRendered = true;
+      });
+    });
   }
 
   private get currentPage(): PdfPage {
@@ -986,7 +1187,47 @@ function parseTableRow(line: string): string[] {
 }
 
 function isListItem(line: string): boolean {
-  return /^\s*(?:[-*]|\d+[.)])\s+/u.test(line);
+  return parsePdfListMarker(line) !== undefined;
+}
+
+function parsePdfListMarker(line: string):
+  | {
+      readonly body: string;
+      readonly indent: number;
+      readonly ordered: boolean;
+      readonly start?: number;
+    }
+  | undefined {
+  const unordered = /^(\s*)[-*]\s+(.+)$/u.exec(line);
+
+  if (unordered !== null) {
+    return {
+      body: unordered[2],
+      indent: countPdfIndentCharacters(unordered[1]),
+      ordered: false
+    };
+  }
+
+  const ordered = /^(\s*)(\d+)[.)]\s+(.+)$/u.exec(line);
+
+  if (ordered === null) {
+    return undefined;
+  }
+
+  return {
+    body: ordered[3],
+    indent: countPdfIndentCharacters(ordered[1]),
+    ordered: true,
+    start: Number.parseInt(ordered[2], 10)
+  };
+}
+
+function countPdfIndent(line: string): number {
+  return countPdfIndentCharacters(/^(\s*)/u.exec(line)?.[1] ?? "");
+}
+
+function countPdfIndentCharacters(value: string): number {
+  return [...value].reduce((total, character) => total + (character === "\t" ? 4 : 1), 0);
 }
 
 function renderImageReference(image: ExportedImageRef): string {

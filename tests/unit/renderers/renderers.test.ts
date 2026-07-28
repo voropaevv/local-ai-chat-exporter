@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
+import { JSDOM } from "jsdom";
 
 import type { ConversationExport, ExportedMessage } from "../../../src/core/schema";
+import { validateConversationExport } from "../../../src/core/validation";
 import {
   renderCsv,
   renderHtml,
@@ -116,8 +118,7 @@ describe("renderMarkdown", () => {
       # Renderer Task: "Export" ---
 
       Source: https://chatgpt.com/c/example
-      Exported: 2026-05-31T10:20:30.000Z
-      Completeness: partial
+      Exported: 31 May 2026, 10:20 UTC
 
       Warnings:
       - Top was not reached
@@ -179,25 +180,25 @@ describe("renderTxt", () => {
       "Title: Renderer Task: "Export" ---
       Platform: ChatGPT
       Source: https://chatgpt.com/c/example
-      Exported: 2026-05-31T10:20:30.000Z
+      Exported: 31 May 2026, 10:20 UTC
       Messages: 2
-      Completeness: partial
+      Capture status: partial
       Warnings:
       - Top was not reached
       - A duplicate visible message was skipped
       - Composer footer was ignored
 
       ================================================================================
-      1. User: "Pilot" (user)
-      Created: 2026-05-31T10:21:00.000Z
+      1. User: "Pilot"
+      Created: 31 May 2026, 10:21 UTC
 
       Please compare A, B, and C.
       This quote: "keep it".
 
       ================================================================================
-      2. ChatGPT (assistant)
+      2. ChatGPT
       Model: gpt-test
-      Created: 2026-05-31T10:22:00.000Z
+      Created: 31 May 2026, 10:22 UTC
 
       Here is code:
 
@@ -215,6 +216,47 @@ describe("renderTxt", () => {
 });
 
 describe("renderJson", () => {
+  test("round-trips structured attachments through the JSON renderer and schema validator", () => {
+    const conversation = makeConversation();
+    const withAttachments: ConversationExport = {
+      ...conversation,
+      messages: conversation.messages.map((message, index) =>
+        index === 0
+          ? {
+              ...message,
+              attachments: [
+                {
+                  description: "Markdown brief",
+                  id: "attachment-1",
+                  kind: "file",
+                  mimeType: "text/markdown",
+                  name: "brief.md",
+                  sizeBytes: 42,
+                  url: "https://example.com/brief.md"
+                }
+              ]
+            }
+          : message
+      )
+    };
+
+    const parsed: unknown = JSON.parse(renderJson(withAttachments).bytes);
+    const validated = validateConversationExport(parsed);
+
+    expect(validated.ok).toBe(true);
+    expect(validated.ok ? validated.value.messages[0]?.attachments : undefined).toEqual([
+      {
+        description: "Markdown brief",
+        id: "attachment-1",
+        kind: "file",
+        mimeType: "text/markdown",
+        name: "brief.md",
+        sizeBytes: 42,
+        url: "https://example.com/brief.md"
+      }
+    ]);
+  });
+
   test("pretty-prints the full conversation export schema with two-space indentation", () => {
     const rendered = renderJson(makeConversation());
 
@@ -301,29 +343,63 @@ describe("renderCsv", () => {
       mimeType: "text/csv;charset=utf-8"
     });
     expect(rendered.bytes).toMatchInlineSnapshot(`
-      "index,role,authorLabel,text,model,createdAt,messageId
+      "index,role,authorLabel,text,model,createdAt,messageId,attachments
       1,user,"User: ""Pilot""","Please compare A, B, and C.
-      This quote: ""keep it"".",,2026-05-31T10:21:00.000Z,msg-1
+      This quote: ""keep it"".",,2026-05-31T10:21:00.000Z,msg-1,
       2,assistant,ChatGPT,"Here is code:
 
       const value = ""<script>"";
       console.log(value);
 
-      Formula-like text: \\(a+b\\).",gpt-test,2026-05-31T10:22:00.000Z,msg-2
+      Formula-like text: \\(a+b\\).",gpt-test,2026-05-31T10:22:00.000Z,msg-2,
       "
     `);
+  });
+
+  test("appends attachment data after the legacy positional columns", () => {
+    const conversation = makeConversation();
+    const withAttachment: ConversationExport = {
+      ...conversation,
+      messageCount: 1,
+      completeness: {
+        ...conversation.completeness,
+        messageCount: 1
+      },
+      messages: [
+        makeMessage({
+          attachments: [
+            {
+              description: 'Markdown "brief"',
+              kind: "file",
+              name: "notes, final.md",
+              url: "https://example.com/notes"
+            }
+          ],
+          text: "Attachment"
+        })
+      ]
+    };
+
+    expect(renderCsv(withAttachment).bytes).toBe(
+      [
+        "index,role,authorLabel,text,model,createdAt,messageId,attachments",
+        '1,user,User,Attachment,,,msg-1,"notes, final.md — Markdown ""brief"" — https://example.com/notes"',
+        ""
+      ].join("\n")
+    );
   });
 });
 
 describe("renderHtml", () => {
-  test("renders a single local HTML document with embedded styles, metadata, warnings, and sanitized content", () => {
+  test("renders readable metadata, actionable capture warnings, and sanitized content", () => {
     const rendered = renderHtml(makeConversation());
+    const document = new JSDOM(rendered.bytes).window.document;
 
     expect(rendered).toMatchObject({
       format: "html",
       mimeType: "text/html;charset=utf-8"
     });
-    expect(rendered.bytes).toContain("generated locally by extension");
+    expect(rendered.bytes).toContain("Generated locally by Jelluvi");
     expect(rendered.bytes).toContain("<style>");
     expect(rendered.bytes).toContain("@media print");
     expect(rendered.bytes).toContain("<table>");
@@ -337,88 +413,14 @@ describe("renderHtml", () => {
     expect(rendered.bytes).not.toContain("data-role");
     expect(rendered.bytes).not.toContain("data-message-id");
     expect(rendered.bytes).not.toContain("https://fonts.");
-    expect(rendered.bytes).toMatchInlineSnapshot(`
-      "<!doctype html>
-      <html lang="en">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Renderer Task: &quot;Export&quot; ---</title>
-        <style>
-      :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      body { margin: 0; color: #1f2328; background: #ffffff; line-height: 1.55; }
-      main { max-width: 920px; margin: 0 auto; padding: 32px 20px 48px; }
-      header { border-bottom: 1px solid #d8dee4; margin-bottom: 28px; padding-bottom: 20px; }
-      h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 12px; }
-      h2 { font-size: 1.25rem; margin: 0 0 12px; }
-      p { margin: 0 0 12px; }
-      a { color: #0969da; }
-      .meta { display: grid; gap: 6px; margin: 16px 0; }
-      .meta div { overflow-wrap: anywhere; }
-      .warnings { border: 1px solid #f0c36d; background: #fff8c5; padding: 12px 16px; margin: 16px 0; }
-      .message { border-top: 1px solid #d8dee4; padding: 22px 0; }
-      .message-meta { color: #57606a; font-size: 0.92rem; margin-bottom: 12px; }
-      .image-refs { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
-      .image-refs h3 { font-size: 0.95rem; margin: 0 0 8px; }
-      .image-refs ul { margin: 0; padding-left: 20px; }
-      .image-refs li { overflow-wrap: anywhere; }
-      .image-refs img { display: block; height: auto; max-width: min(100%, 640px); }
-      .advanced-section { background: #f6f8fa; border: 1px solid #d8dee4; margin: 14px 0 0; padding: 10px 12px; }
-      .advanced-section h3 { font-size: 0.95rem; margin: 0 0 8px; }
-      .advanced-section ul { margin: 0; padding-left: 20px; }
-      .advanced-section li { overflow-wrap: anywhere; }
-      pre { background: #f6f8fa; border: 1px solid #d8dee4; overflow: auto; padding: 12px; }
-      code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; font-size: 0.92em; }
-      table { border-collapse: collapse; display: block; margin: 12px 0; overflow-x: auto; width: 100%; }
-      th, td { border: 1px solid #d8dee4; padding: 6px 10px; text-align: left; }
-      footer { border-top: 1px solid #d8dee4; color: #57606a; font-size: 0.9rem; margin-top: 28px; padding-top: 16px; }
-      @media print {
-        body { color: #000000; }
-        main { max-width: none; padding: 0; }
-        a { color: #000000; text-decoration: underline; }
-        .message { break-inside: avoid; }
-        pre, table { break-inside: avoid; }
-      }
-        </style>
-      </head>
-      <body>
-        <main>
-          <header>
-            <h1>Renderer Task: &quot;Export&quot; ---</h1>
-            <p>This export was generated locally by extension.</p>
-            <section class="meta" aria-label="Export metadata">
-              <div><strong>Platform:</strong> ChatGPT</div>
-              <div><strong>Source:</strong> <a href="https://chatgpt.com/c/example" rel="noreferrer">https://chatgpt.com/c/example</a></div>
-              <div><strong>Exported:</strong> 2026-05-31T10:20:30.000Z</div>
-              <div><strong>Messages:</strong> 2</div>
-              <div><strong>Completeness:</strong> partial</div>
-            </section>
-            <section class="warnings" aria-label="Completeness warnings">
-              <strong>Warnings</strong>
-              <ul>
-                <li>Top was not reached</li>
-                <li>A duplicate visible message was skipped</li>
-                <li>Composer footer was ignored</li>
-              </ul>
-            </section>
-          </header>
-          <article class="message">
-            <h2>1. User: &quot;Pilot&quot;</h2>
-            <div class="message-meta">Role: user - Created: 2026-05-31T10:21:00.000Z</div>
-            <div class="message-body"><p>Please compare <a href="https://example.com/docs?a=1&amp;b=2" rel="noreferrer">docs</a>.</p><table><thead><tr><th>Format</th><th>Use</th></tr></thead><tbody><tr><td>Markdown</td><td>Archive</td></tr><tr><td>CSV</td><td>Spreadsheet</td></tr></tbody></table></div>
-          </article>
-          <article class="message">
-            <h2>2. ChatGPT</h2>
-            <div class="message-meta">Role: assistant - Model: gpt-test - Created: 2026-05-31T10:22:00.000Z</div>
-            <div class="message-body"><p>Here is code:</p><pre><code class="language-ts">const value = &quot;&lt;script&gt;&quot;;
-      console.log(value);</code></pre><p>Formula-like text: \\(a+b\\).</p></div>
-          </article>
-          <footer>This file was generated locally by extension from content visible in the current conversation.</footer>
-        </main>
-      </body>
-      </html>
-      "
-    `);
+    expect(document.querySelector("time")?.textContent).not.toContain("2026-05-31T");
+    expect(document.querySelector("[aria-label='Capture status']")?.textContent).toContain(
+      "Capture may be incomplete"
+    );
+    expect(document.body.textContent).not.toContain("Role: user");
+    expect(document.body.textContent).not.toContain("Completeness:");
+    expect(document.querySelectorAll(".message")).toHaveLength(2);
+    expect(rendered.bytes).toContain(".message + .message");
   });
 
   test("does not render raw ChatGPT DOM classes from message HTML", () => {
@@ -439,6 +441,213 @@ describe("renderHtml", () => {
     expect(rendered).not.toContain("markdown prose");
     expect(rendered).not.toContain("flex w-full");
     expect(rendered).not.toContain("user-message-bubble-color");
+  });
+
+  test("carries the resolved dark theme into the standalone Preview document", () => {
+    const rendered = renderHtml(makeConversation(), { theme: "dark" }).bytes;
+    const document = new JSDOM(rendered).window.document;
+
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(rendered).toContain(':root[data-theme="dark"]');
+    expect(rendered).toContain("--page: #0b1220");
+  });
+
+  test("renders semantic assistant markdown and a role-aware user surface", () => {
+    const conversation = makeConversation();
+    const rendered = renderHtml({
+      ...conversation,
+      completeness: {
+        ...conversation.completeness,
+        status: "complete",
+        warnings: [],
+        platformWarnings: []
+      },
+      messageCount: 2,
+      messages: [
+        makeMessage({
+          id: "user-rich",
+          index: 0,
+          markdown: "Review **all files** and use https://example.com/input.",
+          text: "Review all files and use https://example.com/input."
+        }),
+        makeMessage({
+          id: "assistant-rich",
+          index: 1,
+          role: "assistant",
+          authorLabel: "ChatGPT",
+          text: "Summary",
+          markdown:
+            "## Summary\n\nA **strong** and *clear* result with `inline code`.\n\n- First\n  1. Nested one\n  2. Nested two\n- Second\n\n1. Alpha\n2. Beta\n\n> Important note\n\n[Reference](https://example.com/jobs/(remote))",
+          codeBlocks: []
+        })
+      ]
+    }).bytes;
+    const document = new JSDOM(rendered).window.document;
+
+    expect(document.querySelector(".message--user")).not.toBeNull();
+    expect(document.querySelector(".message--assistant h4")?.textContent).toBe("Summary");
+    expect(document.querySelector(".message--assistant strong")?.textContent).toBe("strong");
+    expect(document.querySelector(".message--assistant em")?.textContent).toBe("clear");
+    expect(document.querySelectorAll(".message--assistant .message-body > ul > li")).toHaveLength(
+      2
+    );
+    expect(document.querySelectorAll(".message--assistant .message-body > ol > li")).toHaveLength(
+      2
+    );
+    expect(
+      document.querySelectorAll(".message--assistant ul > li:first-child > ol > li")
+    ).toHaveLength(2);
+    expect(document.querySelector(".message--assistant blockquote")?.textContent).toContain(
+      "Important note"
+    );
+    expect(document.querySelector(".message--assistant code")?.textContent).toBe("inline code");
+    expect(document.querySelector(".message--assistant a")?.getAttribute("href")).toBe(
+      "https://example.com/jobs/(remote)"
+    );
+    expect(document.querySelector("[aria-label='Capture status']")).toBeNull();
+  });
+
+  test("opens every user-facing external Preview link in an isolated new tab", () => {
+    const conversation = makeConversation();
+    const rendered = renderHtml({
+      ...conversation,
+      completeness: {
+        ...conversation.completeness,
+        status: "complete",
+        warnings: [],
+        platformWarnings: []
+      },
+      messageCount: 1,
+      messages: [
+        makeMessage({
+          attachments: [
+            {
+              kind: "file",
+              name: "archive.zip",
+              url: "https://example.com/archive.zip"
+            },
+            {
+              kind: "website",
+              name: "Dashboard",
+              previewHtml: "<h1>Dashboard preview</h1>",
+              url: "https://example.com/dashboard"
+            }
+          ],
+          canvas: [{ title: "Canvas draft", url: "https://example.com/canvas" }],
+          images: [
+            {
+              alt: "Result chart",
+              height: 360,
+              src: "https://example.com/chart.png",
+              width: 640
+            }
+          ],
+          markdown: "[Documentation](https://example.com/docs) and https://example.com/plain-text.",
+          sources: [
+            {
+              kind: "citation",
+              title: "Source",
+              url: "https://example.com/source"
+            }
+          ]
+        })
+      ]
+    }).bytes;
+    const document = new JSDOM(rendered).window.document;
+    const links = [...document.querySelectorAll<HTMLAnchorElement>("a[href]")];
+
+    expect(links.map((link) => link.href)).toEqual(
+      expect.arrayContaining([
+        "https://chatgpt.com/c/example",
+        "https://example.com/docs",
+        "https://example.com/plain-text",
+        "https://example.com/archive.zip",
+        "https://example.com/dashboard",
+        "https://example.com/chart.png",
+        "https://example.com/source",
+        "https://example.com/canvas"
+      ])
+    );
+
+    links.forEach((link) => {
+      expect(link.target).toBe("_blank");
+      expect(new Set(link.rel.split(/\s+/u))).toEqual(new Set(["noopener", "noreferrer"]));
+    });
+  });
+
+  test("renders attachments, safe static website previews, compact sources, and image cards", () => {
+    const conversation = makeConversation();
+    const rendered = renderHtml({
+      ...conversation,
+      messageCount: 1,
+      messages: [
+        makeMessage({
+          attachments: [
+            {
+              description: "Zip archive",
+              kind: "file",
+              mimeType: "application/zip",
+              name: "project.zip",
+              sizeBytes: 2_400_000
+            },
+            {
+              kind: "website",
+              name: "Dashboard",
+              previewHtml:
+                '<!doctype html><h1>Dashboard preview</h1><script>window.evil()</script><iframe src="https://evil.example"></iframe>',
+              url: "https://example.com/dashboard"
+            }
+          ],
+          images: [
+            {
+              alt: "Source favicon",
+              height: 128,
+              src: "https://www.google.com/s2/favicons?domain=example.com&sz=128",
+              width: 128
+            },
+            {
+              alt: "Result chart",
+              height: 360,
+              src: "https://example.com/chart.png",
+              width: 640
+            }
+          ],
+          sources: [
+            {
+              id: "one",
+              kind: "citation",
+              snippet: "A concise source summary.",
+              title: "1",
+              url: "https://example.com/source"
+            },
+            {
+              id: "two",
+              kind: "citation",
+              snippet: "Duplicate source.",
+              title: "Example source",
+              url: "https://example.com/source"
+            }
+          ]
+        })
+      ]
+    }).bytes;
+    const document = new JSDOM(rendered).window.document;
+    const websitePreview = document.querySelector<HTMLIFrameElement>(".website-preview");
+
+    expect(document.querySelectorAll(".attachment-card")).toHaveLength(2);
+    expect(document.querySelector(".attachment-card")?.textContent).toContain("project.zip");
+    expect(document.querySelector(".attachment-card")?.textContent).toContain("2.4 MB");
+    expect(websitePreview?.getAttribute("sandbox")).toBe("");
+    expect(websitePreview?.getAttribute("src")).toBeNull();
+    expect(websitePreview?.getAttribute("srcdoc")).toContain("Dashboard preview");
+    expect(websitePreview?.getAttribute("srcdoc")).toContain("Content-Security-Policy");
+    expect(websitePreview?.getAttribute("srcdoc")).toContain("default-src 'none'");
+    expect(websitePreview?.getAttribute("srcdoc")).not.toContain("window.evil");
+    expect(websitePreview?.getAttribute("srcdoc")).not.toContain("evil.example");
+    expect(document.querySelectorAll(".source-card")).toHaveLength(1);
+    expect(document.querySelectorAll(".media-card")).toHaveLength(1);
+    expect(document.body.textContent).toContain("Result chart");
+    expect(rendered).not.toContain("google.com/s2/favicons");
   });
 });
 

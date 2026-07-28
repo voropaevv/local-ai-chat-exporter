@@ -12,6 +12,12 @@ import {
 } from "../core/image-safety";
 import { renderAdvancedTextLines } from "./advanced-content";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
+import {
+  formatAttachmentLabel,
+  formatDisplayDateTime,
+  formatFileSize,
+  shouldShowCaptureStatus
+} from "./presentation";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
@@ -42,9 +48,11 @@ function renderDocumentXml(conversation: ConversationExport): string {
     renderParagraph(conversation.title ?? "Untitled conversation", "Title"),
     renderParagraph(`Platform: ${conversation.platformLabel}`),
     renderParagraph(`Source: ${conversation.sourceUrl}`),
-    renderParagraph(`Exported: ${conversation.exportedAt}`),
+    renderParagraph(`Exported: ${formatDisplayDateTime(conversation.exportedAt)}`),
     renderParagraph(`Messages: ${conversation.messageCount}`),
-    renderParagraph(`Completeness: ${conversation.completeness.status}`),
+    ...(shouldShowCaptureStatus(conversation)
+      ? [renderParagraph(`Capture status: ${conversation.completeness.status.replace(/_/gu, " ")}`)]
+      : []),
     ...renderWarnings(conversation),
     ...conversation.messages.flatMap(renderMessage),
     `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>`
@@ -64,7 +72,11 @@ function renderMessage(message: ExportedMessage): readonly string[] {
 
   return [
     renderParagraph(`${message.index + 1}. ${message.authorLabel}`, "Heading1"),
-    renderParagraph(`Role: ${message.role}${message.model ? ` | Model: ${message.model}` : ""}`),
+    ...(message.model !== undefined ? [renderParagraph(`Model: ${message.model}`)] : []),
+    ...(message.createdAt !== undefined
+      ? [renderParagraph(`Created: ${formatDisplayDateTime(message.createdAt)}`)]
+      : []),
+    ...renderAttachmentRefs(message),
     ...renderMarkdownTables(message.markdown),
     ...bodyParagraphs.map((paragraph) => renderParagraph(paragraph)),
     ...message.codeBlocks.map(renderCodeBlock),
@@ -72,6 +84,30 @@ function renderMessage(message: ExportedMessage): readonly string[] {
     ...renderAdvancedTextLines(message)
       .filter((line) => line.length > 0)
       .map((line) => renderParagraph(line))
+  ];
+}
+
+function renderAttachmentRefs(message: ExportedMessage): readonly string[] {
+  const attachments = message.attachments ?? [];
+
+  if (attachments.length === 0) {
+    return [];
+  }
+
+  return [
+    renderParagraph("Attachments", "Heading2"),
+    ...attachments.map((attachment) => {
+      const details = [
+        formatAttachmentLabel(attachment),
+        formatFileSize(attachment.sizeBytes),
+        attachment.url,
+        attachment.warning
+      ].filter((value): value is string => value !== undefined && value.length > 0);
+
+      return renderParagraph(
+        `• ${attachment.name}${details.length > 0 ? ` — ${details.join(" · ")}` : ""}`
+      );
+    })
   ];
 }
 
