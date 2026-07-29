@@ -15,10 +15,12 @@ import { renderHtml } from "./html";
 import { normalizePdfText, PdfFontRegistry, type PdfEmbeddedFont, type PdfFont } from "./pdf-font";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettings } from "./pdf-settings";
 import {
+  type AttachmentVisualKind,
   formatAttachmentBadge,
   formatAttachmentLabel,
   formatDisplayDateTime,
   formatFileSize,
+  getAttachmentVisualKind,
   getMessageDisplayTimestamp,
   shouldShowCaptureStatus
 } from "./presentation";
@@ -130,6 +132,25 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
     text: { b: 0, g: 0, r: 0 }
   }
 };
+
+const PDF_WHITE: PdfColor = { b: 1, g: 1, r: 1 };
+
+function attachmentAccentColor(kind: AttachmentVisualKind): PdfColor {
+  switch (kind) {
+    case "archive":
+      return { b: 0.95, g: 0.32, r: 0.55 };
+    case "code":
+      return { b: 0.93, g: 0.65, r: 0.06 };
+    case "document":
+      return { b: 0.96, g: 0.51, r: 0.23 };
+    case "image":
+      return { b: 0.7, g: 0.28, r: 0.93 };
+    case "website":
+      return { b: 0.6, g: 0.72, r: 0.06 };
+    case "other":
+      return { b: 0.66, g: 0.58, r: 0.5 };
+  }
+}
 
 export function renderPdf(
   conversation: ConversationExport,
@@ -245,7 +266,7 @@ function renderMessage(layout: PdfLayout, message: ExportedMessage): void {
   const displayTimestamp = getMessageDisplayTimestamp(message);
   const messageDetails = [
     ...(message.model !== undefined ? [`Model: ${message.model}`] : []),
-    ...(displayTimestamp !== undefined ? [`Date: ${displayTimestamp}`] : [])
+    ...(displayTimestamp !== undefined ? [displayTimestamp] : [])
   ];
 
   if (messageDetails.length > 0) {
@@ -253,7 +274,6 @@ function renderMessage(layout: PdfLayout, message: ExportedMessage): void {
   }
 
   if ((message.attachments?.length ?? 0) > 0) {
-    layout.heading("Attachments", 3);
     layout.attachmentCards(message.attachments!);
   }
 
@@ -602,14 +622,16 @@ class PdfLayout {
     const detailSize = Math.max(7.5, this.settings.fontSizePt * 0.82);
     const titleLineHeight = titleSize * 1.28;
     const detailLineHeight = detailSize * 1.3;
-    const cardGap = 7;
-    const cardPadding = 9;
-    const badgeWidth = 42;
+    const cardGap = 8;
+    const cardPadding = 7;
+    const cardWidth = Math.min(this.contentWidth, 420);
+    const badgeWidth = 38;
     const copyX = this.margin + cardPadding + badgeWidth + 10;
-    const copyWidth = this.contentWidth - cardPadding * 2 - badgeWidth - 10;
+    const copyWidth = cardWidth - cardPadding * 2 - badgeWidth - 10;
 
     attachments.forEach((attachment) => {
       const badge = formatAttachmentBadge(attachment);
+      const accentColor = attachmentAccentColor(getAttachmentVisualKind(attachment));
       const typeLabel = formatAttachmentLabel(attachment);
       const details = [typeLabel, formatFileSize(attachment.sizeBytes)]
         .filter((value): value is string => value !== undefined && value.trim().length > 0)
@@ -630,29 +652,31 @@ class PdfLayout {
         supportingLines.length * detailLineHeight +
         (detailLines.length > 0 ? 2 : 0) +
         (supportingLines.length > 0 ? 2 : 0);
-      const cardHeight = Math.max(54, copyHeight + cardPadding * 2);
+      const cardHeight = Math.max(48, copyHeight + cardPadding * 2);
 
       this.ensureSpace(cardHeight + cardGap);
 
       const cardTop = this.y;
       const cardBottom = cardTop - cardHeight;
-      const badgeHeight = 34;
+      const badgeHeight = 36;
       const badgeBottom = cardTop - (cardHeight + badgeHeight) / 2;
 
-      this.fillRect(
+      this.fillAndStrokeRoundedRect(
         this.margin,
         cardBottom,
-        this.contentWidth,
+        cardWidth,
         cardHeight,
-        this.theme.cardBackground
+        9,
+        this.theme.cardBackground,
+        this.theme.border
       );
-      this.strokeRect(this.margin, cardBottom, this.contentWidth, cardHeight, this.theme.border);
-      this.strokeRect(
+      this.fillRoundedRect(
         this.margin + cardPadding,
         badgeBottom,
         badgeWidth,
         badgeHeight,
-        this.theme.border
+        8,
+        accentColor
       );
 
       const badgeSize = Math.max(7, Math.min(9, detailSize));
@@ -663,7 +687,7 @@ class PdfLayout {
         badgeBottom + (badgeHeight - badgeSize) / 2 + 1,
         "bold",
         badgeSize,
-        this.theme.heading
+        PDF_WHITE
       );
 
       let baseline = cardTop - cardPadding - titleSize;
@@ -692,7 +716,7 @@ class PdfLayout {
       this.y = cardBottom - cardGap;
     });
 
-    this.space(2);
+    this.space(Math.max(10, this.settings.fontSizePt));
   }
 
   nestedList(list: PdfListBlock): void {
@@ -875,6 +899,39 @@ class PdfLayout {
   private fillRect(x: number, y: number, width: number, height: number, color: PdfColor): void {
     this.currentPage.commands.push(
       `q ${colorOperator(color, "fill")} ${formatNumber(x)} ${formatNumber(y)} ${formatNumber(width)} ${formatNumber(height)} re f Q`
+    );
+  }
+
+  private fillRoundedRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+    color: PdfColor
+  ): void {
+    this.currentPage.commands.push(
+      `q ${colorOperator(color, "fill")} ${roundedRectPath(x, y, width, height, radius)} f Q`
+    );
+  }
+
+  private fillAndStrokeRoundedRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+    fill: PdfColor,
+    stroke: PdfColor
+  ): void {
+    this.currentPage.commands.push(
+      `q ${colorOperator(fill, "fill")} ${colorOperator(stroke, "stroke")} 0.8 w ${roundedRectPath(
+        x,
+        y,
+        width,
+        height,
+        radius
+      )} B Q`
     );
   }
 
@@ -1377,6 +1434,44 @@ function fontResource(font: PdfFont): string {
 
 function colorOperator(color: PdfColor, operation: "fill" | "stroke"): string {
   return `${formatNumber(color.r)} ${formatNumber(color.g)} ${formatNumber(color.b)} ${operation === "fill" ? "rg" : "RG"}`;
+}
+
+function roundedRectPath(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): string {
+  const resolvedRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+  const controlOffset = resolvedRadius * 0.552_284_75;
+  const right = x + width;
+  const top = y + height;
+
+  return [
+    `${formatNumber(x + resolvedRadius)} ${formatNumber(y)} m`,
+    `${formatNumber(right - resolvedRadius)} ${formatNumber(y)} l`,
+    `${formatNumber(right - resolvedRadius + controlOffset)} ${formatNumber(y)} ${formatNumber(
+      right
+    )} ${formatNumber(y + resolvedRadius - controlOffset)} ${formatNumber(right)} ${formatNumber(
+      y + resolvedRadius
+    )} c`,
+    `${formatNumber(right)} ${formatNumber(top - resolvedRadius)} l`,
+    `${formatNumber(right)} ${formatNumber(top - resolvedRadius + controlOffset)} ${formatNumber(
+      right - resolvedRadius + controlOffset
+    )} ${formatNumber(top)} ${formatNumber(right - resolvedRadius)} ${formatNumber(top)} c`,
+    `${formatNumber(x + resolvedRadius)} ${formatNumber(top)} l`,
+    `${formatNumber(x + resolvedRadius - controlOffset)} ${formatNumber(top)} ${formatNumber(
+      x
+    )} ${formatNumber(top - resolvedRadius + controlOffset)} ${formatNumber(x)} ${formatNumber(
+      top - resolvedRadius
+    )} c`,
+    `${formatNumber(x)} ${formatNumber(y + resolvedRadius)} l`,
+    `${formatNumber(x)} ${formatNumber(y + resolvedRadius - controlOffset)} ${formatNumber(
+      x + resolvedRadius - controlOffset
+    )} ${formatNumber(y)} ${formatNumber(x + resolvedRadius)} ${formatNumber(y)} c`,
+    "h"
+  ].join(" ");
 }
 
 function formatNumber(value: number): string {
