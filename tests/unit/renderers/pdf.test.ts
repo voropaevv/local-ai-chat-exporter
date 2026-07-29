@@ -210,13 +210,15 @@ describe("renderPdf", () => {
     const text = extractPdfText(rendered.bytes);
 
     expect(text).toContain("Exported: 31 May 2026, 10:20 UTC");
-    expect(text).toContain("Date: Thursday 9:52 AM");
-    expect(text).toContain("Attachments");
+    expect(text).toContain("Thursday 9:52 AM");
     expect(text).toContain("ZIP");
     expect(text).toContain("reference-assets.zip");
     expect(text).toContain("2.4 MB");
-    expect(body).toMatch(/\bre S\b/u);
+    expect(body).toMatch(/\bc\b/u);
+    expect(body).toMatch(/\bB\b/u);
     expect(text).not.toContain("- reference-assets.zip");
+    expect(text).not.toContain("Attachments");
+    expect(text).not.toContain("Date:");
     expect(text).not.toContain("Role:");
     expect(text).not.toContain("Completeness:");
     expect(text).not.toContain("Capture status:");
