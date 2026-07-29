@@ -225,6 +225,103 @@ describe("extractVisibleChatGptMessages", () => {
     expect(messages[3].attachments?.[0]?.previewHtml).toBeUndefined();
   });
 
+  test("extracts current file tiles, timestamps, and a final answer beside rich activity", () => {
+    const messages = extractVisibleChatGptMessages(
+      loadFixture("current-file-tiles-rich-activity.html")
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toMatchObject({
+      attachments: [
+        {
+          description: "File",
+          kind: "file",
+          name: "Pasted markdown(16).md"
+        },
+        {
+          description: "Zip Archive",
+          kind: "file",
+          name: "Archive(4).zip"
+        }
+      ],
+      metadata: {
+        displayTimestamp: "Thursday 9:52 AM"
+      },
+      role: "user",
+      text: "Find the most relevant roles from all attached files."
+    });
+    expect(messages[0].createdAt).toBeUndefined();
+    expect(messages[0].text).not.toContain("Zip Archive");
+
+    expect(messages[1]).toMatchObject({
+      createdAt: "2026-07-23T10:46:00+04:00",
+      metadata: {
+        displayTimestamp: "Thursday 10:46 AM"
+      },
+      role: "assistant"
+    });
+    expect(messages[1].text).toContain("Итог");
+    expect(messages[1].text).toContain("Я собрал полный список");
+    expect(messages[1].text).not.toContain("Analysis errored");
+    expect(messages[1].markdown).toContain("- 132 вакансии");
+    expect(messages[1].codeBlocks).toEqual([]);
+    expect(messages[1].thinkingBlocks).toHaveLength(1);
+    expect(messages[1].thinkingBlocks?.[0]).toMatchObject({
+      title: "Analyzed"
+    });
+    expect(messages[1].thinkingBlocks?.[0]?.text).toContain("Analysis errored");
+    expect(messages[1].thinkingBlocks?.[0]?.text).toContain("STDOUT/STDERR");
+    expect(messages[1].thinkingBlocks?.[0]?.text).not.toContain("Я собрал полный список");
+  });
+
+  test("re-extracts a stable message when its preceding display timestamp hydrates late", () => {
+    const document = new JSDOM(
+      `<main>
+        <section data-testid="conversation-turn-1">
+          <div data-message-author-role="user" data-message-id="late-timestamp">
+            <div class="markdown"><p>Hello after hydration.</p></div>
+          </div>
+        </section>
+      </main>`,
+      { url: "https://chatgpt.com/c/late-timestamp" }
+    ).window.document;
+    const revisions = new Map<string, string>();
+    const firstPass = extractVisibleChatGptMessages(document, {
+      onStableMessageRevision: (messageId, revision) => revisions.set(messageId, revision)
+    });
+    const turn = document.querySelector("[data-testid='conversation-turn-1']");
+    const separator = document.createElement("div");
+
+    separator.setAttribute("aria-label", "Thursday 9:52 AM");
+    separator.setAttribute("role", "separator");
+    turn?.before(separator);
+
+    const secondPass = extractVisibleChatGptMessages(document, {
+      knownStableMessageRevisions: revisions
+    });
+
+    expect(firstPass[0]?.metadata.displayTimestamp).toBeUndefined();
+    expect(secondPass).toHaveLength(1);
+    expect(secondPass[0]?.metadata.displayTimestamp).toBe("Thursday 9:52 AM");
+  });
+
+  test("does not mistake a time element inside message content for the message date", () => {
+    const document = new JSDOM(
+      `<section data-testid="conversation-turn-1">
+        <div data-message-author-role="assistant" data-message-id="content-time">
+          <div class="markdown">
+            <p>The deadline is <time datetime="2027-01-02T12:00:00Z">2 January</time>.</p>
+          </div>
+        </div>
+      </section>`,
+      { url: "https://chatgpt.com/c/content-time" }
+    ).window.document;
+    const [message] = extractVisibleChatGptMessages(document);
+
+    expect(message?.createdAt).toBeUndefined();
+    expect(message?.metadata.displayTimestamp).toBeUndefined();
+  });
+
   test("hard-bounds captured local artifact HTML", () => {
     const longBody = "x".repeat(300_000);
     const document = new JSDOM(

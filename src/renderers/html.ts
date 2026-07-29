@@ -15,10 +15,13 @@ import { formatSourceKindLabel } from "./advanced-content";
 import {
   escapeAttribute,
   escapeHtml,
+  formatAttachmentBadge,
   formatAttachmentLabel,
   formatDisplayDateTime,
   formatFileSize,
+  getAttachmentVisualKind,
   getMessageAttachments,
+  getMessageDisplayTimestamp,
   renderInlineMarkdown,
   renderSemanticMarkdown,
   safeHref,
@@ -140,7 +143,7 @@ h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 2.4rem); line-height: 1.15; lette
   background: var(--user);
 }
 .message--user + .message { border-top: 0; }
-.message-header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.message-header { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-bottom: 14px; }
 .message-number {
   display: inline-grid;
   min-width: 26px;
@@ -153,6 +156,18 @@ h1 { margin: 0; font-size: clamp(1.75rem, 4vw, 2.4rem); line-height: 1.15; lette
   font-weight: 800;
 }
 .message h2 { margin: 0; font-size: 1rem; line-height: 1.3; }
+.message-timestamp {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.message-timestamp svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .message-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: -6px 0 14px 35px; color: var(--muted); font-size: 0.82rem; }
 .message-body { min-width: 0; font-size: 1rem; }
 .message-body > :first-child { margin-top: 0; }
@@ -202,7 +217,7 @@ table { display: block; width: 100%; margin: 1em 0; overflow-x: auto; border-col
 th, td { border: 1px solid var(--border); padding: 8px 11px; text-align: left; vertical-align: top; }
 th { background: var(--surface-muted); font-weight: 740; }
 .attachment-grid, .media-grid, .source-grid { display: grid; gap: 10px; margin: 0 0 16px; }
-.attachment-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.attachment-grid { width: min(100%, 600px); grid-template-columns: minmax(0, 1fr); }
 .attachment-card, .media-card, .source-card {
   display: grid;
   min-width: 0;
@@ -213,21 +228,53 @@ th { background: var(--surface-muted); font-weight: 740; }
   text-decoration: none;
   box-shadow: 0 7px 18px var(--shadow);
 }
-.attachment-card { grid-template-columns: 44px minmax(0, 1fr); gap: 11px; align-items: center; padding: 11px; }
+.attachment-card {
+  min-height: 64px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 9px 12px 9px 9px;
+}
 .attachment-card:hover, a.media-card:hover, .source-card:hover { border-color: var(--accent); text-decoration: none; }
 .attachment-icon {
   display: inline-grid;
-  width: 44px;
-  height: 44px;
+  position: relative;
+  width: 46px;
+  height: 46px;
   place-items: center;
   border-radius: 12px;
   background: var(--accent-soft);
   color: var(--accent);
 }
+.attachment-icon svg { width: 23px; height: 23px; }
+.attachment-icon--archive { background: rgba(139, 92, 246, 0.16); color: #9b7cff; }
+.attachment-icon--code { background: rgba(14, 165, 233, 0.16); color: #38bdf8; }
+.attachment-icon--document { background: rgba(59, 130, 246, 0.16); color: #60a5fa; }
+.attachment-icon--image { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+.attachment-icon--other { background: rgba(148, 163, 184, 0.16); color: var(--muted); }
+.attachment-icon--website { background: rgba(16, 185, 129, 0.16); color: #34d399; }
+.attachment-icon__badge {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  max-width: 38px;
+  overflow: hidden;
+  border-radius: 4px;
+  padding: 2px 3px;
+  background: var(--surface-raised);
+  color: currentColor;
+  font-size: 0.46rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
 .attachment-icon, .media-icon { font-size: 0.68rem; font-weight: 820; letter-spacing: 0.035em; line-height: 1; }
 .attachment-copy, .media-copy, .source-copy { display: grid; min-width: 0; gap: 2px; }
 .attachment-copy strong, .media-copy strong, .source-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-copy strong { font-size: 0.94rem; }
 .attachment-copy span, .media-copy span, .source-copy span { color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
+.attachment-details { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-open-link { width: fit-content; margin-top: 3px; font-size: 0.82rem; font-weight: 700; }
 .attachment-warning { grid-column: 1 / -1; margin: 0; color: var(--warning); font-size: 0.82rem; }
 .website-preview {
@@ -256,6 +303,7 @@ footer { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 16p
   main { padding: 18px 12px 36px; }
   .conversation-header { border-radius: 14px; padding: 18px; }
   .message--user { width: 94%; border-radius: 18px; padding: 16px; }
+  .message-timestamp { width: 100%; margin-left: 35px; }
   .attachment-grid, .media-grid, .source-grid { grid-template-columns: 1fr; }
 }
 @media print {
@@ -376,30 +424,40 @@ function renderMessage(message: ExportedMessage): string {
   const role = normalizeRoleClass(message.role);
   const meta = renderMessageMeta(message);
   const attachments = renderAttachments(getMessageAttachments(message));
+  const timestamp = renderMessageTimestamp(message);
 
   return `      <article class="message message--${role}">
         <header class="message-header">
           <span class="message-number" aria-label="Message ${message.index + 1}">${message.index + 1}</span>
-          <h2>${escapeHtml(normalizeSingleLine(message.authorLabel))}</h2>
+          <h2>${escapeHtml(normalizeSingleLine(message.authorLabel))}</h2>${timestamp}
         </header>${meta}
         ${attachments}
         <div class="message-body">${renderMessageBody(message)}</div>
       </article>`;
 }
 
+function renderMessageTimestamp(message: ExportedMessage): string {
+  const displayTimestamp = getMessageDisplayTimestamp(message);
+
+  if (displayTimestamp === undefined) {
+    return "";
+  }
+
+  const dateTimeAttribute =
+    message.createdAt === undefined || message.createdAt.trim().length === 0
+      ? ""
+      : ` datetime="${escapeAttribute(message.createdAt)}"`;
+
+  return `<time class="message-timestamp"${dateTimeAttribute}>${renderLucideIcon(
+    "clock"
+  )}<span>${escapeHtml(displayTimestamp)}</span></time>`;
+}
+
 function renderMessageMeta(message: ExportedMessage): string {
   const parts: string[] = [];
 
   if (message.model !== undefined && message.model.trim().length > 0) {
-    parts.push(`<span>${escapeHtml(message.model)}</span>`);
-  }
-
-  if (message.createdAt !== undefined && message.createdAt.trim().length > 0) {
-    parts.push(
-      `<time datetime="${escapeAttribute(message.createdAt)}">${escapeHtml(
-        formatDisplayDateTime(message.createdAt)
-      )}</time>`
-    );
+    parts.push(`<span>Model: ${escapeHtml(message.model)}</span>`);
   }
 
   return parts.length === 0 ? "" : `<div class="message-meta">${parts.join("")}</div>`;
@@ -435,6 +493,7 @@ function renderAttachments(attachments: readonly ExportedAttachmentRef[]): strin
 
 function renderAttachment(attachment: ExportedAttachmentRef): string {
   const href = attachment.url === undefined ? undefined : safeHref(attachment.url);
+  const visualKind = getAttachmentVisualKind(attachment);
   const hasPreview =
     attachment.kind === "website" &&
     attachment.previewHtml !== undefined &&
@@ -460,12 +519,20 @@ function renderAttachment(attachment: ExportedAttachmentRef): string {
     hasPreview && href !== undefined
       ? `<a class="attachment-open-link" href="${href}" rel="noopener noreferrer" target="_blank">Open website</a>`
       : "";
+  const details =
+    detailParts.length === 0
+      ? ""
+      : `<span class="attachment-details">${escapeHtml(detailParts.join(" · "))}</span>`;
 
-  return `<${tag} class="attachment-card attachment-card--${attachment.kind}"${linkAttributes}>
-    <span aria-hidden="true" class="attachment-icon">${escapeHtml(attachmentBadge(attachment))}</span>
-    <span class="attachment-copy"><strong>${escapeHtml(attachment.name)}</strong><span>${escapeHtml(
-      detailParts.join(" · ")
-    )}</span>${openLink}</span>${warning}${preview}
+  return `<${tag} class="attachment-card attachment-card--${visualKind}"${linkAttributes}>
+    <span aria-hidden="true" class="attachment-icon attachment-icon--${visualKind}">${renderLucideIcon(
+      visualKind
+    )}<span class="attachment-icon__badge">${escapeHtml(
+      formatAttachmentBadge(attachment)
+    )}</span></span>
+    <span class="attachment-copy"><strong title="${escapeAttribute(
+      attachment.name
+    )}">${escapeHtml(attachment.name)}</strong>${details}${openLink}</span>${warning}${preview}
   </${tag}>`;
 }
 
@@ -733,23 +800,30 @@ function sanitizeStaticPreviewHtml(input: string): string {
     : protectedHtml;
 }
 
-function attachmentBadge(attachment: ExportedAttachmentRef): string {
-  switch (attachment.kind) {
-    case "image":
-      return "IMG";
-    case "website":
-      return "WEB";
-    case "other":
-      return "FILE";
-    case "file": {
-      const extension = attachment.name.split(".").pop()?.toLocaleUpperCase();
-      return extension !== undefined &&
-        extension !== attachment.name.toLocaleUpperCase() &&
-        /^[A-Z0-9]{1,5}$/u.test(extension)
-        ? extension
-        : "FILE";
+function renderLucideIcon(
+  icon: "archive" | "clock" | "code" | "document" | "image" | "other" | "website"
+): string {
+  // These inline paths are the matching Lucide icons already used by the extension UI.
+  const content = (() => {
+    switch (icon) {
+      case "archive":
+        return '<path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 12v-1"/><path d="M8 18v-2"/><path d="M8 7V6"/><circle cx="8" cy="20" r="2"/>';
+      case "clock":
+        return '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>';
+      case "code":
+        return '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/>';
+      case "document":
+        return '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>';
+      case "image":
+        return '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>';
+      case "other":
+        return '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>';
+      case "website":
+        return '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>';
     }
-  }
+  })();
+
+  return `<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24">${content}</svg>`;
 }
 
 const MAX_STATIC_PREVIEW_HTML = 250_000;

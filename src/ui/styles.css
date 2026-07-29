@@ -31,6 +31,16 @@ body:has(.app-shell--popup) {
   min-width: 378px;
 }
 
+body:has(.app-shell--preview) {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body:has(.app-shell--preview) #app {
+  height: 100%;
+  min-height: 0;
+}
+
 button,
 input,
 select,
@@ -175,10 +185,13 @@ a:hover {
 }
 
 .app-shell--preview {
+  display: flex;
+  height: 100%;
   width: min(1120px, 100vw);
+  min-height: 0;
   margin-inline: auto;
-  min-height: 100vh;
-  align-content: start;
+  flex-direction: column;
+  overflow: hidden;
   padding: 24px;
 }
 
@@ -701,13 +714,19 @@ h3 {
 }
 
 .preview-frame {
+  flex: 1 1 0;
   width: 100%;
   max-width: 100%;
   margin-inline: auto;
-  min-height: calc(100vh - 178px);
+  min-height: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-surface);
+}
+
+.app-shell--preview > :is(.panel:last-child, .preview-empty-state) {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .sr-only {

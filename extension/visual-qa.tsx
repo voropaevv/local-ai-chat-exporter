@@ -44,7 +44,7 @@ const conversation: ConversationExport = {
       id: "qa-user-1",
       images: [],
       index: 0,
-      metadata: {},
+      metadata: { displayTimestamp: "Thursday 9:52 AM" },
       role: "user",
       text: "Create a concise launch checklist for Jelluvi using the attached brief and reference assets."
     },

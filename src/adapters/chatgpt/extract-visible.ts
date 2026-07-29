@@ -1,4 +1,4 @@
-import type { ExportedMessage } from "../../core/schema";
+import type { ChatRole, ExportedMessage } from "../../core/schema";
 import {
   getProviderDefinition,
   getProviderHostnames,
@@ -8,11 +8,11 @@ import { normalizeRole } from "../../core/normalize";
 import { stableHash } from "../../utils/hash";
 import type { PlatformAdapter } from "../types";
 import { createVisibleAdapterContract } from "../shared/contract";
-import { cleanChatGptNode } from "./clean-chatgpt-node";
+import { cleanChatGptNode, type CleanedChatGptNode } from "./clean-chatgpt-node";
 import { detectChatGpt } from "./detect";
 import { CHATGPT_ACTIVITY_SELECTORS, extractChatGptAdvancedContent } from "./extract-advanced";
 import { CHATGPT_ATTACHMENT_SELECTORS, extractChatGptAttachments } from "./extract-attachments";
-import { chatGptSelectors } from "./selectors";
+import { CHATGPT_FINAL_ANSWER_SELECTORS, chatGptSelectors } from "./selectors";
 
 const CHATGPT_PROVIDER = getProviderDefinition("chatgpt");
 
@@ -67,9 +67,7 @@ export function extractVisibleChatGptMessages(
     const role = normalizeRole(messageElement.getAttribute("data-message-author-role"));
     const advancedContent = extractChatGptAdvancedContent(messageElement);
     const attachments = extractChatGptAttachments(messageElement, turn);
-    const cleanedNode = cleanChatGptNode(messageElement, {
-      chatGptSpecificCleanup: true
-    });
+    const cleanedNode = cleanMessageContent(messageElement, turn, role);
 
     if (
       cleanedNode.text.length === 0 &&
@@ -114,14 +112,136 @@ export function extractVisibleChatGptMessages(
       ...(advancedContent.canvas.length > 0 ? { canvas: advancedContent.canvas } : {}),
       ...(advancedContent.createdAt !== undefined ? { createdAt: advancedContent.createdAt } : {}),
       ...(advancedContent.model !== undefined ? { model: advancedContent.model } : {}),
-      metadata:
-        advancedContent.contentKind !== undefined
+      metadata: {
+        ...(advancedContent.contentKind !== undefined
           ? { contentKind: advancedContent.contentKind }
-          : {}
+          : {}),
+        ...(advancedContent.displayTimestamp !== undefined
+          ? { displayTimestamp: advancedContent.displayTimestamp }
+          : {})
+      }
     });
   }
 
   return messages;
+}
+
+function cleanMessageContent(
+  messageElement: Element,
+  turn: Element | null,
+  role: ChatRole
+): CleanedChatGptNode {
+  const base = cleanChatGptNode(messageElement, {
+    chatGptSpecificCleanup: true
+  });
+
+  if (role !== "assistant" || turn === null) {
+    return base;
+  }
+
+  const candidates = collectFinalAnswerCandidates(turn, messageElement);
+  return candidates.reduce((cleaned, candidate) => {
+    const supplement = cleanChatGptNode(candidate, {
+      chatGptSpecificCleanup: true
+    });
+
+    return mergeCleanedContent(cleaned, supplement);
+  }, base);
+}
+
+function collectFinalAnswerCandidates(turn: Element, messageElement: Element): readonly Element[] {
+  const candidates = Array.from(turn.querySelectorAll(CHATGPT_FINAL_ANSWER_SELECTORS)).filter(
+    (candidate) => {
+      if (!isVisibleMessageElement(candidate)) {
+        return false;
+      }
+
+      if (
+        candidate.closest(
+          [
+            CHATGPT_ATTACHMENT_SELECTORS,
+            CHATGPT_ACTIVITY_SELECTORS,
+            "[data-jelluvi-source-list]",
+            "[data-testid='sources']",
+            "[data-testid='source-list']",
+            "[data-testid*='sources-panel' i]",
+            "[data-testid*='sources-drawer' i]",
+            "[data-jelluvi-canvas]",
+            "[data-testid*='canvas' i]"
+          ].join(",")
+        )
+      ) {
+        return false;
+      }
+
+      const roleElement = candidate.closest(chatGptSelectors.messageByRole);
+      return (
+        roleElement === null ||
+        roleElement === messageElement ||
+        normalizeRole(roleElement.getAttribute("data-message-author-role")) === "assistant"
+      );
+    }
+  );
+
+  return candidates.filter(
+    (candidate) => !candidates.some((other) => other !== candidate && candidate.contains(other))
+  );
+}
+
+function mergeCleanedContent(
+  base: CleanedChatGptNode,
+  supplement: CleanedChatGptNode
+): CleanedChatGptNode {
+  if (!hasSubstantiveContent(supplement)) {
+    return base;
+  }
+
+  if (supplement.text.length > 0 && base.text.includes(supplement.text)) {
+    return base;
+  }
+
+  if (base.text.length > 0 && supplement.text.includes(base.text)) {
+    return supplement;
+  }
+
+  return {
+    codeBlocks: uniqueStructuredValues([...base.codeBlocks, ...supplement.codeBlocks]),
+    html: joinContent(base.html, supplement.html),
+    images: uniqueStructuredValues([...base.images, ...supplement.images]),
+    markdown: joinContent(base.markdown, supplement.markdown),
+    text: joinContent(base.text, supplement.text)
+  };
+}
+
+function hasSubstantiveContent(content: CleanedChatGptNode): boolean {
+  return content.text.length > 0 || content.codeBlocks.length > 0 || content.images.length > 0;
+}
+
+function joinContent(left: string, right: string): string {
+  if (left.length === 0) {
+    return right;
+  }
+
+  if (right.length === 0) {
+    return left;
+  }
+
+  return `${left}\n\n${right}`;
+}
+
+function uniqueStructuredValues<T>(values: readonly T[]): readonly T[] {
+  const seen = new Set<string>();
+
+  return values.filter((value) => {
+    const key = JSON.stringify(value);
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 function getStableMessageId(messageElement: Element): string | undefined {
@@ -149,6 +269,10 @@ function getCheapStableMessageRevision(messageElement: Element, turn: Element | 
   const scope = turn ?? messageElement;
   const scopeText = scope.textContent ?? "";
   const linkedPanelSignals = collectLinkedPanelSignals(scope);
+  const precedingTimestampSignal =
+    turn?.previousElementSibling?.matches("[role='separator']") === true
+      ? getCheapElementSignal(turn.previousElementSibling)
+      : "";
   const structuredSignals = Array.from(
     scope.querySelectorAll(
       [
@@ -171,7 +295,8 @@ function getCheapStableMessageRevision(messageElement: Element, turn: Element | 
       stableHash(scopeText),
       structuredSignals.length,
       structuredSignals.join("|"),
-      linkedPanelSignals.join("|")
+      linkedPanelSignals.join("|"),
+      precedingTimestampSignal
     ].join(":")
   );
 }
@@ -205,10 +330,15 @@ function collectLinkedPanelSignals(scope: Element): readonly string[] {
 function getCheapElementSignal(element: Element): string {
   const text = element.textContent ?? "";
   const attributes = [
+    "aria-label",
     "aria-expanded",
     "data-attachment-id",
+    "data-created-at",
+    "data-display-timestamp",
     "data-file-name",
+    "data-timestamp",
     "data-testid",
+    "datetime",
     "href",
     "src",
     "srcdoc",

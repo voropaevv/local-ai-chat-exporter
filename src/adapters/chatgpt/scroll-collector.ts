@@ -12,12 +12,16 @@ import {
   scrollDownBy,
   scrollToTop
 } from "./scroll-container";
+import { chatGptSelectors } from "./selectors";
 
 const DEFAULT_MAX_STEPS = 1500;
 const DEFAULT_MAX_STALLS = 8;
 const DEFAULT_SCROLL_STEP_RATIO = 0.85;
-const DEFAULT_DOM_QUIET_MS = 80;
-const DEFAULT_DOM_SETTLE_MAX_MS = 300;
+const DEFAULT_DOM_QUIET_MS = 100;
+const DEFAULT_DOM_SETTLE_MAX_MS = 500;
+const DEFAULT_DOM_HYDRATION_MAX_MS = 3_000;
+const DEFAULT_DOM_INVENTORY_POLL_MS = 40;
+const EXPECTED_TOP_TURN_WINDOW = 4;
 
 export interface ChatGptScrollCollectorOptions {
   readonly document?: Document;
@@ -56,7 +60,7 @@ export async function collectChatGptConversation(
     options.waitForDomSettle ??
     (options.settleDelayMs !== undefined
       ? createDelayWait(options.settleDelayMs)
-      : createDomQuietWait(container));
+      : createDomHydrationWait(container));
   const scrollBy = options.scrollBy ?? scrollDownBy;
   const originalScrollTop = getScrollTop(container);
   const messages: ExportedMessage[] = [];
@@ -67,11 +71,21 @@ export async function collectChatGptConversation(
   let consecutiveStalls = 0;
   let stalls = 0;
   let aborted = options.signal?.aborted ?? false;
+  let unresolvedTopHydration = false;
+  const usesDefaultDomWait =
+    options.waitForDomSettle === undefined && options.settleDelayMs === undefined;
 
   try {
     scrollToTop(container);
     await waitForDomSettle(options.signal);
     const reachedTop = isAtTop(container);
+    unresolvedTopHydration =
+      usesDefaultDomWait && reachedTop && getHydrationInventory(container).suspicious;
+
+    if (unresolvedTopHydration) {
+      warnings.push("ChatGPT's early turn window did not finish loading before the scan timeout.");
+    }
+
     duplicateCount += collectStepMessages(
       container,
       options.extractMessages,
@@ -135,7 +149,7 @@ export async function collectChatGptConversation(
       reachedTop,
       scanWarnings: warnings,
       scrollSteps,
-      virtualized: false
+      virtualized: unresolvedTopHydration
     });
 
     return {
@@ -245,6 +259,7 @@ function getMessageFingerprint(message: ExportedMessage): string {
       createdAt: message.createdAt,
       images: message.images,
       markdown: message.markdown,
+      displayTimestamp: message.metadata.displayTimestamp,
       model: message.model,
       participant: message.participant,
       sources: message.sources ?? [],
@@ -279,10 +294,11 @@ function createDelayWait(delayMs: number): (signal?: AbortSignal) => Promise<voi
   };
 }
 
-function createDomQuietWait(
+function createDomHydrationWait(
   container: Element,
   quietMs = DEFAULT_DOM_QUIET_MS,
-  maximumMs = DEFAULT_DOM_SETTLE_MAX_MS
+  maximumMs = DEFAULT_DOM_SETTLE_MAX_MS,
+  hydrationMaximumMs = DEFAULT_DOM_HYDRATION_MAX_MS
 ): (signal?: AbortSignal) => Promise<void> {
   const ownerWindow = container.ownerDocument?.defaultView;
   const Observer =
@@ -301,7 +317,8 @@ function createDomQuietWait(
       let fallbackFrameTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
       let finished = false;
       let observer: MutationObserver | undefined;
-      let quietTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+      let inventoryPoll: ReturnType<typeof globalThis.setInterval> | undefined;
+      let maximumTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
       const finish = () => {
         if (finished) {
@@ -316,19 +333,14 @@ function createDomQuietWait(
         if (fallbackFrameTimer !== undefined) {
           globalThis.clearTimeout(fallbackFrameTimer);
         }
-        globalThis.clearTimeout(maximumTimer);
-        if (quietTimer !== undefined) {
-          globalThis.clearTimeout(quietTimer);
+        if (inventoryPoll !== undefined) {
+          globalThis.clearInterval(inventoryPoll);
+        }
+        if (maximumTimer !== undefined) {
+          globalThis.clearTimeout(maximumTimer);
         }
         signal?.removeEventListener("abort", finish);
         resolve();
-      };
-
-      const scheduleQuietWindow = () => {
-        if (quietTimer !== undefined) {
-          globalThis.clearTimeout(quietTimer);
-        }
-        quietTimer = globalThis.setTimeout(finish, quietMs);
       };
 
       const beginObservation = () => {
@@ -336,19 +348,70 @@ function createDomQuietWait(
           return;
         }
 
+        const startedAt = Date.now();
+        const hydratingTop = isAtTop(container);
+        let inventory = hydratingTop ? getHydrationInventory(container) : undefined;
+        let lastRelevantChangeAt = startedAt;
+
+        const sampleState = () => {
+          if (finished) {
+            return;
+          }
+
+          const now = Date.now();
+
+          if (!hydratingTop) {
+            if (now - lastRelevantChangeAt >= quietMs || now - startedAt >= maximumMs) {
+              finish();
+            }
+            return;
+          }
+
+          const nextInventory = getHydrationInventory(container);
+
+          if (inventory === undefined || nextInventory.signature !== inventory.signature) {
+            lastRelevantChangeAt = now;
+          }
+          inventory = nextInventory;
+
+          if (!inventory.suspicious && now - lastRelevantChangeAt >= quietMs) {
+            finish();
+            return;
+          }
+
+          if (!inventory.suspicious && now - startedAt >= maximumMs) {
+            finish();
+          }
+        };
+
         if (Observer !== undefined) {
-          observer = new Observer(scheduleQuietWindow);
+          observer = new Observer(() => {
+            if (hydratingTop) {
+              sampleState();
+            } else {
+              lastRelevantChangeAt = Date.now();
+            }
+          });
           observer.observe(container, {
+            attributes: true,
+            attributeFilter: [
+              "aria-hidden",
+              "data-message-author-role",
+              "data-message-id",
+              "data-testid",
+              "hidden"
+            ],
             characterData: true,
             childList: true,
             subtree: true
           });
         }
 
-        scheduleQuietWindow();
+        inventoryPoll = globalThis.setInterval(sampleState, DEFAULT_DOM_INVENTORY_POLL_MS);
+        maximumTimer = globalThis.setTimeout(finish, hydratingTop ? hydrationMaximumMs : maximumMs);
+        sampleState();
       };
 
-      const maximumTimer = globalThis.setTimeout(finish, maximumMs);
       signal?.addEventListener("abort", finish, { once: true });
 
       if (signal?.aborted) {
@@ -360,6 +423,114 @@ function createDomQuietWait(
       }
     });
   };
+}
+
+interface HydrationInventory {
+  readonly signature: string;
+  readonly suspicious: boolean;
+}
+
+function getHydrationInventory(container: Element): HydrationInventory {
+  if (!isAtTop(container)) {
+    return { signature: "not-at-top", suspicious: false };
+  }
+
+  const turns = Array.from(container.querySelectorAll(chatGptSelectors.conversationTurn))
+    .map((turn) => ({
+      number: parseTurnNumber(turn.getAttribute("data-testid")),
+      turn
+    }))
+    .filter(
+      (entry): entry is { readonly number: number; readonly turn: Element } =>
+        entry.number !== undefined
+    )
+    .sort((left, right) => left.number - right.number);
+  const turnNumbers = [...new Set(turns.map(({ number }) => number))];
+  const topTurns = turns.filter(({ number }) => number <= EXPECTED_TOP_TURN_WINDOW);
+  const turnSignals = topTurns.map(({ number, turn }) => {
+    const roleElements = Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole));
+    const text = turn.textContent ?? "";
+
+    return [
+      number,
+      roleElements.length,
+      roleElements
+        .map(
+          (roleElement) =>
+            `${roleElement.getAttribute("data-message-author-role") ?? ""}:${
+              roleElement.getAttribute("data-message-id") ?? ""
+            }`
+        )
+        .join(","),
+      text.length,
+      stableHash(text)
+    ].join(":");
+  });
+
+  return {
+    signature: `${turnNumbers.join(",")}|${turnSignals.join("|")}`,
+    suspicious: hasIncompleteExpectedTopTurn(container, turns)
+  };
+}
+
+function parseTurnNumber(testId: string | null): number | undefined {
+  const match = testId?.match(/^conversation-turn-(\d+)(?:\D|$)/u);
+
+  if (match === null || match === undefined) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function hasIncompleteExpectedTopTurn(
+  container: Element,
+  turns: readonly { readonly number: number; readonly turn: Element }[]
+): boolean {
+  if (!isAtTop(container)) {
+    return false;
+  }
+
+  if (turns.length === 0) {
+    return !isAtBottom(container);
+  }
+
+  const turnNumbers = [...new Set(turns.map(({ number }) => number))];
+
+  if (turnNumbers[0] !== 1) {
+    return true;
+  }
+
+  const highestExpectedTurn = Math.min(
+    EXPECTED_TOP_TURN_WINDOW,
+    turnNumbers[turnNumbers.length - 1]
+  );
+  const mountedTurns = new Set(turnNumbers);
+
+  if (highestExpectedTurn === 1 && !isAtBottom(container)) {
+    return true;
+  }
+
+  for (let turnNumber = 1; turnNumber <= highestExpectedTurn; turnNumber += 1) {
+    if (!mountedTurns.has(turnNumber)) {
+      return true;
+    }
+  }
+
+  return turns
+    .filter(({ number }) => number <= highestExpectedTurn)
+    .some(({ turn }) => !hasHydratedRoleContent(turn));
+}
+
+function hasHydratedRoleContent(turn: Element): boolean {
+  const roleElements = Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole));
+
+  return roleElements.some(
+    (roleElement) =>
+      (roleElement.textContent ?? "").trim().length > 0 ||
+      roleElement.querySelector("img, pre, table, [role='group']") !== null
+  );
 }
 
 function getCurrentDocument(): Document {

@@ -598,6 +598,7 @@ describe("renderHtml", () => {
               url: "https://example.com/dashboard"
             }
           ],
+          createdAt: "2026-05-31T10:21:00.000Z",
           images: [
             {
               alt: "Source favicon",
@@ -612,6 +613,7 @@ describe("renderHtml", () => {
               width: 640
             }
           ],
+          metadata: { displayTimestamp: "Thursday 9:52 AM" },
           sources: [
             {
               id: "one",
@@ -637,6 +639,16 @@ describe("renderHtml", () => {
     expect(document.querySelectorAll(".attachment-card")).toHaveLength(2);
     expect(document.querySelector(".attachment-card")?.textContent).toContain("project.zip");
     expect(document.querySelector(".attachment-card")?.textContent).toContain("2.4 MB");
+    expect(document.querySelector(".attachment-card--archive")).not.toBeNull();
+    expect(document.querySelector(".attachment-icon--archive svg")).not.toBeNull();
+    expect(document.querySelector(".attachment-icon__badge")?.textContent).toBe("ZIP");
+    expect(document.querySelector(".message-header .message-timestamp")?.textContent).toContain(
+      "Thursday 9:52 AM"
+    );
+    expect(document.querySelector(".message-header time")?.getAttribute("datetime")).toBe(
+      "2026-05-31T10:21:00.000Z"
+    );
+    expect(document.querySelector(".message-meta time")).toBeNull();
     expect(websitePreview?.getAttribute("sandbox")).toBe("");
     expect(websitePreview?.getAttribute("src")).toBeNull();
     expect(websitePreview?.getAttribute("srcdoc")).toContain("Dashboard preview");
