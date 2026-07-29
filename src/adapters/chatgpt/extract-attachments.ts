@@ -11,8 +11,11 @@ export const CHATGPT_ATTACHMENT_SELECTORS = [
   "[data-jelluvi-artifact]",
   "[data-attachment-id]",
   "[data-file-name]",
+  "[data-filename]",
   "[data-testid*='attachment' i]",
   "[data-testid*='artifact' i]",
+  "[data-testid*='file-tile' i]",
+  "[role='group'][class*='file-tile']",
   "[aria-label*='attachment' i]",
   "iframe[srcdoc]",
   "iframe[src]"
@@ -131,6 +134,12 @@ function extractAttachmentName(
 
   if (explicit !== undefined) {
     return explicit;
+  }
+
+  const ariaLabel = firstNonEmptyAttribute(element, ["aria-label"]);
+
+  if (ariaLabel !== undefined && looksLikeFilename(ariaLabel)) {
+    return ariaLabel;
   }
 
   const downloadName = element.querySelector("a[download]")?.getAttribute("download")?.trim();

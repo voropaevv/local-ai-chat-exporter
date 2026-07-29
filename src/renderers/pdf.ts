@@ -1,5 +1,6 @@
 import type {
   ConversationExport,
+  ExportedAttachmentRef,
   ExportedCodeBlock,
   ExportedImageRef,
   ExportedMessage
@@ -14,9 +15,11 @@ import { renderHtml } from "./html";
 import { normalizePdfText, PdfFontRegistry, type PdfEmbeddedFont, type PdfFont } from "./pdf-font";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettings } from "./pdf-settings";
 import {
+  formatAttachmentBadge,
   formatAttachmentLabel,
   formatDisplayDateTime,
   formatFileSize,
+  getMessageDisplayTimestamp,
   shouldShowCaptureStatus
 } from "./presentation";
 import type { RenderedFile, RendererOptions } from "./types";
@@ -24,6 +27,7 @@ import type { RenderedFile, RendererOptions } from "./types";
 interface PdfTheme {
   readonly background: PdfColor;
   readonly border: PdfColor;
+  readonly cardBackground: PdfColor;
   readonly codeBackground?: PdfColor;
   readonly heading: PdfColor;
   readonly muted: PdfColor;
@@ -102,6 +106,7 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
   dark: {
     background: { b: 0.153, g: 0.094, r: 0.067 },
     border: { b: 0.42, g: 0.322, r: 0.251 },
+    cardBackground: { b: 0.2, g: 0.133, r: 0.09 },
     codeBackground: { b: 0.22, g: 0.157, r: 0.118 },
     heading: { b: 1, g: 1, r: 1 },
     muted: { b: 0.839, g: 0.78, r: 0.702 },
@@ -110,6 +115,7 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
   light: {
     background: { b: 1, g: 1, r: 1 },
     border: { b: 0.894, g: 0.871, r: 0.847 },
+    cardBackground: { b: 0.988, g: 0.976, r: 0.957 },
     codeBackground: { b: 0.969, g: 0.965, r: 0.949 },
     heading: { b: 0.196, g: 0.122, r: 0.075 },
     muted: { b: 0.431, g: 0.384, r: 0.341 },
@@ -118,6 +124,7 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
   simple: {
     background: { b: 1, g: 1, r: 1 },
     border: { b: 0.78, g: 0.78, r: 0.78 },
+    cardBackground: { b: 0.98, g: 0.98, r: 0.98 },
     heading: { b: 0, g: 0, r: 0 },
     muted: { b: 0.25, g: 0.25, r: 0.25 },
     text: { b: 0, g: 0, r: 0 }
@@ -235,11 +242,10 @@ function renderPdfReadyHtmlFallback(
 function renderMessage(layout: PdfLayout, message: ExportedMessage): void {
   layout.keepWithNext();
   layout.heading(`${message.index + 1}. ${normalizeSingleLine(message.authorLabel)}`, 2);
+  const displayTimestamp = getMessageDisplayTimestamp(message);
   const messageDetails = [
     ...(message.model !== undefined ? [`Model: ${message.model}`] : []),
-    ...(message.createdAt !== undefined
-      ? [`Created: ${formatDisplayDateTime(message.createdAt)}`]
-      : [])
+    ...(displayTimestamp !== undefined ? [`Date: ${displayTimestamp}`] : [])
   ];
 
   if (messageDetails.length > 0) {
@@ -248,19 +254,7 @@ function renderMessage(layout: PdfLayout, message: ExportedMessage): void {
 
   if ((message.attachments?.length ?? 0) > 0) {
     layout.heading("Attachments", 3);
-    layout.list(
-      message.attachments!.map((attachment) => {
-        const details = [
-          formatAttachmentLabel(attachment),
-          formatFileSize(attachment.sizeBytes),
-          attachment.url,
-          attachment.warning
-        ].filter((value): value is string => value !== undefined && value.length > 0);
-
-        return `${attachment.name}${details.length > 0 ? ` - ${details.join(" - ")}` : ""}`;
-      }),
-      false
-    );
+    layout.attachmentCards(message.attachments!);
   }
 
   for (const block of parseMessageBlocks(message)) {
@@ -601,6 +595,104 @@ class PdfLayout {
       });
     });
     this.space(4);
+  }
+
+  attachmentCards(attachments: readonly ExportedAttachmentRef[]): void {
+    const titleSize = Math.max(9, this.settings.fontSizePt * 0.98);
+    const detailSize = Math.max(7.5, this.settings.fontSizePt * 0.82);
+    const titleLineHeight = titleSize * 1.28;
+    const detailLineHeight = detailSize * 1.3;
+    const cardGap = 7;
+    const cardPadding = 9;
+    const badgeWidth = 42;
+    const copyX = this.margin + cardPadding + badgeWidth + 10;
+    const copyWidth = this.contentWidth - cardPadding * 2 - badgeWidth - 10;
+
+    attachments.forEach((attachment) => {
+      const badge = formatAttachmentBadge(attachment);
+      const typeLabel = formatAttachmentLabel(attachment);
+      const details = [typeLabel, formatFileSize(attachment.sizeBytes)]
+        .filter((value): value is string => value !== undefined && value.trim().length > 0)
+        .join(" · ");
+      const supportingText = [attachment.url, attachment.warning]
+        .filter((value): value is string => value !== undefined && value.trim().length > 0)
+        .join(" · ");
+      const titleLines = wrapText(attachment.name, copyWidth, titleSize, "bold");
+      const detailLines =
+        details.length === 0 ? [] : wrapText(details, copyWidth, detailSize, "regular");
+      const supportingLines =
+        supportingText.length === 0
+          ? []
+          : wrapText(supportingText, copyWidth, detailSize, "regular");
+      const copyHeight =
+        titleLines.length * titleLineHeight +
+        detailLines.length * detailLineHeight +
+        supportingLines.length * detailLineHeight +
+        (detailLines.length > 0 ? 2 : 0) +
+        (supportingLines.length > 0 ? 2 : 0);
+      const cardHeight = Math.max(54, copyHeight + cardPadding * 2);
+
+      this.ensureSpace(cardHeight + cardGap);
+
+      const cardTop = this.y;
+      const cardBottom = cardTop - cardHeight;
+      const badgeHeight = 34;
+      const badgeBottom = cardTop - (cardHeight + badgeHeight) / 2;
+
+      this.fillRect(
+        this.margin,
+        cardBottom,
+        this.contentWidth,
+        cardHeight,
+        this.theme.cardBackground
+      );
+      this.strokeRect(this.margin, cardBottom, this.contentWidth, cardHeight, this.theme.border);
+      this.strokeRect(
+        this.margin + cardPadding,
+        badgeBottom,
+        badgeWidth,
+        badgeHeight,
+        this.theme.border
+      );
+
+      const badgeSize = Math.max(7, Math.min(9, detailSize));
+      const estimatedBadgeWidth = badge.length * badgeSize * 0.54;
+      this.drawText(
+        badge,
+        this.margin + cardPadding + Math.max(4, (badgeWidth - estimatedBadgeWidth) / 2),
+        badgeBottom + (badgeHeight - badgeSize) / 2 + 1,
+        "bold",
+        badgeSize,
+        this.theme.heading
+      );
+
+      let baseline = cardTop - cardPadding - titleSize;
+
+      titleLines.forEach((line) => {
+        this.drawText(line, copyX, baseline, "bold", titleSize, this.theme.text);
+        baseline -= titleLineHeight;
+      });
+
+      if (detailLines.length > 0) {
+        baseline -= 2;
+        detailLines.forEach((line) => {
+          this.drawText(line, copyX, baseline, "regular", detailSize, this.theme.muted);
+          baseline -= detailLineHeight;
+        });
+      }
+
+      if (supportingLines.length > 0) {
+        baseline -= 2;
+        supportingLines.forEach((line) => {
+          this.drawText(line, copyX, baseline, "regular", detailSize, this.theme.muted);
+          baseline -= detailLineHeight;
+        });
+      }
+
+      this.y = cardBottom - cardGap;
+    });
+
+    this.space(2);
   }
 
   nestedList(list: PdfListBlock): void {

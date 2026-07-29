@@ -6,7 +6,7 @@ import type {
 } from "../../core/schema";
 import { cleanText } from "../../utils/text";
 import { isSafeHref, normalizeInlineText } from "./extract-links";
-import { chatGptSelectors } from "./selectors";
+import { CHATGPT_EXPLICIT_FINAL_ANSWER_SELECTORS, chatGptSelectors } from "./selectors";
 
 const CANVAS_FALLBACK_WARNING =
   "Canvas content was detected but could not be extracted from the current DOM. Open the canvas link or capture it manually.";
@@ -63,6 +63,7 @@ export interface ChatGptAdvancedContent {
   readonly canvas: readonly ExportedCanvasRef[];
   readonly contentKind?: "deep_research";
   readonly createdAt?: string;
+  readonly displayTimestamp?: string;
   readonly model?: string;
   readonly participant?: string;
   readonly sources: readonly ExportedSourceRef[];
@@ -85,12 +86,19 @@ export function extractChatGptAdvancedContent(messageElement: Element): ChatGptA
 function extractMessageMetadata(
   messageElement: Element,
   turn: Element | null
-): Pick<ChatGptAdvancedContent, "createdAt" | "model" | "participant"> {
-  const createdAt =
-    firstNonEmptyAttribute(messageElement, ["data-created-at", "data-timestamp"]) ??
-    firstNonEmptyAttribute(turn, ["data-created-at", "data-timestamp"]) ??
-    firstTimeDatetime(messageElement) ??
-    firstTimeDatetime(turn);
+): Pick<ChatGptAdvancedContent, "createdAt" | "displayTimestamp" | "model" | "participant"> {
+  const separator = findPrecedingTimestampSeparator(turn);
+  const createdAt = firstMachineDateTime([
+    firstNonEmptyAttribute(messageElement, ["data-created-at", "data-timestamp"]),
+    firstNonEmptyAttribute(turn, ["data-created-at", "data-timestamp"]),
+    firstNonEmptyAttribute(separator, ["data-created-at", "data-timestamp"]),
+    firstTimeDatetime(separator)
+  ]);
+  const displayTimestamp =
+    firstNonEmptyAttribute(messageElement, ["data-display-timestamp"]) ??
+    firstNonEmptyAttribute(turn, ["data-display-timestamp"]) ??
+    firstNonEmptyAttribute(separator, ["aria-label"]) ??
+    firstTimeText(separator);
   const model =
     firstNonEmptyAttribute(messageElement, ["data-model", "data-message-model"]) ??
     firstNonEmptyAttribute(turn, ["data-model", "data-message-model"]) ??
@@ -108,6 +116,7 @@ function extractMessageMetadata(
 
   return {
     ...(createdAt !== undefined ? { createdAt } : {}),
+    ...(displayTimestamp !== undefined ? { displayTimestamp } : {}),
     ...(model !== undefined ? { model } : {}),
     ...(participant !== undefined ? { participant } : {})
   };
@@ -248,7 +257,15 @@ function extractThinkingBlocks(
         firstSelectorText(element, ["summary", "h1", "h2", "h3"]) ??
         normalizeInlineText(element.getAttribute("aria-label") ?? "") ??
         (element.matches(CHATGPT_ACTIVITY_SELECTORS) ? "Activity" : "Thinking");
-      const text = cleanText(textWithoutSelectors(element, ["summary", "h1", "h2", "h3"]));
+      const text = cleanText(
+        textWithoutSelectors(element, [
+          "summary",
+          "h1",
+          "h2",
+          "h3",
+          CHATGPT_EXPLICIT_FINAL_ANSWER_SELECTORS
+        ])
+      );
 
       return {
         ...(title.length > 0 ? { title } : {}),
@@ -479,6 +496,53 @@ function firstSelectorText(
 
 function firstTimeDatetime(element: Element | null): string | undefined {
   return firstNonEmptyAttribute(element?.querySelector("time[datetime]") ?? null, ["datetime"]);
+}
+
+function firstTimeText(element: Element | null): string | undefined {
+  if (element === null) {
+    return undefined;
+  }
+
+  const text = cleanText(element.querySelector("time")?.textContent ?? "");
+  return text.length > 0 ? text : undefined;
+}
+
+function findPrecedingTimestampSeparator(turn: Element | null): Element | null {
+  const previous = turn?.previousElementSibling ?? null;
+  return previous?.matches("[role='separator']") === true ? previous : null;
+}
+
+function normalizeMachineDateTime(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  if (/^\d{10,13}$/u.test(trimmed)) {
+    const numeric = Number.parseInt(trimmed, 10);
+    const milliseconds = trimmed.length === 10 ? numeric * 1000 : numeric;
+    const parsed = new Date(milliseconds);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+  }
+
+  if (!/\b\d{4}\b/u.test(trimmed)) {
+    return undefined;
+  }
+
+  return Number.isNaN(Date.parse(trimmed)) ? undefined : trimmed;
+}
+
+function firstMachineDateTime(values: readonly (string | undefined)[]): string | undefined {
+  for (const value of values) {
+    const normalized = normalizeMachineDateTime(value);
+
+    if (normalized !== undefined) {
+      return normalized;
+    }
+  }
+
+  return undefined;
 }
 
 function firstNonEmptyAttribute(

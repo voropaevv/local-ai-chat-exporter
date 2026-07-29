@@ -294,7 +294,7 @@ describe("collectChatGptConversation", () => {
     }
   });
 
-  test("waits for DOM quiet but never longer than the 300 ms hard cap", async () => {
+  test("waits for a suspicious virtualized turn inventory to hydrate", async () => {
     vi.useFakeTimers();
 
     try {
@@ -306,7 +306,7 @@ describe("collectChatGptConversation", () => {
       }
 
       setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
-      renderMessages(container, ["m1|user|First user message"]);
+      renderMessages(container, ["1|user|First user message", "5|user|Fifth user message"]);
       let settled = false;
       const resultPromise = collectChatGptConversation({
         document,
@@ -317,21 +317,135 @@ describe("collectChatGptConversation", () => {
       });
 
       await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1_199);
+      expect(settled).toBe(false);
 
-      for (let elapsed = 60; elapsed <= 240; elapsed += 60) {
-        await vi.advanceTimersByTimeAsync(60);
-        container.append(document.createElement("span"));
-        await Promise.resolve();
-        expect(settled).toBe(false);
+      renderMessages(container, [
+        "1|user|First user message",
+        "2|assistant|First assistant message",
+        "3|user|Second user message",
+        "4|assistant|Second assistant message",
+        "5|user|Fifth user message"
+      ]);
+      await vi.advanceTimersByTimeAsync(120);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "2", "3", "4", "5"]);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("bounds a virtualized hydration wait when missing turns never mount", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
       }
 
-      await vi.advanceTimersByTimeAsync(59);
+      setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+      renderMessages(container, ["1|user|First user message", "5|user|Fifth user message"]);
+      let settled = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(2_999);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
 
       const result = await resultPromise;
-      expect(result.messages.map((message) => message.id)).toEqual(["m1"]);
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "5"]);
       expect(settled).toBe(true);
+      expect(result.completeness.status).toBe("probably_complete");
+      expect(result.completeness.warnings).toContain(
+        "ChatGPT's early turn window did not finish loading before the scan timeout."
+      );
+      expect(result.completeness.warnings).toContain(
+        "Platform virtualization may hide unloaded messages."
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("waits for turn one when the top initially exposes only a later window", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+      renderMessages(container, ["5|user|Fifth user message"]);
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container
+      });
+
+      await vi.advanceTimersByTimeAsync(500);
+      renderMessages(container, [
+        "1|user|First user message",
+        "2|assistant|First assistant message"
+      ]);
+      await vi.advanceTimersByTimeAsync(120);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
+      expect(result.completeness.status).toBe("complete");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("waits for an empty early turn placeholder to receive message content", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+      renderMessages(container, ["1|user|First user message"]);
+      container.insertAdjacentHTML(
+        "beforeend",
+        `<article data-testid="conversation-turn-2"><div class="loading"></div></article>`
+      );
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container
+      });
+
+      await vi.advanceTimersByTimeAsync(500);
+      const placeholder = container.querySelector("[data-testid='conversation-turn-2']");
+      placeholder?.insertAdjacentHTML(
+        "beforeend",
+        `<div data-message-author-role="assistant" data-message-id="2">
+          <div class="markdown"><p>Hydrated assistant answer</p></div>
+        </div>`
+      );
+      await vi.advanceTimersByTimeAsync(120);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
+      expect(result.completeness.status).toBe("complete");
     } finally {
       vi.useRealTimers();
     }

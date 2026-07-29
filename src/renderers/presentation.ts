@@ -2,6 +2,8 @@ import type { ConversationExport, ExportedAttachmentRef, ExportedMessage } from 
 
 export type HtmlTheme = "dark" | "light" | "system";
 
+export type AttachmentVisualKind = "archive" | "code" | "document" | "image" | "other" | "website";
+
 export function getMessageAttachments(message: ExportedMessage): readonly ExportedAttachmentRef[] {
   return message.attachments ?? [];
 }
@@ -27,6 +29,18 @@ export function formatDisplayDateTime(value: string): string {
   } catch {
     return value;
   }
+}
+
+export function getMessageDisplayTimestamp(message: ExportedMessage): string | undefined {
+  const displayTimestamp = message.metadata.displayTimestamp;
+
+  if (typeof displayTimestamp === "string" && displayTimestamp.trim().length > 0) {
+    return displayTimestamp.trim();
+  }
+
+  return message.createdAt !== undefined && message.createdAt.trim().length > 0
+    ? formatDisplayDateTime(message.createdAt)
+    : undefined;
 }
 
 export function shouldShowCaptureStatus(conversation: ConversationExport): boolean {
@@ -84,6 +98,82 @@ export function formatFileSize(sizeBytes: number | undefined): string | undefine
   return `${formatDecimal(sizeBytes / 1_000_000_000)} GB`;
 }
 
+export function getAttachmentVisualKind(attachment: ExportedAttachmentRef): AttachmentVisualKind {
+  if (attachment.kind === "website") {
+    return "website";
+  }
+
+  if (
+    attachment.kind === "image" ||
+    attachment.mimeType?.toLocaleLowerCase().startsWith("image/")
+  ) {
+    return "image";
+  }
+
+  const extension = fileExtension(attachment.name);
+  const mimeType = attachment.mimeType?.toLocaleLowerCase() ?? "";
+
+  if (
+    ["7z", "bz2", "gz", "rar", "tar", "tgz", "xz", "zip"].includes(extension) ||
+    /\b(?:7z|gzip|rar|tar|zip)\b/u.test(mimeType)
+  ) {
+    return "archive";
+  }
+
+  if (
+    [
+      "css",
+      "csv",
+      "html",
+      "htm",
+      "js",
+      "json",
+      "jsx",
+      "md",
+      "py",
+      "sh",
+      "sql",
+      "ts",
+      "tsx",
+      "xml",
+      "yaml",
+      "yml"
+    ].includes(extension) ||
+    /\b(?:csv|html|javascript|json|markdown|shell|sql|xml|yaml)\b/u.test(mimeType)
+  ) {
+    return "code";
+  }
+
+  if (attachment.kind === "file") {
+    return "document";
+  }
+
+  return "other";
+}
+
+export function formatAttachmentBadge(attachment: ExportedAttachmentRef): string {
+  const extension = fileExtension(attachment.name).toLocaleUpperCase();
+
+  if (extension.length > 0 && extension.length <= 5 && /^[A-Z0-9]+$/u.test(extension)) {
+    return extension;
+  }
+
+  switch (getAttachmentVisualKind(attachment)) {
+    case "archive":
+      return "ZIP";
+    case "code":
+      return "CODE";
+    case "document":
+      return "FILE";
+    case "image":
+      return "IMG";
+    case "website":
+      return "WEB";
+    case "other":
+      return "ATT";
+  }
+}
+
 export function renderSemanticMarkdown(markdown: string): string {
   const normalized = markdown.replace(/\r\n?/gu, "\n").trim();
 
@@ -92,6 +182,13 @@ export function renderSemanticMarkdown(markdown: string): string {
   }
 
   return renderMarkdownBlocks(normalized.split("\n"));
+}
+
+function fileExtension(name: string): string {
+  const normalized = name.trim();
+  const extension = normalized.includes(".") ? normalized.split(".").pop() : undefined;
+
+  return extension === undefined || extension === normalized ? "" : extension.toLocaleLowerCase();
 }
 
 export function renderInlineMarkdown(input: string): string {

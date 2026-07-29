@@ -110,7 +110,6 @@ export function cleanChatGptNode(
   }
 
   const clonedElement = clone as Element;
-  const codeBlocks = extractCodeBlocks(messageElement);
   const imageOptions = {
     chatGptSpecificFiltering: options.chatGptSpecificCleanup === true
   };
@@ -118,6 +117,7 @@ export function cleanChatGptNode(
   copyResolvedImageMetadata(messageElement, clonedElement);
   normalizeMathMl(clonedElement);
   removeUiArtifacts(clonedElement, options);
+  const codeBlocks = extractCodeBlocks(clonedElement);
   removeNonContentImageElements(clonedElement, imageOptions);
   removeRedundantCodeLanguageLabels(clonedElement, codeBlocks);
   const images = extractImageRefs(clonedElement, imageOptions);
