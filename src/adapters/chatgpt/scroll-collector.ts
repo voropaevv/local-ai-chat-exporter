@@ -5,6 +5,7 @@ import { extractVisibleChatGptMessages } from "./extract-visible";
 import {
   findChatGptScrollContainer,
   getClientHeight,
+  getScrollHeight,
   getScrollTop,
   isAtBottom,
   isAtTop,
@@ -22,6 +23,8 @@ const DEFAULT_DOM_SETTLE_MAX_MS = 500;
 const DEFAULT_DOM_HYDRATION_MAX_MS = 3_000;
 const DEFAULT_DOM_INVENTORY_POLL_MS = 40;
 const EXPECTED_TOP_TURN_WINDOW = 4;
+const EXPECTED_BOTTOM_TURN_WINDOW = 4;
+const MAX_BOTTOM_HYDRATION_PASSES = 2;
 
 export interface ChatGptScrollCollectorOptions {
   readonly document?: Document;
@@ -72,8 +75,13 @@ export async function collectChatGptConversation(
   let stalls = 0;
   let aborted = options.signal?.aborted ?? false;
   let unresolvedTopHydration = false;
+  let unresolvedBottomHydration = false;
+  let bottomHydrationPasses = 0;
   const usesDefaultDomWait =
     options.waitForDomSettle === undefined && options.settleDelayMs === undefined;
+  const waitForBottomHydration = usesDefaultDomWait
+    ? createBottomHydrationWait(container)
+    : undefined;
 
   try {
     scrollToTop(container);
@@ -98,12 +106,47 @@ export async function collectChatGptConversation(
       warnings.push("Scan was cancelled.");
     }
 
-    while (
-      !aborted &&
-      !isAtBottom(container) &&
-      scrollSteps < maxSteps &&
-      consecutiveStalls < maxStalls
-    ) {
+    while (!aborted && scrollSteps < maxSteps && consecutiveStalls < maxStalls) {
+      if (isAtBottom(container)) {
+        const shouldHydrateBottom =
+          waitForBottomHydration !== undefined &&
+          !isAtTop(container) &&
+          bottomHydrationPasses < MAX_BOTTOM_HYDRATION_PASSES;
+
+        if (!shouldHydrateBottom) {
+          if (
+            waitForBottomHydration !== undefined &&
+            !isAtTop(container) &&
+            bottomHydrationPasses >= MAX_BOTTOM_HYDRATION_PASSES
+          ) {
+            unresolvedBottomHydration = true;
+          }
+          break;
+        }
+
+        bottomHydrationPasses += 1;
+        const bottomHydration = await waitForBottomHydration(options.signal);
+        unresolvedBottomHydration = bottomHydration.unresolved;
+        duplicateCount += collectStepMessages(
+          container,
+          options.extractMessages,
+          messages,
+          dedupeState
+        );
+
+        if (options.signal?.aborted) {
+          aborted = true;
+          warnings.push("Scan was cancelled.");
+          break;
+        }
+
+        if (isAtBottom(container)) {
+          break;
+        }
+
+        continue;
+      }
+
       const previousScrollTop = getScrollTop(container);
       const scrollPixels = Math.max(1, Math.floor(getClientHeight(container) * scrollStepRatio));
 
@@ -133,6 +176,10 @@ export async function collectChatGptConversation(
 
     const reachedBottom = isAtBottom(container);
 
+    if (unresolvedBottomHydration) {
+      warnings.push("ChatGPT's final turn window did not finish loading before the scan timeout.");
+    }
+
     if (consecutiveStalls >= maxStalls && !reachedBottom) {
       warnings.push("Scan stalled before reaching the bottom.");
     }
@@ -149,7 +196,7 @@ export async function collectChatGptConversation(
       reachedTop,
       scanWarnings: warnings,
       scrollSteps,
-      virtualized: unresolvedTopHydration
+      virtualized: unresolvedTopHydration || unresolvedBottomHydration
     });
 
     return {
@@ -425,6 +472,89 @@ function createDomHydrationWait(
   };
 }
 
+interface BottomHydrationWaitResult {
+  readonly unresolved: boolean;
+}
+
+function createBottomHydrationWait(
+  container: Element,
+  quietMs = DEFAULT_DOM_QUIET_MS,
+  maximumMs = DEFAULT_DOM_HYDRATION_MAX_MS
+): (signal?: AbortSignal) => Promise<BottomHydrationWaitResult> {
+  const ownerWindow = container.ownerDocument?.defaultView;
+  const Observer =
+    ownerWindow?.MutationObserver ??
+    (typeof globalThis.MutationObserver === "undefined" ? undefined : globalThis.MutationObserver);
+
+  return (signal?: AbortSignal) => {
+    if (signal?.aborted) {
+      return Promise.resolve({ unresolved: false });
+    }
+
+    return new Promise((resolve) => {
+      let finished = false;
+      let observer: MutationObserver | undefined;
+      let inventory = getBottomHydrationInventory(container);
+      let lastInventoryChangeAt = Date.now();
+
+      const finish = () => {
+        if (finished) {
+          return;
+        }
+
+        finished = true;
+        observer?.disconnect();
+        if (inventoryPoll !== undefined) {
+          globalThis.clearInterval(inventoryPoll);
+        }
+        if (maximumTimer !== undefined) {
+          globalThis.clearTimeout(maximumTimer);
+        }
+        signal?.removeEventListener("abort", finish);
+
+        const finalInventory = getBottomHydrationInventory(container);
+        const unresolved =
+          !signal?.aborted &&
+          (finalInventory.suspicious || Date.now() - lastInventoryChangeAt < quietMs);
+        resolve({ unresolved });
+      };
+
+      const sampleInventory = () => {
+        if (finished) {
+          return;
+        }
+
+        const nextInventory = getBottomHydrationInventory(container);
+        if (nextInventory.signature !== inventory.signature) {
+          lastInventoryChangeAt = Date.now();
+        }
+        inventory = nextInventory;
+      };
+
+      if (Observer !== undefined) {
+        observer = new Observer(sampleInventory);
+        observer.observe(container, {
+          attributes: true,
+          attributeFilter: [
+            "aria-hidden",
+            "data-message-author-role",
+            "data-message-id",
+            "data-testid",
+            "hidden"
+          ],
+          characterData: true,
+          childList: true,
+          subtree: true
+        });
+      }
+
+      const inventoryPoll = globalThis.setInterval(sampleInventory, DEFAULT_DOM_INVENTORY_POLL_MS);
+      const maximumTimer = globalThis.setTimeout(finish, maximumMs);
+      signal?.addEventListener("abort", finish, { once: true });
+    });
+  };
+}
+
 interface HydrationInventory {
   readonly signature: string;
   readonly suspicious: boolean;
@@ -470,6 +600,50 @@ function getHydrationInventory(container: Element): HydrationInventory {
   return {
     signature: `${turnNumbers.join(",")}|${turnSignals.join("|")}`,
     suspicious: hasIncompleteExpectedTopTurn(container, turns)
+  };
+}
+
+function getBottomHydrationInventory(container: Element): HydrationInventory {
+  if (!isAtBottom(container) || isAtTop(container)) {
+    return { signature: "not-at-bottom", suspicious: false };
+  }
+
+  const turns = Array.from(container.querySelectorAll(chatGptSelectors.conversationTurn))
+    .map((turn) => ({
+      number: parseTurnNumber(turn.getAttribute("data-testid")),
+      turn
+    }))
+    .filter(
+      (entry): entry is { readonly number: number; readonly turn: Element } =>
+        entry.number !== undefined
+    )
+    .sort((left, right) => left.number - right.number);
+  const bottomTurns = turns.slice(-EXPECTED_BOTTOM_TURN_WINDOW);
+  const turnSignals = bottomTurns.map(({ number, turn }) => {
+    const roleElements = Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole));
+    const text = turn.textContent ?? "";
+
+    return [
+      number,
+      roleElements.length,
+      roleElements
+        .map(
+          (roleElement) =>
+            `${roleElement.getAttribute("data-message-author-role") ?? ""}:${
+              roleElement.getAttribute("data-message-id") ?? ""
+            }`
+        )
+        .join(","),
+      text.length,
+      stableHash(text)
+    ].join(":");
+  });
+
+  return {
+    signature: `${getScrollHeight(container)}|${bottomTurns
+      .map(({ number }) => number)
+      .join(",")}|${turnSignals.join("|")}`,
+    suspicious: hasIncompleteFinalTurn(container, bottomTurns)
   };
 }
 
@@ -521,6 +695,27 @@ function hasIncompleteExpectedTopTurn(
   return turns
     .filter(({ number }) => number <= highestExpectedTurn)
     .some(({ turn }) => !hasHydratedRoleContent(turn));
+}
+
+function hasIncompleteFinalTurn(
+  container: Element,
+  bottomTurns: readonly { readonly number: number; readonly turn: Element }[]
+): boolean {
+  if (!isAtBottom(container) || isAtTop(container)) {
+    return false;
+  }
+
+  if (bottomTurns.length === 0) {
+    return true;
+  }
+
+  for (let index = 1; index < bottomTurns.length; index += 1) {
+    if (bottomTurns[index].number !== bottomTurns[index - 1].number + 1) {
+      return true;
+    }
+  }
+
+  return !hasHydratedRoleContent(bottomTurns[bottomTurns.length - 1].turn);
 }
 
 function hasHydratedRoleContent(turn: Element): boolean {
