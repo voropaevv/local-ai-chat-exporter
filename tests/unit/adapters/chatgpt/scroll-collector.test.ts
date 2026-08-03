@@ -378,6 +378,111 @@ describe("collectChatGptConversation", () => {
     }
   });
 
+  test("waits at the bottom for delayed final turns to mount", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      const scrollMetrics = { clientHeight: 100, scrollHeight: 300, scrollTop: 0 };
+      setScrollMetrics(container, scrollMetrics);
+      renderMessages(container, [
+        "1|user|First user message",
+        "2|assistant|First assistant message"
+      ]);
+      let lateTailMounted = false;
+      let settled = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollBy: (element, pixels) => {
+          element.scrollTop += pixels;
+
+          if (!lateTailMounted && element.scrollTop >= 200) {
+            lateTailMounted = true;
+            globalThis.setTimeout(() => {
+              scrollMetrics.scrollHeight = 400;
+              renderMessages(container, [
+                "1|user|First user message",
+                "2|assistant|First assistant message",
+                "3|user|Late final user message",
+                "4|assistant|Late final assistant message"
+              ]);
+            }, 750);
+          }
+        },
+        scrollContainer: container
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(8_000);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "2", "3", "4"]);
+      expect(result.completeness.status).toBe("complete");
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("warns when the final turn remains unhydrated after the bottom wait", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 100, scrollHeight: 300, scrollTop: 0 });
+      renderMessages(container, [
+        "1|user|First user message",
+        "2|assistant|First assistant message"
+      ]);
+      let finalPlaceholderMounted = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollBy: (element, pixels) => {
+          element.scrollTop += pixels;
+
+          if (!finalPlaceholderMounted && element.scrollTop >= 200) {
+            finalPlaceholderMounted = true;
+            container.insertAdjacentHTML(
+              "beforeend",
+              `<article data-testid="conversation-turn-3"><div class="loading"></div></article>`
+            );
+          }
+        },
+        scrollContainer: container
+      });
+
+      await vi.advanceTimersByTimeAsync(3_600);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
+      expect(result.completeness.status).toBe("probably_complete");
+      expect(result.completeness.warnings).toContain(
+        "ChatGPT's final turn window did not finish loading before the scan timeout."
+      );
+      expect(result.completeness.warnings).toContain(
+        "Platform virtualization may hide unloaded messages."
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("waits for turn one when the top initially exposes only a later window", async () => {
     vi.useFakeTimers();
 
