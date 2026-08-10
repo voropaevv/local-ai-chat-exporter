@@ -110,38 +110,81 @@ describe("extractVisibleChatGptMessages", () => {
     expect(markdown.match(/```/g)).toHaveLength(6);
     expect(markdown.match(/make verify/g)).toHaveLength(2);
     expect(markdown.match(/uname -m/g)).toHaveLength(1);
-    expect(markdown.indexOf("uname -m")).toBeGreaterThan(
-      markdown.lastIndexOf("make verify")
-    );
+    expect(markdown.indexOf("uname -m")).toBeGreaterThan(markdown.lastIndexOf("make verify"));
   });
 
-  test("captures generated download controls as attachments without blank list items", () => {
+  test("captures the live main generated download beside four file entities", () => {
     const document = new JSDOM(
       `<main>
         <section data-testid="conversation-turn-generated-files">
           <div data-message-author-role="assistant" data-message-id="generated-files">
             <div class="markdown">
               <p>Generated files:</p>
+              <p data-end="74" data-start="12">
+                <span data-state="closed">
+                  <button
+                    class="behavior-btn hover:entity-accent focus-visible:focus-ring entity-underline inline cursor-pointer appearance-none border-0 bg-transparent p-0 text-start align-baseline text-inherit"
+                    type="button"
+                  >Скачать Social Video Downloader для macOS — исходный проект ZIP</button>
+                </span>
+              </p>
               <ul>
                 <li>
                   <p role="presentation">
                     <button
-                      aria-label="project-bundle.zip"
                       class="behavior-btn entity-underline text-token-text-link"
                       type="button"
                     >
-                      <span>project-bundle.zip</span>
+                      <span>Готовая задача для Codex</span>
                     </button>
                   </p>
                 </li>
                 <li>
-                  <a download="verification-report.pdf" href="https://chatgpt.com/backend-api/files/report">
-                    <button aria-label="Download verification-report.pdf" type="button">
-                      <span>verification-report.pdf</span>
+                  <p role="presentation">
+                    <button
+                      class="behavior-btn entity-underline text-token-text-link"
+                      type="button"
+                    >
+                      <span>Описание архитектуры</span>
                     </button>
-                  </a>
+                  </p>
+                </li>
+                <li>
+                  <p role="presentation">
+                    <button
+                      class="behavior-btn entity-underline text-token-text-link"
+                      type="button"
+                    >
+                      <span>README и команды запуска</span>
+                    </button>
+                  </p>
+                </li>
+                <li>
+                  <p role="presentation">
+                    <button
+                      class="behavior-btn entity-underline text-token-text-link"
+                      type="button"
+                    >
+                      <span>Контрольная сумма SHA-256</span>
+                    </button>
+                  </p>
                 </li>
               </ul>
+              <p>
+                <button
+                  class="behavior-btn entity-underline inline text-inherit"
+                  type="button"
+                >Open settings</button>
+                <button
+                  class="behavior-btn entity-underline inline text-inherit"
+                  type="button"
+                >Download documentation</button>
+                <button
+                  aria-label="Example citation"
+                  class="behavior-btn entity-underline inline text-inherit"
+                  type="button"
+                >Example source</button>
+              </p>
               <p><a href="https://example.com/docs">Regular documentation</a></p>
             </div>
           </div>
@@ -155,18 +198,52 @@ describe("extractVisibleChatGptMessages", () => {
     expect(message.attachments).toEqual([
       {
         kind: "file",
-        name: "project-bundle.zip"
+        name: "Social Video Downloader для macOS — исходный проект ZIP"
       },
       {
         kind: "file",
-        name: "verification-report.pdf",
-        url: "https://chatgpt.com/backend-api/files/report"
+        name: "Готовая задача для Codex"
+      },
+      {
+        kind: "file",
+        name: "Описание архитектуры"
+      },
+      {
+        kind: "file",
+        name: "README и команды запуска"
+      },
+      {
+        kind: "file",
+        name: "Контрольная сумма SHA-256"
       }
     ]);
-    expect(message.markdown).toContain(
-      "[Regular documentation](https://example.com/docs)"
-    );
+    expect(message.markdown).toContain("[Regular documentation](https://example.com/docs)");
+    expect(message.attachments).toHaveLength(5);
+    expect(message.attachments?.every((attachment) => attachment.url === undefined)).toBe(true);
     expect(message.markdown).not.toMatch(/^\s*-\s*$/m);
+  });
+
+  test("retains generated file labels without leaking unsafe download URLs", () => {
+    const document = new JSDOM(
+      `<section data-testid="conversation-turn-unsafe-download">
+        <div data-message-author-role="assistant" data-message-id="unsafe-download">
+          <div class="markdown">
+            <a download="payload.zip" href="javascript:window.evil()">Download payload.zip</a>
+          </div>
+        </div>
+      </section>`,
+      { url: "https://chatgpt.com/c/unsafe-download" }
+    ).window.document;
+    const [message] = extractVisibleChatGptMessages(document);
+
+    expect(message.attachments).toEqual([
+      {
+        description: "Download payload.zip",
+        kind: "file",
+        name: "payload.zip"
+      }
+    ]);
+    expect(message.markdown).not.toContain("javascript:");
   });
 
   test("keeps table HTML and visible table text", () => {

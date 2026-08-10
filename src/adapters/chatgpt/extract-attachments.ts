@@ -14,6 +14,10 @@ const CHATGPT_GENERATED_DOWNLOAD_SELECTORS = [
 
 const CHATGPT_INLINE_FILE_ENTITY_SELECTOR =
   "button.behavior-btn.entity-underline.text-token-text-link";
+const CHATGPT_GENERATED_FILE_BUTTON_SELECTOR = "button.behavior-btn.entity-underline.text-inherit";
+const CHATGPT_GENERATED_FILE_BUTTON_PREFIX = /^(?:download|скачать)\s+(.+)$/iu;
+const CHATGPT_GENERATED_FILE_TYPE_SUFFIX =
+  /(?:\.[a-z0-9]{1,12}|(?:^|[\s(—–-])(?:7z|csv|docx?|gif|gz|html?|jpe?g|json|md|mov|mp[34]|pdf|png|pptx?|rar|svg|tar|txt|webm|xlsx?|xml|ya?ml|zip))(?:[\s)]*)$/iu;
 
 export const CHATGPT_ATTACHMENT_SELECTORS = [
   "[data-jelluvi-attachment]",
@@ -29,6 +33,8 @@ export const CHATGPT_ATTACHMENT_SELECTORS = [
   CHATGPT_GENERATED_DOWNLOAD_SELECTORS,
   `.markdown ${CHATGPT_INLINE_FILE_ENTITY_SELECTOR}`,
   `.prose ${CHATGPT_INLINE_FILE_ENTITY_SELECTOR}`,
+  `.markdown ${CHATGPT_GENERATED_FILE_BUTTON_SELECTOR}`,
+  `.prose ${CHATGPT_GENERATED_FILE_BUTTON_SELECTOR}`,
   "iframe[srcdoc]",
   "iframe[src]"
 ].join(",");
@@ -144,6 +150,10 @@ function extractAttachmentName(
   element: Element,
   iframe: HTMLIFrameElement | null
 ): string | undefined {
+  if (element.matches(CHATGPT_GENERATED_FILE_BUTTON_SELECTOR)) {
+    return extractGeneratedFileButtonName(element);
+  }
+
   const explicit =
     firstNonEmptyAttribute(element, [
       "data-file-name",
@@ -198,6 +208,16 @@ function extractAttachmentName(
   return lines[0];
 }
 
+function extractGeneratedFileButtonName(element: Element): string | undefined {
+  const label = normalizeInlineText(
+    firstNonEmptyAttribute(element, ["aria-label", "title"]) ?? element.textContent ?? ""
+  );
+  const match = label.match(CHATGPT_GENERATED_FILE_BUTTON_PREFIX);
+  const name = match?.[1] === undefined ? undefined : cleanText(match[1]);
+
+  return name !== undefined && CHATGPT_GENERATED_FILE_TYPE_SUFFIX.test(name) ? name : undefined;
+}
+
 function extractGeneratedDownloadName(element: Element): string | undefined {
   const anchor =
     element.tagName.toLocaleLowerCase() === "a"
@@ -225,6 +245,10 @@ function extractGeneratedDownloadName(element: Element): string | undefined {
 }
 
 function extractAttachmentDescription(element: Element, name: string): string | undefined {
+  if (element.matches(CHATGPT_GENERATED_FILE_BUTTON_SELECTOR)) {
+    return undefined;
+  }
+
   const explicit =
     firstNonEmptyAttribute(element, ["data-description"]) ??
     firstSelectorText(element, [
@@ -263,7 +287,10 @@ function detectAttachmentKind(
     return explicit;
   }
 
-  if (element.matches(CHATGPT_INLINE_FILE_ENTITY_SELECTOR)) {
+  if (
+    element.matches(CHATGPT_INLINE_FILE_ENTITY_SELECTOR) ||
+    element.matches(CHATGPT_GENERATED_FILE_BUTTON_SELECTOR)
+  ) {
     return "file";
   }
 
