@@ -81,7 +81,11 @@ export function renderConversationFiles(
   options: Partial<ExportOptions> = {}
 ): readonly RenderedFile<RenderedBytes>[] {
   const normalizedOptions = normalizeExportOptions(options);
-  const preparedConversation = prepareConversation(conversation, normalizedOptions);
+  const preparedConversation = prepareConversation(
+    conversation,
+    normalizedOptions,
+    normalizedOptions.formats.includes("zip")
+  );
 
   if (preparedConversation.messages.length === 0) {
     throw new ExportPipelineError(
@@ -131,12 +135,15 @@ export function getExportedMessageCount(
 
 function prepareConversation(
   conversation: ConversationExport,
-  options: ExportOptions
+  options: ExportOptions,
+  preserveEmbeddedImageData = false
 ): ConversationExport {
   const messages = filterMessagesByScope(conversation.messages, {
     range: options.range,
     scope: options.scope
-  }).map((message, index) => prepareMessage(message, index, options));
+  }).map((message, index) =>
+    prepareMessage(message, index, options, preserveEmbeddedImageData)
+  );
 
   return {
     schemaVersion: conversation.schemaVersion,
@@ -163,7 +170,8 @@ function prepareConversation(
 function prepareMessage(
   message: ExportedMessage,
   index: number,
-  options: ExportOptions
+  options: ExportOptions,
+  preserveEmbeddedImageData: boolean
 ): ExportedMessage {
   return {
     id: redactIfNeeded(message.id, options.redaction),
@@ -180,7 +188,9 @@ function prepareMessage(
     codeBlocks: message.codeBlocks.map((codeBlock) =>
       prepareCodeBlock(codeBlock, options.redaction)
     ),
-    images: message.images.map((image) => prepareImageRef(image, options.redaction)),
+    images: message.images.map((image) =>
+      prepareImageRef(image, options.redaction, preserveEmbeddedImageData)
+    ),
     ...(message.attachments !== undefined
       ? {
           attachments: message.attachments.map((attachment) => ({
@@ -287,8 +297,12 @@ function prepareCodeBlock(
   };
 }
 
-function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings): ExportedImageRef {
-  return sanitizeImageRefForOutput({
+function prepareImageRef(
+  image: ExportedImageRef,
+  redaction: RedactionSettings,
+  preserveEmbeddedImageData: boolean
+): ExportedImageRef {
+  const preparedImage = {
     ...(image.alt !== undefined ? { alt: redactIfNeeded(image.alt, redaction) } : {}),
     ...(image.src !== undefined ? { src: redactIfNeeded(image.src, redaction) } : {}),
     ...(image.dataUri !== undefined ? { dataUri: image.dataUri } : {}),
@@ -297,7 +311,9 @@ function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings):
       : {}),
     ...(image.width !== undefined ? { width: image.width } : {}),
     ...(image.height !== undefined ? { height: image.height } : {})
-  });
+  };
+
+  return preserveEmbeddedImageData ? preparedImage : sanitizeImageRefForOutput(preparedImage);
 }
 
 function prepareCompleteness(

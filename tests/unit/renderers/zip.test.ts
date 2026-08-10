@@ -178,6 +178,33 @@ describe("renderZip", () => {
     expect(rendered.format).toBe("zip");
     expect(rendered.filename).toBe("ZIP-Export.zip");
   });
+
+  test("export pipeline preserves embedded image assets inside ZIP bundles", () => {
+    const dataImage =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+    const [rendered] = renderConversationFiles(
+      makeConversation({
+        messages: [
+          makeMessage({
+            images: [{ alt: "Exported diagram", dataUri: dataImage, height: 1, width: 1 }],
+            markdown: `![Exported diagram](${dataImage})`,
+            text: `Embedded image ${dataImage}`
+          })
+        ]
+      }),
+      { formats: ["zip"], zipFormats: ["md", "json"] }
+    );
+
+    expect(rendered.bytes).toBeInstanceOf(Uint8Array);
+    const zip = unzipSync(rendered.bytes as Uint8Array);
+    const assetName = Object.keys(zip).find(
+      (name) => name.startsWith("assets/h") && name.endsWith(".png")
+    );
+
+    expect(assetName).toBeDefined();
+    expect(strFromU8(zip["conversation.md"])).not.toContain("data:image");
+    expect(strFromU8(zip["conversation.json"])).not.toContain("data:image");
+  });
 });
 
 describe("renderBatchZip", () => {
