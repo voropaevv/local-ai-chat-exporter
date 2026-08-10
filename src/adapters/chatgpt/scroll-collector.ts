@@ -25,6 +25,8 @@ const DEFAULT_DOM_INVENTORY_POLL_MS = 40;
 const EXPECTED_TOP_TURN_WINDOW = 4;
 const EXPECTED_BOTTOM_TURN_WINDOW = 4;
 const MAX_BOTTOM_HYDRATION_PASSES = 2;
+const MAX_MISSING_TURN_ATTEMPTS = 2;
+const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]";
 
 export interface ChatGptScrollCollectorOptions {
   readonly document?: Document;
@@ -68,6 +70,7 @@ export async function collectChatGptConversation(
   const originalScrollTop = getScrollTop(container);
   const messages: ExportedMessage[] = [];
   const dedupeState = createDedupeState();
+  const turnTrackingState = createTurnTrackingState(container);
   const warnings: string[] = [];
   let duplicateCount = 0;
   let scrollSteps = 0;
@@ -98,7 +101,8 @@ export async function collectChatGptConversation(
       container,
       options.extractMessages,
       messages,
-      dedupeState
+      dedupeState,
+      turnTrackingState
     );
 
     if (options.signal?.aborted) {
@@ -131,7 +135,8 @@ export async function collectChatGptConversation(
           container,
           options.extractMessages,
           messages,
-          dedupeState
+          dedupeState,
+          turnTrackingState
         );
 
         if (options.signal?.aborted) {
@@ -157,7 +162,8 @@ export async function collectChatGptConversation(
         container,
         options.extractMessages,
         messages,
-        dedupeState
+        dedupeState,
+        turnTrackingState
       );
 
       if (options.signal?.aborted) {
@@ -174,7 +180,84 @@ export async function collectChatGptConversation(
       }
     }
 
+    for (
+      let completionPass = 0;
+      !aborted && completionPass < MAX_BOTTOM_HYDRATION_PASSES && scrollSteps < maxSteps;
+      completionPass += 1
+    ) {
+      const recovery = await recoverMissingTurnContainers({
+        container,
+        dedupeState,
+        extractMessages: options.extractMessages,
+        maxSteps: maxSteps - scrollSteps,
+        messages,
+        signal: options.signal,
+        turnTrackingState,
+        waitForDomSettle,
+        waitForTurnHydration: usesDefaultDomWait
+          ? createTurnContainerHydrationWait(container)
+          : undefined
+      });
+
+      duplicateCount += recovery.duplicateCount;
+      scrollSteps += recovery.scrollSteps;
+
+      if (recovery.scrollSteps === 0 || options.signal?.aborted || scrollSteps >= maxSteps) {
+        break;
+      }
+
+      if (!options.signal?.aborted) {
+        setScrollTop(container, getScrollHeight(container));
+        scrollSteps += 1;
+        await waitForDomSettle(options.signal);
+        duplicateCount += collectStepMessages(
+          container,
+          options.extractMessages,
+          messages,
+          dedupeState,
+          turnTrackingState
+        );
+
+        if (waitForBottomHydration !== undefined && !isAtTop(container)) {
+          const bottomHydration = await waitForBottomHydration(options.signal);
+          unresolvedBottomHydration = bottomHydration.unresolved;
+          duplicateCount += collectStepMessages(
+            container,
+            options.extractMessages,
+            messages,
+            dedupeState,
+            turnTrackingState
+          );
+        }
+      }
+
+      refreshTurnTrackingState(container, turnTrackingState);
+      if (getMissingTurnContainerIds(turnTrackingState).length === 0) {
+        break;
+      }
+    }
+
+    if (options.signal?.aborted && !aborted) {
+      aborted = true;
+      warnings.push("Scan was cancelled.");
+    }
+
+    refreshTurnTrackingState(container, turnTrackingState);
+    const missingTurnContainerIds = getMissingTurnContainerIds(turnTrackingState);
+    const orderedMessages = orderMessagesByTurnContainer(
+      messages,
+      dedupeState,
+      turnTrackingState
+    );
     const reachedBottom = isAtBottom(container);
+
+    if (missingTurnContainerIds.length > 0) {
+      warnings.push(
+        `ChatGPT did not hydrate ${missingTurnContainerIds.length} conversation ${
+          missingTurnContainerIds.length === 1 ? "turn" : "turns"
+        } before the scan timeout.`
+      );
+    }
 
     if (unresolvedBottomHydration) {
       warnings.push("ChatGPT's final turn window did not finish loading before the scan timeout.");
@@ -190,20 +273,23 @@ export async function collectChatGptConversation(
 
     const completeness = buildCompletenessReport({
       duplicateCount,
-      messages,
+      messages: orderedMessages,
       platformWarnings: [],
       reachedBottom,
       reachedTop,
       scanWarnings: warnings,
       scrollSteps,
-      virtualized: unresolvedTopHydration || unresolvedBottomHydration
+      virtualized:
+        unresolvedTopHydration ||
+        unresolvedBottomHydration ||
+        missingTurnContainerIds.length > 0
     });
 
     return {
       aborted,
       completeness,
       duplicateCount,
-      messages: messages.map((message, index) => ({ ...message, index })),
+      messages: orderedMessages.map((message, index) => ({ ...message, index })),
       reachedBottom,
       reachedTop,
       scrollSteps,
@@ -219,8 +305,13 @@ function collectStepMessages(
   root: ParentNode,
   extractMessages: ChatGptScrollCollectorOptions["extractMessages"],
   messages: ExportedMessage[],
-  dedupeState: DedupeState
+  dedupeState: DedupeState,
+  turnTrackingState?: TurnTrackingState
 ): number {
+  if (turnTrackingState !== undefined) {
+    refreshTurnTrackingState(root, turnTrackingState);
+  }
+
   let prefilteredDuplicateCount = 0;
   const stepRevisions = new Map<string, string>();
   const visibleMessages =
@@ -234,22 +325,28 @@ function collectStepMessages(
         stepRevisions.set(messageId, revision);
       }
     });
+  if (turnTrackingState !== undefined) {
+    refreshTurnTrackingState(root, turnTrackingState);
+  }
   let duplicateCount = prefilteredDuplicateCount;
 
   for (const message of visibleMessages) {
     const idKey = message.id.trim();
+    const logicalKey = turnTrackingState?.logicalKeyByMessageId.get(idKey) ?? idKey;
     const fingerprint = getMessageFingerprint(message);
 
-    if (idKey.length > 0) {
-      const existingIndex = dedupeState.messageIndexesById.get(idKey);
+    if (logicalKey.length > 0) {
+      const existingIndex = dedupeState.messageIndexesByKey.get(logicalKey);
 
       if (existingIndex !== undefined) {
-        if (dedupeState.messageFingerprintsById.get(idKey) === fingerprint) {
+        if (dedupeState.messageFingerprintsByKey.get(logicalKey) === fingerprint) {
           duplicateCount += 1;
         } else {
           messages[existingIndex] = { ...message, index: existingIndex };
-          dedupeState.messageFingerprintsById.set(idKey, fingerprint);
+          dedupeState.messageFingerprintsByKey.set(logicalKey, fingerprint);
         }
+
+        turnTrackingState?.extractedTurnContainerIds.add(logicalKey);
 
         const revision = stepRevisions.get(idKey);
         if (revision !== undefined) {
@@ -259,8 +356,10 @@ function collectStepMessages(
       }
 
       const messageIndex = messages.length;
-      dedupeState.messageFingerprintsById.set(idKey, fingerprint);
-      dedupeState.messageIndexesById.set(idKey, messageIndex);
+      dedupeState.messageFingerprintsByKey.set(logicalKey, fingerprint);
+      dedupeState.messageIndexesByKey.set(logicalKey, messageIndex);
+      dedupeState.logicalKeysByMessageIndex.push(logicalKey);
+      turnTrackingState?.extractedTurnContainerIds.add(logicalKey);
       const revision = stepRevisions.get(idKey);
       if (revision !== undefined) {
         dedupeState.revisions.set(idKey, revision);
@@ -283,18 +382,247 @@ function collectStepMessages(
 
 interface DedupeState {
   readonly fingerprints: Set<string>;
-  readonly messageFingerprintsById: Map<string, string>;
-  readonly messageIndexesById: Map<string, number>;
+  readonly logicalKeysByMessageIndex: string[];
+  readonly messageFingerprintsByKey: Map<string, string>;
+  readonly messageIndexesByKey: Map<string, number>;
   readonly revisions: Map<string, string>;
 }
 
 function createDedupeState(): DedupeState {
   return {
     fingerprints: new Set<string>(),
-    messageFingerprintsById: new Map<string, string>(),
-    messageIndexesById: new Map<string, number>(),
+    logicalKeysByMessageIndex: [],
+    messageFingerprintsByKey: new Map<string, string>(),
+    messageIndexesByKey: new Map<string, number>(),
     revisions: new Map<string, string>()
   };
+}
+
+interface TurnTrackingState {
+  readonly expectedTurnContainerIdSet: Set<string>;
+  readonly expectedTurnContainerIds: string[];
+  readonly extractedTurnContainerIds: Set<string>;
+  readonly logicalKeyByMessageId: Map<string, string>;
+}
+
+function createTurnTrackingState(root: ParentNode): TurnTrackingState {
+  const state: TurnTrackingState = {
+    expectedTurnContainerIdSet: new Set<string>(),
+    expectedTurnContainerIds: [],
+    extractedTurnContainerIds: new Set<string>(),
+    logicalKeyByMessageId: new Map<string, string>()
+  };
+
+  refreshTurnTrackingState(root, state);
+  return state;
+}
+
+function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): void {
+  for (const turnContainer of getTrackableTurnContainers(root)) {
+    const logicalKey = getTurnContainerLogicalKey(turnContainer);
+
+    if (logicalKey === undefined) {
+      continue;
+    }
+
+    if (!state.expectedTurnContainerIdSet.has(logicalKey)) {
+      state.expectedTurnContainerIdSet.add(logicalKey);
+      state.expectedTurnContainerIds.push(logicalKey);
+    }
+
+    for (const messageElement of Array.from(
+      turnContainer.querySelectorAll(chatGptSelectors.messageByRole)
+    )) {
+      const messageId = getMessageElementStableId(messageElement);
+      const turnId = messageElement
+        .closest(chatGptSelectors.conversationTurn)
+        ?.getAttribute("data-testid")
+        ?.trim();
+
+      if (messageId !== undefined) {
+        state.logicalKeyByMessageId.set(messageId, logicalKey);
+      }
+
+      if (turnId !== undefined && turnId.length > 0) {
+        state.logicalKeyByMessageId.set(turnId, logicalKey);
+      }
+    }
+  }
+}
+
+function getTrackableTurnContainers(root: ParentNode): readonly Element[] {
+  return Array.from(root.querySelectorAll(TURN_CONTAINER_SELECTOR)).filter((element) => {
+    const ancestorTurnContainer = element.parentElement?.closest(TURN_CONTAINER_SELECTOR);
+
+    if (ancestorTurnContainer !== null && ancestorTurnContainer !== undefined) {
+      return false;
+    }
+
+    if (getTurnContainerLogicalKey(element) === undefined) {
+      return false;
+    }
+
+    if (element.querySelector(chatGptSelectors.messageByRole) !== null) {
+      return true;
+    }
+
+    const style = element.getAttribute("style") ?? "";
+    const className = element.getAttribute("class") ?? "";
+
+    return (
+      style.includes("--last-known-height") ||
+      style.includes("--estimated-turn-height") ||
+      className.includes("estimated-turn-height") ||
+      className.includes("last-known-height")
+    );
+  });
+}
+
+function getTurnContainerLogicalKey(turnContainer: Element): string | undefined {
+  const logicalKey = turnContainer.getAttribute("data-turn-id-container")?.trim();
+  return logicalKey !== undefined && logicalKey.length > 0 ? logicalKey : undefined;
+}
+
+function getMessageElementStableId(messageElement: Element): string | undefined {
+  const messageId =
+    messageElement.getAttribute("data-message-id") ??
+    messageElement.getAttribute("data-message-id-testid") ??
+    messageElement.id;
+
+  if (messageId.trim().length > 0) {
+    return messageId.trim();
+  }
+
+  const turnId = messageElement
+    .closest(chatGptSelectors.conversationTurn)
+    ?.getAttribute("data-testid")
+    ?.trim();
+  return turnId !== undefined && turnId.length > 0 ? turnId : undefined;
+}
+
+function getMissingTurnContainerIds(state: TurnTrackingState): readonly string[] {
+  return state.expectedTurnContainerIds.filter(
+    (logicalKey) => !state.extractedTurnContainerIds.has(logicalKey)
+  );
+}
+
+interface MissingTurnRecoveryOptions {
+  readonly container: Element;
+  readonly dedupeState: DedupeState;
+  readonly extractMessages: ChatGptScrollCollectorOptions["extractMessages"];
+  readonly maxSteps: number;
+  readonly messages: ExportedMessage[];
+  readonly signal?: AbortSignal;
+  readonly turnTrackingState: TurnTrackingState;
+  readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
+  readonly waitForTurnHydration?: (
+    logicalKey: string,
+    signal?: AbortSignal
+  ) => Promise<void>;
+}
+
+interface MissingTurnRecoveryResult {
+  readonly duplicateCount: number;
+  readonly scrollSteps: number;
+}
+
+async function recoverMissingTurnContainers(
+  options: MissingTurnRecoveryOptions
+): Promise<MissingTurnRecoveryResult> {
+  const attemptsByLogicalKey = new Map<string, number>();
+  let duplicateCount = 0;
+  let scrollSteps = 0;
+
+  while (!options.signal?.aborted && scrollSteps < options.maxSteps) {
+    refreshTurnTrackingState(options.container, options.turnTrackingState);
+    const logicalKey = getMissingTurnContainerIds(options.turnTrackingState).find(
+      (candidate) =>
+        (attemptsByLogicalKey.get(candidate) ?? 0) < MAX_MISSING_TURN_ATTEMPTS
+    );
+
+    if (logicalKey === undefined) {
+      break;
+    }
+
+    attemptsByLogicalKey.set(logicalKey, (attemptsByLogicalKey.get(logicalKey) ?? 0) + 1);
+    const turnContainer = findTrackableTurnContainer(options.container, logicalKey);
+
+    if (turnContainer === undefined) {
+      continue;
+    }
+
+    scrollTurnContainerIntoView(options.container, turnContainer);
+    scrollSteps += 1;
+    await options.waitForDomSettle(options.signal);
+    await options.waitForTurnHydration?.(logicalKey, options.signal);
+    duplicateCount += collectStepMessages(
+      options.container,
+      options.extractMessages,
+      options.messages,
+      options.dedupeState,
+      options.turnTrackingState
+    );
+  }
+
+  return { duplicateCount, scrollSteps };
+}
+
+function findTrackableTurnContainer(
+  root: ParentNode,
+  logicalKey: string
+): Element | undefined {
+  return getTrackableTurnContainers(root).find(
+    (turnContainer) => getTurnContainerLogicalKey(turnContainer) === logicalKey
+  );
+}
+
+function scrollTurnContainerIntoView(container: Element, turnContainer: Element): void {
+  const containerTop = container.getBoundingClientRect().top;
+  const turnTop = turnContainer.getBoundingClientRect().top;
+  const topPadding = Math.min(64, Math.max(0, getClientHeight(container) * 0.1));
+  const targetScrollTop = getScrollTop(container) + turnTop - containerTop - topPadding;
+
+  setScrollTop(container, Math.max(0, targetScrollTop));
+}
+
+function orderMessagesByTurnContainer(
+  messages: readonly ExportedMessage[],
+  dedupeState: DedupeState,
+  turnTrackingState: TurnTrackingState
+): readonly ExportedMessage[] {
+  if (turnTrackingState.expectedTurnContainerIds.length === 0) {
+    return messages;
+  }
+
+  const orderByLogicalKey = new Map(
+    turnTrackingState.expectedTurnContainerIds.map((logicalKey, index) => [logicalKey, index])
+  );
+
+  return messages
+    .map((message, originalIndex) => ({
+      logicalKey: dedupeState.logicalKeysByMessageIndex[originalIndex] ?? message.id,
+      message,
+      originalIndex
+    }))
+    .sort((left, right) => {
+      const leftOrder = orderByLogicalKey.get(left.logicalKey);
+      const rightOrder = orderByLogicalKey.get(right.logicalKey);
+
+      if (leftOrder === undefined && rightOrder === undefined) {
+        return left.originalIndex - right.originalIndex;
+      }
+
+      if (leftOrder === undefined) {
+        return 1;
+      }
+
+      if (rightOrder === undefined) {
+        return -1;
+      }
+
+      return leftOrder - rightOrder;
+    })
+    .map(({ message }) => message);
 }
 
 function getMessageFingerprint(message: ExportedMessage): string {
@@ -553,6 +881,115 @@ function createBottomHydrationWait(
       signal?.addEventListener("abort", finish, { once: true });
     });
   };
+}
+
+function createTurnContainerHydrationWait(
+  container: Element,
+  quietMs = DEFAULT_DOM_QUIET_MS,
+  maximumMs = DEFAULT_DOM_HYDRATION_MAX_MS
+): (logicalKey: string, signal?: AbortSignal) => Promise<void> {
+  const ownerWindow = container.ownerDocument?.defaultView;
+  const Observer =
+    ownerWindow?.MutationObserver ??
+    (typeof globalThis.MutationObserver === "undefined" ? undefined : globalThis.MutationObserver);
+
+  return (logicalKey: string, signal?: AbortSignal) => {
+    if (signal?.aborted) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let finished = false;
+      let observer: MutationObserver | undefined;
+      let signature = getTurnContainerHydrationSignature(container, logicalKey);
+      let lastChangeAt = Date.now();
+
+      const finish = () => {
+        if (finished) {
+          return;
+        }
+
+        finished = true;
+        observer?.disconnect();
+        globalThis.clearInterval(inventoryPoll);
+        globalThis.clearTimeout(maximumTimer);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+
+      const sample = () => {
+        if (finished) {
+          return;
+        }
+
+        const nextSignature = getTurnContainerHydrationSignature(container, logicalKey);
+        if (nextSignature !== signature) {
+          signature = nextSignature;
+          lastChangeAt = Date.now();
+        }
+
+        const turnContainer = findTrackableTurnContainer(container, logicalKey);
+        if (
+          turnContainer !== undefined &&
+          hasHydratedRoleContent(turnContainer) &&
+          Date.now() - lastChangeAt >= quietMs
+        ) {
+          finish();
+        }
+      };
+
+      if (Observer !== undefined) {
+        observer = new Observer(sample);
+        observer.observe(container, {
+          attributes: true,
+          attributeFilter: [
+            "aria-hidden",
+            "class",
+            "data-message-author-role",
+            "data-message-id",
+            "data-testid",
+            "hidden",
+            "style"
+          ],
+          characterData: true,
+          childList: true,
+          subtree: true
+        });
+      }
+
+      const inventoryPoll = globalThis.setInterval(sample, DEFAULT_DOM_INVENTORY_POLL_MS);
+      const maximumTimer = globalThis.setTimeout(finish, maximumMs);
+      signal?.addEventListener("abort", finish, { once: true });
+      sample();
+    });
+  };
+}
+
+function getTurnContainerHydrationSignature(container: Element, logicalKey: string): string {
+  const turnContainer = findTrackableTurnContainer(container, logicalKey);
+
+  if (turnContainer === undefined) {
+    return "missing";
+  }
+
+  const roleElements = Array.from(
+    turnContainer.querySelectorAll(chatGptSelectors.messageByRole)
+  );
+  const text = turnContainer.textContent ?? "";
+
+  return [
+    roleElements.length,
+    roleElements
+      .map(
+        (roleElement) =>
+          `${roleElement.getAttribute("data-message-author-role") ?? ""}:${
+            roleElement.getAttribute("data-message-id") ?? ""
+          }`
+      )
+      .join(","),
+    text.length,
+    stableHash(text)
+  ].join(":");
 }
 
 interface HydrationInventory {
