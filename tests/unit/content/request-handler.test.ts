@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 import {
+  CONTENT_CANCEL_SCAN_MESSAGE,
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
@@ -70,6 +71,17 @@ function createHandler(overrides: Partial<Parameters<typeof createContentRequest
     handler,
     scanCurrentConversationExport
   };
+}
+
+function createDeferred<T>() {
+  let rejectPromise: (reason?: unknown) => void = () => undefined;
+  let resolvePromise: (value: T | PromiseLike<T>) => void = () => undefined;
+  const promise = new Promise<T>((resolve, reject) => {
+    rejectPromise = reject;
+    resolvePromise = resolve;
+  });
+
+  return { promise, reject: rejectPromise, resolve: resolvePromise };
 }
 
 describe("content request handler scan cache", () => {
@@ -195,6 +207,45 @@ describe("content request handler scan cache", () => {
     expect(observeConversationChanges).toHaveBeenCalledTimes(2);
     expect(stopFirstObserver).toHaveBeenCalledTimes(1);
     expect(stopSecondObserver).not.toHaveBeenCalled();
+  });
+
+  test("keeps the newer scan cancellable when an older scan unwinds late", async () => {
+    const firstScan = createDeferred<ConversationExport>();
+    const secondScan = createDeferred<ConversationExport>();
+    const signals: AbortSignal[] = [];
+    const scanCurrentConversationExport = vi
+      .fn()
+      .mockImplementationOnce(({ signal }: { readonly signal?: AbortSignal }) => {
+        if (signal !== undefined) {
+          signals.push(signal);
+        }
+        return firstScan.promise;
+      })
+      .mockImplementationOnce(({ signal }: { readonly signal?: AbortSignal }) => {
+        if (signal !== undefined) {
+          signals.push(signal);
+        }
+        return secondScan.promise;
+      });
+    const { handler } = createHandler({ scanCurrentConversationExport });
+
+    const firstRequest = handler({ type: CONTENT_SCAN_MESSAGE });
+    const secondRequest = handler({ type: CONTENT_SCAN_MESSAGE });
+
+    expect(signals).toHaveLength(2);
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+
+    firstScan.reject(new Error("first scan cancelled"));
+    await expect(firstRequest).rejects.toThrow("first scan cancelled");
+    await expect(handler({ type: CONTENT_CANCEL_SCAN_MESSAGE })).resolves.toEqual({
+      cancelled: true
+    });
+
+    expect(signals[1]?.aborted).toBe(true);
+
+    secondScan.reject(new Error("second scan cancelled"));
+    await expect(secondRequest).rejects.toThrow("second scan cancelled");
   });
 
   test("does not reuse the previous snapshot when a refresh fails", async () => {

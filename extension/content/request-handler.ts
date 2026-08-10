@@ -71,11 +71,12 @@ export function createContentRequestHandler(
     stopObservingConversationChanges?.();
     stopObservingConversationChanges = undefined;
     cachedConversationDirty = true;
-    activeScanController = new AbortController();
+    const scanController = new AbortController();
+    activeScanController = scanController;
 
     try {
       const conversation = await dependencies.scanCurrentConversationExport({
-        signal: activeScanController.signal
+        signal: scanController.signal
       });
       const scanId = createScanId(scanSequence);
 
@@ -90,7 +91,9 @@ export function createContentRequestHandler(
 
       return summarizeConversation(conversation, scanId);
     } finally {
-      activeScanController = undefined;
+      if (activeScanController === scanController) {
+        activeScanController = undefined;
+      }
     }
   }
 
