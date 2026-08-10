@@ -1,6 +1,7 @@
 import {
+  CHATGPT_CHAT_ORIGINS,
+  getAllowedBatchDiscoveryOrigins,
   getBatchRequiredOriginsForTabs,
-  SUPPORTED_CHAT_ORIGINS,
   type BatchCandidateTab
 } from "../core/batch";
 
@@ -14,14 +15,23 @@ export interface BatchPermissionsApi {
 }
 
 export async function requestBatchDiscoveryPermission(
+  requestedOrigins: readonly string[] = CHATGPT_CHAT_ORIGINS,
   permissions: BatchPermissionsApi | undefined = getCurrentPermissionsApi()
 ): Promise<BatchPermissionResult> {
+  const origins = getAllowedBatchDiscoveryOrigins(requestedOrigins);
+
+  if (origins.length === 0) {
+    return {
+      granted: false,
+      message: "No supported site access was selected for batch discovery."
+    };
+  }
+
   return requestPermission(
     permissions,
-    { origins: [...SUPPORTED_CHAT_ORIGINS] },
+    { origins: [...origins] },
     {
-      deniedMessage:
-        "Site access is needed to find already-open chats on the supported AI services."
+      deniedMessage: `Site access is needed to find open chats on: ${formatOriginList(origins)}.`
     }
   );
 }

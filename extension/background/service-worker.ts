@@ -138,7 +138,7 @@ async function handlePopupRequest(
   }
 
   if (request.type === POPUP_BATCH_LIST_MESSAGE) {
-    return handlePopupBatchListRequest();
+    return handlePopupBatchListRequest(request.origins);
   }
 
   if (request.type === POPUP_BATCH_EXPORT_MESSAGE) {

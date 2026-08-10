@@ -123,6 +123,8 @@ Business model:
 - Conversation content is not stored by default.
 - Browser storage is used for versioned local export, PDF, content, theme, and redaction preferences.
 - Optional site access is requested only when the user starts batch discovery or batch export.
+- Batch discovery defaults to ChatGPT-only access. Scanning every supported AI provider is a
+  separate explicit action with a broader permission prompt.
 - Jelluvi does not request browsing-history (`tabs`) or browser-downloads permissions.
 
 ## Limitations

@@ -17,7 +17,12 @@ import type { LucideIcon } from "lucide-preact";
 import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 
-import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
+import {
+  CHATGPT_CHAT_ORIGINS,
+  SUPPORTED_CHAT_ORIGINS,
+  type BatchCandidateTab,
+  type BatchManifestResult
+} from "../core/batch";
 import type { DiagnosticReport } from "../core/diagnostics";
 import type { BatchExportSuccess, BatchListSuccess, RuntimeResponse } from "../core/messages";
 import { SETTINGS_GET_DIAGNOSTICS_MESSAGE } from "../core/messages";
@@ -109,6 +114,8 @@ export function OptionsApp() {
   const [exportSettings, setExportSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
+  const [batchDiscoveryOrigins, setBatchDiscoveryOrigins] =
+    useState<readonly string[]>(CHATGPT_CHAT_ORIGINS);
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
   const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
   const [batchStatus, setBatchStatus] = useState("");
@@ -187,8 +194,8 @@ export function OptionsApp() {
     window.close();
   }
 
-  async function handleLoadBatchCandidates() {
-    const permission = await requestBatchDiscoveryPermission();
+  async function handleLoadBatchCandidates(origins: readonly string[]) {
+    const permission = await requestBatchDiscoveryPermission(origins);
 
     setBatchResults([]);
 
@@ -199,8 +206,9 @@ export function OptionsApp() {
 
     setBatchBusy(true);
     setBatchStatus("Looking for open AI chat tabs...");
+    setBatchDiscoveryOrigins(origins);
 
-    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest(origins));
 
     if (response.ok) {
       const tabs = response.value.tabs;
@@ -301,7 +309,9 @@ export function OptionsApp() {
   async function preflightBatchTabs(
     selectedTabIds: readonly number[]
   ): Promise<readonly BatchCandidateTab[] | undefined> {
-    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+    const response = await sendRuntimeMessage<BatchListSuccess>(
+      buildBatchListRequest(batchDiscoveryOrigins)
+    );
 
     if (!response.ok) {
       setBatchStatus(response.error.message);
@@ -460,7 +470,8 @@ export function OptionsApp() {
           candidates={batchCandidates}
           onClearSelection={handleClearBatchSelection}
           onExportSelected={handleBatchExport}
-          onLoadCandidates={handleLoadBatchCandidates}
+          onLoadAllCandidates={() => handleLoadBatchCandidates(SUPPORTED_CHAT_ORIGINS)}
+          onLoadChatGptCandidates={() => handleLoadBatchCandidates(CHATGPT_CHAT_ORIGINS)}
           onSelectAll={handleSelectAllBatchTabs}
           onToggleTab={handleToggleBatchTab}
           results={batchResults}

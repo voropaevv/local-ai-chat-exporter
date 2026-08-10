@@ -1,5 +1,11 @@
 import type { LocalRendererFormat } from "../renderers/types";
-import { getProviderByUrl, getProviderOriginForUrl, type ProviderId } from "./provider-catalog";
+import {
+  getProviderByUrl,
+  getProviderDefinition,
+  getProviderOriginForUrl,
+  SUPPORTED_CHAT_ORIGINS,
+  type ProviderId
+} from "./provider-catalog";
 
 export interface BatchTabLike {
   readonly id?: number;
@@ -83,6 +89,18 @@ export interface SupportedChatPageInfo {
 }
 
 export { SUPPORTED_CHAT_ORIGINS } from "./provider-catalog";
+
+export const CHATGPT_CHAT_ORIGINS: readonly string[] = [
+  ...getProviderDefinition("chatgpt").origins
+];
+
+export function getAllowedBatchDiscoveryOrigins(
+  requestedOrigins: readonly string[]
+): readonly string[] {
+  const allowedOrigins = new Set(SUPPORTED_CHAT_ORIGINS);
+
+  return [...new Set(requestedOrigins.filter((origin) => allowedOrigins.has(origin)))];
+}
 
 export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly BatchCandidateTab[] {
   return tabs.flatMap((tab) => {

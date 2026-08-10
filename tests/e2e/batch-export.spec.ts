@@ -30,7 +30,8 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchSource).not.toContain("chrome.permissions.request");
   expect(permissionSource).toContain("return chrome.permissions");
   expect(permissionSource).toContain("permissions.request(request, resolve)");
-  expect(permissionSource).toContain("SUPPORTED_CHAT_ORIGINS");
+  expect(permissionSource).toContain("getAllowedBatchDiscoveryOrigins");
+  expect(permissionSource).toContain("CHATGPT_CHAT_ORIGINS");
   expect(permissionSource).not.toContain('permissions: ["tabs"]');
   expect(batchSource).not.toContain('permissions: ["downloads"]');
   expect(batchSource).not.toContain("Downloads permission is required");
@@ -40,7 +41,8 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(popupSource).not.toContain("requestBatchHostPermissions");
   expect(optionsSource).toContain("requestBatchDiscoveryPermission");
   expect(optionsSource).toContain("requestBatchHostPermissions");
-  expect(batchUiSource).toContain("Find open tabs");
+  expect(batchUiSource).toContain("Find ChatGPT tabs");
+  expect(batchUiSource).toContain("Find all AI tabs");
   expect(batchUiSource).toContain("Select all");
   expect(batchUiSource).toContain("Clear selection");
   expect(batchUiSource).toContain("Export selected to ZIP");

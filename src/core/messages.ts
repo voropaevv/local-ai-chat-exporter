@@ -49,6 +49,7 @@ export interface PopupExportRequest {
 }
 
 export interface PopupBatchListRequest {
+  readonly origins: readonly string[];
   readonly type: typeof POPUP_BATCH_LIST_MESSAGE;
 }
 

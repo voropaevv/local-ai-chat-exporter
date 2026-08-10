@@ -1,6 +1,8 @@
 import {
+  CHATGPT_CHAT_ORIGINS,
   createBatchManifest,
   createBatchRootDirectory,
+  getAllowedBatchDiscoveryOrigins,
   getBatchRequiredOrigins,
   getBatchCandidateTabs,
   SUPPORTED_CHAT_ORIGINS,
@@ -32,8 +34,19 @@ import {
 import { ensureContentScript } from "../../src/utils/content-script";
 import { serializeRenderedFile } from "../../src/core/rendered-file-transport";
 
-export async function handlePopupBatchListRequest(): Promise<BatchListSuccess> {
-  const tabs = await chrome.tabs.query({ url: [...SUPPORTED_CHAT_ORIGINS] });
+export async function handlePopupBatchListRequest(
+  requestedOrigins: readonly string[] = CHATGPT_CHAT_ORIGINS
+): Promise<BatchListSuccess> {
+  const origins = getAllowedBatchDiscoveryOrigins(requestedOrigins);
+
+  if (origins.length === 0) {
+    throw new ExportPipelineError(
+      "unsupported_platform",
+      "Batch discovery did not receive a supported site scope."
+    );
+  }
+
+  const tabs = await chrome.tabs.query({ url: [...origins] });
   return {
     tabs: getBatchCandidateTabs(tabs)
   };

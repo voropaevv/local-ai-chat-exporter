@@ -5,7 +5,8 @@ interface BatchExportProps {
   readonly candidates: readonly BatchCandidateTab[];
   readonly onClearSelection: () => void;
   readonly onExportSelected: () => void;
-  readonly onLoadCandidates: () => void;
+  readonly onLoadAllCandidates: () => void;
+  readonly onLoadChatGptCandidates: () => void;
   readonly onSelectAll: () => void;
   readonly onToggleTab: (tabId: number) => void;
   readonly results: readonly BatchManifestResult[];
@@ -18,7 +19,8 @@ export function BatchExport({
   candidates,
   onClearSelection,
   onExportSelected,
-  onLoadCandidates,
+  onLoadAllCandidates,
+  onLoadChatGptCandidates,
   onSelectAll,
   onToggleTab,
   results,
@@ -27,14 +29,22 @@ export function BatchExport({
 }: BatchExportProps) {
   return (
     <div className="settings-control-stack">
-      <div className="section-heading">
+      <div className="button-row">
         <button
           className="secondary-action compact-action"
           disabled={busy}
-          onClick={onLoadCandidates}
+          onClick={onLoadChatGptCandidates}
           type="button"
         >
-          Find open tabs
+          Find ChatGPT tabs
+        </button>
+        <button
+          className="secondary-action compact-action"
+          disabled={busy}
+          onClick={onLoadAllCandidates}
+          type="button"
+        >
+          Find all AI tabs
         </button>
       </div>
       {candidates.length > 0 ? (

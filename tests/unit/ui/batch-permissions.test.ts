@@ -6,7 +6,7 @@ import {
   requestBatchHostPermissions,
   type BatchPermissionsApi
 } from "../../../src/ui/batch-permissions";
-import { SUPPORTED_CHAT_ORIGINS } from "../../../src/core/batch";
+import { CHATGPT_CHAT_ORIGINS, SUPPORTED_CHAT_ORIGINS } from "../../../src/core/batch";
 
 function makePermissionsApi(granted: boolean): BatchPermissionsApi & {
   readonly request: ReturnType<typeof vi.fn>;
@@ -19,23 +19,51 @@ function makePermissionsApi(granted: boolean): BatchPermissionsApi & {
 }
 
 describe("batch permission prompts", () => {
-  test("requests supported-site access from the user gesture flow", async () => {
+  test("requests ChatGPT-only access by default from the user gesture flow", async () => {
     const permissions = makePermissionsApi(true);
 
-    await expect(requestBatchDiscoveryPermission(permissions)).resolves.toEqual({ granted: true });
+    await expect(
+      requestBatchDiscoveryPermission(CHATGPT_CHAT_ORIGINS, permissions)
+    ).resolves.toEqual({ granted: true });
+    expect(permissions.request).toHaveBeenCalledWith(
+      { origins: [...CHATGPT_CHAT_ORIGINS] },
+      expect.any(Function)
+    );
+  });
+
+  test("explains the exact ChatGPT site scope when access is denied", async () => {
+    const permissions = makePermissionsApi(false);
+
+    await expect(
+      requestBatchDiscoveryPermission(CHATGPT_CHAT_ORIGINS, permissions)
+    ).resolves.toEqual({
+      granted: false,
+      message: "Site access is needed to find open chats on: chatgpt.com, chat.openai.com."
+    });
+  });
+
+  test("requests every supported origin only after an explicit all-provider choice", async () => {
+    const permissions = makePermissionsApi(true);
+
+    await expect(
+      requestBatchDiscoveryPermission(SUPPORTED_CHAT_ORIGINS, permissions)
+    ).resolves.toEqual({ granted: true });
     expect(permissions.request).toHaveBeenCalledWith(
       { origins: [...SUPPORTED_CHAT_ORIGINS] },
       expect.any(Function)
     );
   });
 
-  test("explains supported-site access denial without asking for browsing history", async () => {
-    const permissions = makePermissionsApi(false);
+  test("rejects unsupported discovery origins without opening a permission prompt", async () => {
+    const permissions = makePermissionsApi(true);
 
-    await expect(requestBatchDiscoveryPermission(permissions)).resolves.toEqual({
+    await expect(
+      requestBatchDiscoveryPermission(["https://example.com/*"], permissions)
+    ).resolves.toEqual({
       granted: false,
-      message: "Site access is needed to find already-open chats on the supported AI services."
+      message: "No supported site access was selected for batch discovery."
     });
+    expect(permissions.request).not.toHaveBeenCalled();
   });
 
   test("requests all selected host origins in one prompt", async () => {

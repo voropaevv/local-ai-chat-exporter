@@ -11,6 +11,8 @@ Jelluvi is a local-first Manifest V3 extension.
 - It does not use telemetry, analytics, ads, trackers, or remote logging.
 - It does not request browsing-history (`tabs`) or downloads permission.
 - It requests optional host access only when the user starts batch discovery or batch export.
+- The default batch action requests only ChatGPT origins. A separate all-provider action is
+  required before the browser can request access to every supported AI site.
 
 ## Manual Review Steps
 

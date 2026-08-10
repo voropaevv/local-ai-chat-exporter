@@ -1,6 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { handlePopupBatchExportRequest } from "../../../extension/background/batch";
+import {
+  handlePopupBatchExportRequest,
+  handlePopupBatchListRequest
+} from "../../../extension/background/batch";
+import { CHATGPT_CHAT_ORIGINS } from "../../../src/core/batch";
 import {
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_SCAN_MESSAGE,
@@ -19,6 +23,29 @@ const failedScanResponse: RuntimeResponse<ScanSummary> = {
 };
 
 describe("batch export background flow", () => {
+  test("limits discovery to the exact supported origins requested by the UI", async () => {
+    const query = vi.fn(async () => [
+      {
+        id: 10,
+        title: "Scoped ChatGPT chat",
+        url: "https://chatgpt.com/c/scoped"
+      }
+    ]);
+
+    vi.stubGlobal("chrome", {
+      tabs: { query }
+    });
+
+    const response = await handlePopupBatchListRequest([
+      ...CHATGPT_CHAT_ORIGINS,
+      "https://example.com/*"
+    ]);
+
+    expect(query).toHaveBeenCalledWith({ url: [...CHATGPT_CHAT_ORIGINS] });
+    expect(response.tabs).toHaveLength(1);
+    expect(response.tabs[0]?.platform).toBe("chatgpt");
+  });
+
   test("uses only pre-approved permissions and preserves selected batch formats", async () => {
     const requestPermission = vi.fn(
       (_permissions: chrome.permissions.Permissions, callback: (granted: boolean) => void) =>

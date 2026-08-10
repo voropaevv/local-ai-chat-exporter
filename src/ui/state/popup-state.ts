@@ -401,8 +401,8 @@ export function buildOpenPreviewRequest(
   };
 }
 
-export function buildBatchListRequest(): PopupBatchListRequest {
-  return { type: POPUP_BATCH_LIST_MESSAGE };
+export function buildBatchListRequest(origins: readonly string[]): PopupBatchListRequest {
+  return { origins, type: POPUP_BATCH_LIST_MESSAGE };
 }
 
 export function buildBatchExportRequest(
