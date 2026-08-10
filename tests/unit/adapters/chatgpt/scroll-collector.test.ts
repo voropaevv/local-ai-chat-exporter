@@ -12,6 +12,7 @@ function setScrollMetrics(
   element: Element,
   metrics: {
     readonly clientHeight: number;
+    readonly onScrollTopChange?: (scrollTop: number, previousScrollTop: number) => void;
     readonly scrollHeight: number;
     readonly scrollTop: number;
   }
@@ -25,7 +26,9 @@ function setScrollMetrics(
       configurable: true,
       get: () => scrollTop,
       set: (value: number) => {
+        const previousScrollTop = scrollTop;
         scrollTop = Math.max(0, Math.min(value, metrics.scrollHeight - metrics.clientHeight));
+        metrics.onScrollTopChange?.(scrollTop, previousScrollTop);
       }
     }
   });
@@ -292,6 +295,188 @@ describe("collectChatGptConversation", () => {
     } finally {
       cloneSpy.mockRestore();
     }
+  });
+
+  test("dedupes a hydrating turn when ChatGPT replaces its temporary id", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 120px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="assistant">
+              <div class="markdown"><p>Partial answer</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 200, scrollTop: 0 });
+    let hydrated = false;
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 4,
+      scrollBy: (element, pixels) => {
+        element.scrollTop += pixels;
+
+        if (!hydrated) {
+          hydrated = true;
+          const message = container.querySelector("[data-message-author-role]");
+          message?.setAttribute("data-message-id", "hydrated-message-id");
+          if (message !== null) {
+            message.innerHTML = `<div class="markdown"><p>Complete answer</p></div>`;
+          }
+        }
+      },
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({
+      id: "hydrated-message-id",
+      text: "Complete answer"
+    });
+    expect(result.duplicateCount).toBeGreaterThan(0);
+  });
+
+  test("hydrates missing virtual turn containers and restores conversation order", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>First</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">
+              <div class="markdown"><p>Second</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-3" style="--last-known-height: 100px"></div>
+        <div data-turn-id-container="logical-turn-4" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-4">
+            <div data-message-author-role="assistant" data-message-id="m4">
+              <div class="markdown"><p>Fourth</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    const wrappers = Array.from(container.querySelectorAll("[data-turn-id-container]"));
+    wrappers.forEach((wrapper, index) => {
+      Object.defineProperty(wrapper, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({
+          bottom: index * 100 + 100 - container.scrollTop,
+          height: 100,
+          left: 0,
+          right: 500,
+          top: index * 100 - container.scrollTop,
+          width: 500,
+          x: 0,
+          y: index * 100 - container.scrollTop,
+          toJSON: () => ({})
+        })
+      });
+    });
+    Object.defineProperty(container, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 500,
+        top: 0,
+        width: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      })
+    });
+
+    const missingWrapper = wrappers[2];
+    let hydrated = false;
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: (scrollTop, previousScrollTop) => {
+        if (!hydrated && previousScrollTop === 300 && scrollTop < 250) {
+          hydrated = true;
+          missingWrapper.innerHTML = `
+            <article data-testid="conversation-turn-3">
+              <div data-message-author-role="user" data-message-id="m3">
+                <div class="markdown"><p>Third</p></div>
+              </div>
+            </article>
+          `;
+        }
+      },
+      scrollHeight: 400,
+      scrollTop: 0
+    });
+
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 20,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(hydrated).toBe(true);
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2", "m3", "m4"]);
+    expect(result.completeness.status).toBe("complete");
+    expect(result.completeness.lastMessagePreview).toBe("Fourth");
+  });
+
+  test("does not report complete when a tracked turn container stays unhydrated", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>First</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px"></div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 200, scrollTop: 0 });
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 20,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1"]);
+    expect(result.completeness.status).toBe("probably_complete");
+    expect(result.completeness.warnings).toContain(
+      "ChatGPT did not hydrate 1 conversation turn before the scan timeout."
+    );
+    expect(result.completeness.warnings).toContain(
+      "Platform virtualization may hide unloaded messages."
+    );
   });
 
   test("waits for a suspicious virtualized turn inventory to hydrate", async () => {
