@@ -500,6 +500,138 @@ describe("collectChatGptConversation", () => {
     );
   });
 
+  test("shares the missing-turn attempt budget across completion passes", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>First</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px"></div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 100, scrollTop: 0 });
+    let waitCalls = 0;
+    const result = await collectChatGptConversation({
+      document,
+      maxMissingTurnRecoveryAttempts: 1,
+      maxSteps: 20,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        waitCalls += 1;
+
+        if (waitCalls === 2) {
+          const missingTurn = container.querySelector(
+            "[data-turn-id-container='logical-turn-2']"
+          );
+          if (missingTurn !== null) {
+            missingTurn.innerHTML = `
+              <article data-testid="conversation-turn-2">
+                <div data-message-author-role="assistant" data-message-id="m2">
+                  <div class="markdown"><p>Second</p></div>
+                </div>
+              </article>
+            `;
+          }
+        }
+
+        if (waitCalls === 3) {
+          container.insertAdjacentHTML(
+            "beforeend",
+            `<div data-turn-id-container="logical-turn-3"
+              style="--last-known-height: 100px"></div>`
+          );
+        }
+
+        return Promise.resolve();
+      }
+    });
+
+    expect(waitCalls).toBe(3);
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.scrollSteps).toBe(2);
+    expect(result.warnings).toContain(
+      "ChatGPT missing-turn recovery stopped at its bounded scan budget."
+    );
+    expect(result.warnings).toContain(
+      "ChatGPT did not hydrate 1 conversation turn before the scan timeout."
+    );
+  });
+
+  test("bounds production missing-turn waits without polling the full turn inventory", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`
+        <main id="chat-scroll">
+          <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-1">
+              <div data-message-author-role="user" data-message-id="m1">
+                <div class="markdown"><p>First</p></div>
+              </div>
+            </article>
+          </div>
+          <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-2">
+              <div data-message-author-role="assistant" data-message-id="m2">
+                <div class="markdown"><p>Second</p></div>
+              </div>
+            </article>
+          </div>
+          <div data-turn-id-container="logical-turn-3" style="--last-known-height: 100px"></div>
+        </main>
+      `);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 100, scrollHeight: 100, scrollTop: 0 });
+      const querySelectorAllSpy = vi.spyOn(container, "querySelectorAll");
+      let settled = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        maxMissingTurnRecoveryAttempts: 10,
+        missingTurnRecoveryBudgetMs: 1_000,
+        scrollContainer: container
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(100);
+
+      const result = await resultPromise;
+      const fullTurnInventoryScans = querySelectorAllSpy.mock.calls.filter(
+        ([selector]) => selector === "[data-turn-id-container]"
+      );
+
+      expect(result.aborted).toBe(false);
+      expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+      expect(result.warnings).toContain(
+        "ChatGPT missing-turn recovery stopped at its bounded scan budget."
+      );
+      expect(fullTurnInventoryScans.length).toBeLessThan(10);
+      expect(vi.getTimerCount()).toBe(0);
+      querySelectorAllSpy.mockRestore();
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
   test("waits for a suspicious virtualized turn inventory to hydrate", async () => {
     vi.useFakeTimers();
 
@@ -821,6 +953,78 @@ describe("collectChatGptConversation", () => {
     expect(result.completeness.status).toBe("partial");
     expect(result.warnings).toContain("Scan was cancelled.");
     expect(container.scrollTop).toBe(0);
+  });
+
+  test("stops the main scan after bounded no-new-message progress", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 2_000, scrollTop: 0 });
+    renderMessages(container, ["m1|user|First user message"]);
+
+    const result = await collectChatGptConversation({
+      document,
+      maxNoNewMessageSteps: 3,
+      maxStalls: 100,
+      maxSteps: 100,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.reachedBottom).toBe(false);
+    expect(result.scrollSteps).toBe(3);
+    expect(result.completeness.status).toBe("partial");
+    expect(result.warnings).toContain(
+      "Scan stopped after repeated scrolls without discovering new conversation content."
+    );
+  });
+
+  test("resets the no-new-message bound when lazy history appears", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    const scrollMetrics = { clientHeight: 100, scrollHeight: 300, scrollTop: 0 };
+    setScrollMetrics(container, scrollMetrics);
+    renderMessages(container, ["m1|user|First user message"]);
+    let scrollCalls = 0;
+
+    const result = await collectChatGptConversation({
+      document,
+      maxNoNewMessageSteps: 2,
+      maxSteps: 10,
+      scrollBy: (element, pixels) => {
+        element.scrollTop += pixels;
+        scrollCalls += 1;
+
+        if (scrollCalls === 2) {
+          scrollMetrics.scrollHeight = 400;
+        }
+
+        if (scrollCalls === 4) {
+          renderMessages(container, [
+            "m1|user|First user message",
+            "m2|assistant|Lazy assistant answer"
+          ]);
+        }
+      },
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(scrollCalls).toBe(4);
+    expect(result.reachedBottom).toBe(true);
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.warnings).not.toContain(
+      "Scan stopped after repeated scrolls without discovering new conversation content."
+    );
   });
 
   test("marks a stalled scan as partial", async () => {
