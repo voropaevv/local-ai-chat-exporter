@@ -160,6 +160,27 @@ describe("collectChatGptConversation", () => {
     expect(scrollPixels).toEqual([85]);
   });
 
+  test("keeps repeated same-role text when stable message ids differ", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+    renderMessages(container, ["m1|user|Continue", "m2|user|Continue"]);
+
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.messages.map((message) => message.text)).toEqual(["Continue", "Continue"]);
+  });
+
   test("keeps distinct attachment-only turns when both have stable ids", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");
