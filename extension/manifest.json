@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Jelluvi - AI Chat Export",
   "short_name": "Jelluvi",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Export AI chats locally and privately.",
   "minimum_chrome_version": "114",
   "permissions": ["activeTab", "scripting", "storage"],
