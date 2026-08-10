@@ -15,10 +15,14 @@ export const POPUP_OPEN_PREVIEW_MESSAGE = "jelluvi/open-preview";
 export const SETTINGS_GET_DIAGNOSTICS_MESSAGE = "jelluvi/get-diagnostics";
 export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/preview-get-cached-conversation";
 export const PREVIEW_RETURN_TO_SOURCE_MESSAGE = "jelluvi/preview-return-to-source";
-export const CONTENT_SCAN_MESSAGE = "jelluvi/content-scan";
-export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/content-cancel-scan";
-export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/content-get-scan-cache-summary";
-export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/content-get-cached-conversation";
+// Keep content requests versioned so a listener left in an already-open tab
+// cannot race the freshly injected listener after an extension update.
+export const CONTENT_SCAN_MESSAGE = "jelluvi/v2/content-scan";
+export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/v2/content-cancel-scan";
+export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE =
+  "jelluvi/v2/content-get-scan-cache-summary";
+export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE =
+  "jelluvi/v2/content-get-cached-conversation";
 
 export interface ScanSummary {
   readonly completeness: CompletenessReport;

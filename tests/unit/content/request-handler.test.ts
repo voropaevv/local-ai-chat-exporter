@@ -221,4 +221,9 @@ describe("content request handler scan cache", () => {
       })
     ).toBe(false);
   });
+
+  test("rejects the legacy content protocol so a stale listener cannot race the current one", () => {
+    expect(isContentRequest({ type: "jelluvi/content-scan" })).toBe(false);
+    expect(isContentRequest({ type: CONTENT_SCAN_MESSAGE })).toBe(true);
+  });
 });

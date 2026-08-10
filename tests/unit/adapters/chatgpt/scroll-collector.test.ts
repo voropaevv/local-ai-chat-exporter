@@ -925,6 +925,134 @@ describe("collectChatGptConversation", () => {
     }
   });
 
+  test("starts the DOM wait when a background tab never runs requestAnimationFrame", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+      const ownerWindow = document.defaultView;
+
+      if (!container || ownerWindow === null) {
+        throw new Error("fixture missing browser context");
+      }
+
+      const requestFrame = vi.fn(() => 17);
+      const cancelFrame = vi.fn();
+      Object.defineProperties(ownerWindow, {
+        cancelAnimationFrame: { configurable: true, value: cancelFrame },
+        requestAnimationFrame: { configurable: true, value: requestFrame }
+      });
+      setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+      renderMessages(container, ["1|user|First", "2|assistant|Second"]);
+      let settled = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(119);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
+      expect(result.completeness.status).toBe("complete");
+      expect(requestFrame).toHaveBeenCalledTimes(1);
+      expect(cancelFrame).toHaveBeenCalledWith(17);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("cancels before a suspended requestAnimationFrame without leaking timers", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+      const ownerWindow = document.defaultView;
+      const controller = new AbortController();
+
+      if (!container || ownerWindow === null) {
+        throw new Error("fixture missing browser context");
+      }
+
+      const cancelFrame = vi.fn();
+      Object.defineProperties(ownerWindow, {
+        cancelAnimationFrame: { configurable: true, value: cancelFrame },
+        requestAnimationFrame: { configurable: true, value: () => 23 }
+      });
+      setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+      renderMessages(container, ["1|user|First"]);
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container,
+        signal: controller.signal
+      });
+
+      controller.abort();
+      const result = await resultPromise;
+
+      expect(result.aborted).toBe(true);
+      expect(result.warnings).toContain("Scan was cancelled.");
+      expect(cancelFrame).toHaveBeenCalledWith(23);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("returns collected messages when the total main-scan wall budget expires", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 100, scrollHeight: 2_000, scrollTop: 0 });
+      renderMessages(container, ["1|user|First", "2|assistant|Second"]);
+      let settled = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        mainScanBudgetMs: 1_000,
+        scrollContainer: container,
+        waitForDomSettle: (signal) =>
+          signal?.aborted === true
+            ? Promise.resolve()
+            : new Promise<void>((resolve) => {
+                signal?.addEventListener("abort", () => resolve(), { once: true });
+              })
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const result = await resultPromise;
+      expect(result.aborted).toBe(false);
+      expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
+      expect(result.warnings).toContain(
+        "ChatGPT main scan stopped at its bounded wall-clock budget."
+      );
+      expect(result.completeness.status).toBe("partial");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("supports cancellation with AbortSignal", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");
@@ -981,6 +1109,56 @@ describe("collectChatGptConversation", () => {
     expect(result.warnings).toContain(
       "Scan stopped after repeated scrolls without discovering new conversation content."
     );
+  });
+
+  test("does not treat rich-message revisions or height jitter as new history", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      const scrollMetrics = { clientHeight: 100, scrollHeight: 2_000, scrollTop: 0 };
+      setScrollMetrics(container, scrollMetrics);
+      renderMessages(container, ["1|user|First", "2|assistant|Rich answer"]);
+      let scrollCalls = 0;
+      const resultPromise = collectChatGptConversation({
+        document,
+        maxNoNewMessageSteps: 3,
+        maxStalls: 100,
+        maxSteps: 100,
+        scrollBy: (element, pixels) => {
+          element.scrollTop += pixels;
+          scrollCalls += 1;
+          scrollMetrics.scrollHeight = scrollCalls % 2 === 0 ? 2_000 : 2_001;
+          const answer = container.querySelector(
+            "[data-message-id='2'] .markdown p"
+          );
+          if (answer !== null) {
+            answer.textContent = `Rich answer revision ${scrollCalls}`;
+          }
+        },
+        scrollContainer: container
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await resultPromise;
+
+      expect(scrollCalls).toBe(3);
+      expect(result.scrollSteps).toBe(3);
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[1]?.text).toBe("Rich answer revision 3");
+      expect(result.warnings).toContain(
+        "Scan stopped after repeated scrolls without discovering new conversation content."
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("resets the no-new-message bound when lazy history appears", async () => {

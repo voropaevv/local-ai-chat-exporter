@@ -3,7 +3,8 @@ import { scanCurrentConversationExport } from "../../src/content/scan";
 import { observeConversationChanges } from "./conversation-change-observer";
 import { createContentRequestHandler, isContentRequest } from "./request-handler";
 
-const LISTENER_STATE_KEY = "__logThreadContentListenerRegistered";
+// Version this key with the content-message protocol in src/core/messages.ts.
+const LISTENER_STATE_KEY = "__jelluviContentV2ListenerRegistered";
 
 const contentGlobal = globalThis as typeof globalThis & {
   [LISTENER_STATE_KEY]?: boolean;
