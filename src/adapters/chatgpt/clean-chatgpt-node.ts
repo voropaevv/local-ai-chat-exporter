@@ -117,6 +117,7 @@ export function cleanChatGptNode(
   copyResolvedImageMetadata(messageElement, clonedElement);
   normalizeMathMl(clonedElement);
   removeUiArtifacts(clonedElement, options);
+  removeEmptyContentContainers(clonedElement);
   const codeBlocks = extractCodeBlocks(clonedElement);
   removeNonContentImageElements(clonedElement, imageOptions);
   removeRedundantCodeLanguageLabels(clonedElement, codeBlocks);
@@ -192,6 +193,20 @@ function removeUiArtifacts(root: Element, options: CleanChatGptNodeOptions): voi
   root.querySelectorAll(selectors).forEach((element) => {
     element.remove();
   });
+}
+
+function removeEmptyContentContainers(root: Element): void {
+  const candidates = Array.from(root.querySelectorAll("p, li, ul, ol")).reverse();
+
+  for (const element of candidates) {
+    const hasText = normalizeInlineText(element.textContent ?? "").length > 0;
+    const hasPortableContent =
+      element.querySelector("img, pre, code, table, hr, br, audio, video") !== null;
+
+    if (!hasText && !hasPortableContent) {
+      element.remove();
+    }
+  }
 }
 
 function removeRedundantCodeLanguageLabels(

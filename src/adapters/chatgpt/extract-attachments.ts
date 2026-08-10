@@ -6,6 +6,15 @@ const MAX_PREVIEW_HTML_CHARACTERS = 250_000;
 const PREVIEW_UNAVAILABLE_WARNING =
   "The embedded preview could not be captured as a portable local snapshot. Open the original conversation to view it.";
 
+const CHATGPT_GENERATED_DOWNLOAD_SELECTORS = [
+  "a[download]",
+  "a[href^='sandbox:']",
+  "a[href*='/backend-api/files/']"
+].join(",");
+
+const CHATGPT_INLINE_FILE_ENTITY_SELECTOR =
+  "button.behavior-btn.entity-underline.text-token-text-link";
+
 export const CHATGPT_ATTACHMENT_SELECTORS = [
   "[data-jelluvi-attachment]",
   "[data-jelluvi-artifact]",
@@ -17,6 +26,9 @@ export const CHATGPT_ATTACHMENT_SELECTORS = [
   "[data-testid*='file-tile' i]",
   "[role='group'][class*='file-tile']",
   "[aria-label*='attachment' i]",
+  CHATGPT_GENERATED_DOWNLOAD_SELECTORS,
+  `.markdown ${CHATGPT_INLINE_FILE_ENTITY_SELECTOR}`,
+  `.prose ${CHATGPT_INLINE_FILE_ENTITY_SELECTOR}`,
   "iframe[srcdoc]",
   "iframe[src]"
 ].join(",");
@@ -26,9 +38,9 @@ export function extractChatGptAttachments(
   turn: Element | null = null
 ): readonly ExportedAttachmentRef[] {
   const scope = turn ?? messageElement;
-  const individualCandidates = Array.from(
-    scope.querySelectorAll(CHATGPT_ATTACHMENT_SELECTORS)
-  ).filter((element) => !isAttachmentCollection(element));
+  const individualCandidates = Array.from(scope.querySelectorAll(CHATGPT_ATTACHMENT_SELECTORS))
+    .filter((element) => !isAttachmentCollection(element))
+    .sort(compareDocumentOrder);
   const candidates = individualCandidates.filter(
     (element) =>
       !individualCandidates.some(
@@ -59,6 +71,24 @@ export function extractChatGptAttachments(
   }
 
   return attachments;
+}
+
+function compareDocumentOrder(left: Element, right: Element): number {
+  if (left === right) {
+    return 0;
+  }
+
+  const position = left.compareDocumentPosition(right);
+
+  if ((position & 2) !== 0) {
+    return 1;
+  }
+
+  if ((position & 4) !== 0) {
+    return -1;
+  }
+
+  return 0;
 }
 
 function isAttachmentCollection(element: Element): boolean {
@@ -142,9 +172,16 @@ function extractAttachmentName(
     return ariaLabel;
   }
 
-  const downloadName = element.querySelector("a[download]")?.getAttribute("download")?.trim();
+  const downloadName =
+    firstNonEmptyAttribute(element, ["download"]) ??
+    element.querySelector("a[download]")?.getAttribute("download")?.trim();
   if (downloadName) {
     return cleanText(downloadName);
+  }
+
+  const generatedDownloadName = extractGeneratedDownloadName(element);
+  if (generatedDownloadName !== undefined) {
+    return generatedDownloadName;
   }
 
   const lines = getDistinctTextLines(element);
@@ -159,6 +196,32 @@ function extractAttachmentName(
   }
 
   return lines[0];
+}
+
+function extractGeneratedDownloadName(element: Element): string | undefined {
+  const anchor =
+    element.tagName.toLocaleLowerCase() === "a"
+      ? element
+      : element.querySelector(CHATGPT_GENERATED_DOWNLOAD_SELECTORS);
+  const href = anchor?.getAttribute("href")?.trim();
+
+  if (href === undefined || href.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const pathname = new URL(href, "https://chatgpt.com").pathname;
+    const encodedName = pathname.split("/").filter(Boolean).at(-1);
+
+    if (encodedName === undefined) {
+      return undefined;
+    }
+
+    const name = cleanText(decodeURIComponent(encodedName));
+    return looksLikeFilename(name) ? name : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function extractAttachmentDescription(element: Element, name: string): string | undefined {
@@ -200,6 +263,10 @@ function detectAttachmentKind(
     return explicit;
   }
 
+  if (element.matches(CHATGPT_INLINE_FILE_ENTITY_SELECTOR)) {
+    return "file";
+  }
+
   if (iframe !== null || mimeType === "text/html" || /\.html?$/i.test(name)) {
     return "website";
   }
@@ -220,6 +287,7 @@ function extractPortableUrl(
 ): string | undefined {
   const candidates = [
     firstNonEmptyAttribute(element, ["data-url", "data-href"]),
+    element.tagName.toLocaleLowerCase() === "a" ? element.getAttribute("href")?.trim() : undefined,
     element.querySelector("a[href]")?.getAttribute("href")?.trim(),
     iframe?.getAttribute("src")?.trim()
   ];

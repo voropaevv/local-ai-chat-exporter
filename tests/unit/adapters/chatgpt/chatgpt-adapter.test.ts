@@ -62,6 +62,113 @@ describe("extractVisibleChatGptMessages", () => {
     ]);
   });
 
+  test("keeps multiple nested-pre code blocks aligned without collapsing legitimate repeats", () => {
+    const document = new JSDOM(
+      `<main>
+        <section data-testid="conversation-turn-nested-code">
+          <div data-message-author-role="assistant" data-message-id="nested-code">
+            <div class="markdown">
+              <p>Run the first command.</p>
+              <div data-code-block="first"></div>
+              <p>Run the same command again.</p>
+              <div data-code-block="repeat"></div>
+              <p>Then run the final command.</p>
+              <div data-code-block="final"></div>
+            </div>
+          </div>
+        </section>
+      </main>`,
+      { url: "https://chatgpt.com/c/nested-code" }
+    ).window.document;
+
+    const codeByBlock = new Map([
+      ["first", "make verify\n"],
+      ["repeat", "make verify\n"],
+      ["final", "uname -m\n"]
+    ]);
+
+    for (const [blockId, codeText] of codeByBlock) {
+      const host = document.querySelector(`[data-code-block='${blockId}']`);
+      const outerPre = document.createElement("pre");
+      const innerPre = document.createElement("pre");
+      const code = document.createElement("code");
+
+      code.textContent = codeText;
+      innerPre.append(code);
+      outerPre.append(innerPre);
+      host?.append(outerPre);
+    }
+
+    const [message] = extractVisibleChatGptMessages(document);
+    const markdown = message.markdown ?? "";
+
+    expect(message.codeBlocks.map((block) => block.code)).toEqual([
+      "make verify\n",
+      "make verify\n",
+      "uname -m\n"
+    ]);
+    expect(markdown.match(/```/g)).toHaveLength(6);
+    expect(markdown.match(/make verify/g)).toHaveLength(2);
+    expect(markdown.match(/uname -m/g)).toHaveLength(1);
+    expect(markdown.indexOf("uname -m")).toBeGreaterThan(
+      markdown.lastIndexOf("make verify")
+    );
+  });
+
+  test("captures generated download controls as attachments without blank list items", () => {
+    const document = new JSDOM(
+      `<main>
+        <section data-testid="conversation-turn-generated-files">
+          <div data-message-author-role="assistant" data-message-id="generated-files">
+            <div class="markdown">
+              <p>Generated files:</p>
+              <ul>
+                <li>
+                  <p role="presentation">
+                    <button
+                      aria-label="project-bundle.zip"
+                      class="behavior-btn entity-underline text-token-text-link"
+                      type="button"
+                    >
+                      <span>project-bundle.zip</span>
+                    </button>
+                  </p>
+                </li>
+                <li>
+                  <a download="verification-report.pdf" href="https://chatgpt.com/backend-api/files/report">
+                    <button aria-label="Download verification-report.pdf" type="button">
+                      <span>verification-report.pdf</span>
+                    </button>
+                  </a>
+                </li>
+              </ul>
+              <p><a href="https://example.com/docs">Regular documentation</a></p>
+            </div>
+          </div>
+        </section>
+      </main>`,
+      { url: "https://chatgpt.com/c/generated-files" }
+    ).window.document;
+
+    const [message] = extractVisibleChatGptMessages(document);
+
+    expect(message.attachments).toEqual([
+      {
+        kind: "file",
+        name: "project-bundle.zip"
+      },
+      {
+        kind: "file",
+        name: "verification-report.pdf",
+        url: "https://chatgpt.com/backend-api/files/report"
+      }
+    ]);
+    expect(message.markdown).toContain(
+      "[Regular documentation](https://example.com/docs)"
+    );
+    expect(message.markdown).not.toMatch(/^\s*-\s*$/m);
+  });
+
   test("keeps table HTML and visible table text", () => {
     const [message] = extractVisibleChatGptMessages(loadFixture("table.html"));
 
