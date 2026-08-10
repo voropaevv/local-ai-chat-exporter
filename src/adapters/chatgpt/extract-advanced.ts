@@ -70,7 +70,19 @@ export interface ChatGptAdvancedContent {
   readonly thinkingBlocks: readonly ExportedThinkingBlock[];
 }
 
-export function extractChatGptAdvancedContent(messageElement: Element): ChatGptAdvancedContent {
+export interface ChatGptAdvancedExtractionOptions {
+  /**
+   * A scan-scoped activity-panel index. Long ChatGPT conversations can
+   * contain hundreds of messages; querying the whole owner document once per
+   * message makes a targeted turn traversal quadratic in the size of the DOM.
+   */
+  readonly linkedActivityElements?: Iterable<Element>;
+}
+
+export function extractChatGptAdvancedContent(
+  messageElement: Element,
+  options: ChatGptAdvancedExtractionOptions = {}
+): ChatGptAdvancedContent {
   const turn = messageElement.closest(chatGptSelectors.conversationTurn);
   const contentKind = detectContentKind(messageElement, turn);
 
@@ -79,7 +91,7 @@ export function extractChatGptAdvancedContent(messageElement: Element): ChatGptA
     ...(contentKind !== undefined ? { contentKind } : {}),
     ...extractMessageMetadata(messageElement, turn),
     sources: extractSources(messageElement, contentKind),
-    thinkingBlocks: extractThinkingBlocks(messageElement, turn)
+    thinkingBlocks: extractThinkingBlocks(messageElement, turn, options.linkedActivityElements)
   };
 }
 
@@ -241,9 +253,10 @@ function extractSourceSnippet(anchor: Element): string | undefined {
 
 function extractThinkingBlocks(
   messageElement: Element,
-  turn: Element | null
+  turn: Element | null,
+  linkedActivityElements?: Iterable<Element>
 ): readonly ExportedThinkingBlock[] {
-  const candidates = collectLinkedReasoningElements(messageElement, turn);
+  const candidates = collectLinkedReasoningElements(messageElement, turn, linkedActivityElements);
   const seen = new Set<string>();
 
   return candidates
@@ -284,7 +297,8 @@ function extractThinkingBlocks(
 
 function collectLinkedReasoningElements(
   messageElement: Element,
-  turn: Element | null
+  turn: Element | null,
+  linkedActivityElements?: Iterable<Element>
 ): readonly Element[] {
   const localScope = turn ?? messageElement;
   const elements = new Set<Element>(
@@ -305,9 +319,11 @@ function collectLinkedReasoningElements(
     return [...elements];
   }
 
-  for (const element of Array.from(
-    messageElement.ownerDocument.querySelectorAll(CHATGPT_ACTIVITY_SELECTORS)
-  )) {
+  const activityElements =
+    linkedActivityElements ??
+    Array.from(messageElement.ownerDocument.querySelectorAll(CHATGPT_ACTIVITY_SELECTORS));
+
+  for (const element of activityElements) {
     if (
       isReasoningContentElement(element) &&
       (localScope.contains(element) ||

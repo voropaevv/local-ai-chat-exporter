@@ -1,6 +1,7 @@
 import { buildCompletenessReport } from "../../core/completeness";
 import type { CompletenessReport, ExportedMessage } from "../../core/schema";
 import { stableHash } from "../../utils/hash";
+import { CHATGPT_ACTIVITY_SELECTORS } from "./extract-advanced";
 import { extractVisibleChatGptMessages } from "./extract-visible";
 import {
   findChatGptScrollContainer,
@@ -30,6 +31,9 @@ const MAX_BOTTOM_HYDRATION_PASSES = 2;
 const MAX_MISSING_TURN_ATTEMPTS = 2;
 const DEFAULT_MAX_MISSING_TURN_RECOVERY_ATTEMPTS = 24;
 const DEFAULT_MISSING_TURN_RECOVERY_BUDGET_MS = 20_000;
+const DEFAULT_TURN_TRAVERSAL_BUDGET_MS = 180_000;
+const DEFAULT_TURN_TRAVERSAL_INACTIVITY_MS = 20_000;
+const MAX_TURN_INVENTORY_COMPLETION_PASSES = 3;
 const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]";
 
 export interface ChatGptScrollCollectorOptions {
@@ -46,6 +50,8 @@ export interface ChatGptScrollCollectorOptions {
   readonly scrollStepRatio?: number;
   readonly settleDelayMs?: number;
   readonly signal?: AbortSignal;
+  readonly turnTraversalBudgetMs?: number;
+  readonly turnTraversalInactivityMs?: number;
   readonly waitForDomSettle?: (signal?: AbortSignal) => Promise<void>;
 }
 
@@ -72,10 +78,7 @@ export async function collectChatGptConversation(
     1,
     options.maxNoNewMessageSteps ?? DEFAULT_MAX_NO_NEW_MESSAGE_STEPS
   );
-  const mainScanBudgetMs = Math.max(
-    0,
-    options.mainScanBudgetMs ?? DEFAULT_MAIN_SCAN_BUDGET_MS
-  );
+  const mainScanBudgetMs = Math.max(0, options.mainScanBudgetMs ?? DEFAULT_MAIN_SCAN_BUDGET_MS);
   const maxMissingTurnRecoveryAttempts = Math.max(
     0,
     options.maxMissingTurnRecoveryAttempts ?? DEFAULT_MAX_MISSING_TURN_RECOVERY_ATTEMPTS
@@ -92,6 +95,35 @@ export async function collectChatGptConversation(
       : createDomHydrationWait(container));
   const scrollBy = options.scrollBy ?? scrollDownBy;
   const originalScrollTop = getScrollTop(container);
+  const initialTurnTrackingState = createTurnTrackingState(container);
+
+  if (initialTurnTrackingState.expectedTurnContainerIds.length > 0) {
+    try {
+      return await collectStableTurnContainerConversation({
+        container,
+        extractMessages: options.extractMessages,
+        mainSignal: options.signal,
+        maxSteps,
+        scrollBy,
+        settleDelayMs: options.settleDelayMs,
+        turnTrackingState: initialTurnTrackingState,
+        turnTraversalBudgetMs: Math.max(
+          0,
+          options.turnTraversalBudgetMs ??
+            options.missingTurnRecoveryBudgetMs ??
+            DEFAULT_TURN_TRAVERSAL_BUDGET_MS
+        ),
+        turnTraversalInactivityMs: Math.max(
+          0,
+          options.turnTraversalInactivityMs ?? DEFAULT_TURN_TRAVERSAL_INACTIVITY_MS
+        ),
+        waitForDomSettle: options.waitForDomSettle
+      });
+    } finally {
+      setScrollTop(container, originalScrollTop);
+    }
+  }
+
   const messages: ExportedMessage[] = [];
   const dedupeState = createDedupeState();
   const turnTrackingState = createTurnTrackingState(container);
@@ -236,10 +268,7 @@ export async function collectChatGptConversation(
         )
       ) {
         consecutiveNoNewMessageSteps = 0;
-        scrollHeightProgressBaseline = Math.max(
-          scrollHeightProgressBaseline,
-          currentScrollHeight
-        );
+        scrollHeightProgressBaseline = Math.max(scrollHeightProgressBaseline, currentScrollHeight);
       } else {
         consecutiveNoNewMessageSteps += 1;
       }
@@ -332,11 +361,7 @@ export async function collectChatGptConversation(
 
     refreshTurnTrackingState(container, turnTrackingState);
     const missingTurnContainerIds = getMissingTurnContainerIds(turnTrackingState);
-    const orderedMessages = orderMessagesByTurnContainer(
-      messages,
-      dedupeState,
-      turnTrackingState
-    );
+    const orderedMessages = orderMessagesByTurnContainer(messages, dedupeState, turnTrackingState);
     const reachedBottom = isAtBottom(container);
 
     if (missingTurnContainerIds.length > 0) {
@@ -406,12 +431,436 @@ export async function collectChatGptConversation(
   }
 }
 
+interface StableTurnContainerCollectorOptions {
+  readonly container: Element;
+  readonly extractMessages: ChatGptScrollCollectorOptions["extractMessages"];
+  readonly mainSignal?: AbortSignal;
+  readonly maxSteps: number;
+  readonly scrollBy: (container: Element, pixels: number) => void;
+  readonly settleDelayMs?: number;
+  readonly turnTrackingState: TurnTrackingState;
+  readonly turnTraversalBudgetMs: number;
+  readonly turnTraversalInactivityMs: number;
+  readonly waitForDomSettle: ChatGptScrollCollectorOptions["waitForDomSettle"];
+}
+
+interface ActivityElementIndex {
+  readonly dispose: () => void;
+  readonly elements: ReadonlySet<Element>;
+}
+
+function createActivityElementIndex(rootDocument: Document): ActivityElementIndex {
+  const elements = new Set<Element>(
+    Array.from(rootDocument.querySelectorAll(CHATGPT_ACTIVITY_SELECTORS))
+  );
+  const Observer =
+    rootDocument.defaultView?.MutationObserver ??
+    (typeof globalThis.MutationObserver === "undefined" ? undefined : globalThis.MutationObserver);
+  const addFromElement = (element: Element) => {
+    if (element.matches(CHATGPT_ACTIVITY_SELECTORS)) {
+      elements.add(element);
+    }
+    for (const candidate of Array.from(element.querySelectorAll(CHATGPT_ACTIVITY_SELECTORS))) {
+      elements.add(candidate);
+    }
+  };
+  const removeFromElement = (element: Element) => {
+    if (element.matches(CHATGPT_ACTIVITY_SELECTORS)) {
+      elements.delete(element);
+    }
+    for (const candidate of Array.from(element.querySelectorAll(CHATGPT_ACTIVITY_SELECTORS))) {
+      elements.delete(candidate);
+    }
+  };
+  const observer =
+    Observer === undefined
+      ? undefined
+      : new Observer((mutations) => {
+          for (const mutation of mutations) {
+            for (const addedNode of Array.from(mutation.addedNodes)) {
+              const element = getMutationElement(addedNode);
+              if (element !== undefined) {
+                addFromElement(element);
+              }
+            }
+            for (const removedNode of Array.from(mutation.removedNodes)) {
+              const element = getMutationElement(removedNode);
+              if (element !== undefined) {
+                removeFromElement(element);
+              }
+            }
+          }
+        });
+
+  const observationRoot = rootDocument.documentElement;
+  if (observer !== undefined && observationRoot !== null) {
+    observer.observe(observationRoot, { childList: true, subtree: true });
+  }
+
+  return {
+    dispose: () => observer?.disconnect(),
+    elements
+  };
+}
+
+interface TurnMutationTracker {
+  readonly dirtyLogicalKeys: Set<string>;
+  readonly dispose: () => void;
+  readonly flush: () => void;
+}
+
+function createTurnMutationTracker(
+  container: Element,
+  turnTrackingState: TurnTrackingState
+): TurnMutationTracker {
+  const dirtyLogicalKeys = new Set<string>();
+  const Observer =
+    container.ownerDocument.defaultView?.MutationObserver ??
+    (typeof globalThis.MutationObserver === "undefined" ? undefined : globalThis.MutationObserver);
+
+  const processMutations = (mutations: readonly MutationRecord[]) => {
+    registerTurnContainersFromMutations(mutations, turnTrackingState);
+
+    for (const mutation of mutations) {
+      const hasNewContent = mutation.type !== "childList" || mutation.addedNodes.length > 0;
+
+      if (!hasNewContent) {
+        continue;
+      }
+
+      const turnContainer = getOutermostTurnContainer(getMutationElement(mutation.target));
+      const logicalKey =
+        turnContainer === undefined ? undefined : getTurnContainerLogicalKey(turnContainer);
+
+      if (logicalKey !== undefined && turnTrackingState.extractedTurnContainerIds.has(logicalKey)) {
+        dirtyLogicalKeys.add(logicalKey);
+      }
+    }
+  };
+  const observer = Observer === undefined ? undefined : new Observer(processMutations);
+
+  observer?.observe(container, {
+    attributes: true,
+    attributeFilter: [
+      "aria-hidden",
+      "data-message-author-role",
+      "data-message-id",
+      "data-message-id-testid",
+      "hidden"
+    ],
+    characterData: true,
+    childList: true,
+    subtree: true
+  });
+
+  return {
+    dirtyLogicalKeys,
+    dispose: () => observer?.disconnect(),
+    flush: () => {
+      if (observer !== undefined) {
+        processMutations(observer.takeRecords());
+      }
+    }
+  };
+}
+
+async function collectStableTurnContainerConversation(
+  options: StableTurnContainerCollectorOptions
+): Promise<ChatGptScrollCollectorResult> {
+  const waitForDomSettle =
+    options.waitForDomSettle ??
+    (options.settleDelayMs !== undefined
+      ? createDelayWait(options.settleDelayMs)
+      : createDomHydrationWait(options.container));
+  const usesDefaultDomWait =
+    options.waitForDomSettle === undefined && options.settleDelayMs === undefined;
+  const waitForTurnHydration = usesDefaultDomWait
+    ? createTurnContainerHydrationWait(options.container, options.turnTrackingState)
+    : undefined;
+  const waitForBottomHydration = usesDefaultDomWait
+    ? createBottomHydrationWait(options.container)
+    : undefined;
+  const budget = createProgressWatchdog({
+    inactivityMs: options.turnTraversalInactivityMs,
+    maximumMs: options.turnTraversalBudgetMs,
+    parentSignal: options.mainSignal
+  });
+  const messages: ExportedMessage[] = [];
+  const dedupeState = createDedupeState();
+  const warnings: string[] = [];
+  const activityElementIndex = createActivityElementIndex(options.container.ownerDocument);
+  const linkedActivityElements =
+    options.extractMessages === undefined ? activityElementIndex.elements : undefined;
+  const mutationTracker = createTurnMutationTracker(options.container, options.turnTrackingState);
+  const attemptsByLogicalKey = new Map<string, number>();
+  const initialExpectedTurnCount = options.turnTrackingState.expectedTurnContainerIds.length;
+  let aborted = options.mainSignal?.aborted ?? false;
+  let duplicateCount = 0;
+  let inventoryAmbiguous = false;
+  let reachedBottom = false;
+  let reachedTop = false;
+  let scrollSteps = 0;
+  let unresolvedBottomHydration = false;
+
+  try {
+    scrollToTop(options.container);
+    await waitForDomSettle(budget.signal);
+    reachedTop = isAtTop(options.container);
+    const topInventory = reconcileTurnTrackingState(options.container, options.turnTrackingState);
+    inventoryAmbiguous ||= topInventory.ambiguous;
+
+    if (options.turnTrackingState.expectedTurnContainerIds.length > initialExpectedTurnCount) {
+      budget.recordProgress();
+    }
+
+    for (
+      let completionPass = 0;
+      completionPass < MAX_TURN_INVENTORY_COMPLETION_PASSES &&
+      !budget.isExhausted() &&
+      !options.mainSignal?.aborted;
+      completionPass += 1
+    ) {
+      const extractedBeforePass = options.turnTrackingState.extractedTurnContainerIds.size;
+      const expectedBeforePass = options.turnTrackingState.expectedTurnContainerIds.length;
+
+      for (const logicalKey of options.turnTrackingState.expectedTurnContainerIds) {
+        mutationTracker.flush();
+        const dirty = mutationTracker.dirtyLogicalKeys.has(logicalKey);
+
+        if (
+          (options.turnTrackingState.extractedTurnContainerIds.has(logicalKey) && !dirty) ||
+          budget.isExhausted() ||
+          options.mainSignal?.aborted
+        ) {
+          continue;
+        }
+
+        if (scrollSteps >= options.maxSteps) {
+          break;
+        }
+
+        let turnContainer = findTrackableTurnContainer(
+          options.turnTrackingState,
+          logicalKey,
+          options.container
+        );
+
+        if (turnContainer === undefined) {
+          continue;
+        }
+
+        // Extract an already hydrated wrapper in place. This keeps the common
+        // path O(number of turns) without repainting the whole conversation.
+        if (hasHydratedRoleContent(turnContainer) && hasStableRoleMessageIdentity(turnContainer)) {
+          mutationTracker.dirtyLogicalKeys.delete(logicalKey);
+          duplicateCount += collectStepMessages(
+            turnContainer,
+            options.extractMessages,
+            messages,
+            dedupeState,
+            options.turnTrackingState,
+            linkedActivityElements,
+            logicalKey
+          );
+
+          if (options.turnTrackingState.extractedTurnContainerIds.has(logicalKey)) {
+            budget.recordProgress();
+            continue;
+          }
+        }
+
+        const attempts = attemptsByLogicalKey.get(logicalKey) ?? 0;
+        if (attempts >= MAX_MISSING_TURN_ATTEMPTS) {
+          continue;
+        }
+        attemptsByLogicalKey.set(logicalKey, attempts + 1);
+        scrollTurnContainerIntoView(options.container, turnContainer, options.scrollBy);
+        scrollSteps += 1;
+        if (waitForTurnHydration !== undefined) {
+          await waitForTurnHydration(logicalKey, budget.signal);
+        } else {
+          await waitForDomSettle(budget.signal);
+        }
+        refreshTurnTrackingState(options.container, options.turnTrackingState);
+        turnContainer = findTrackableTurnContainer(
+          options.turnTrackingState,
+          logicalKey,
+          options.container
+        );
+
+        if (turnContainer === undefined || !hasHydratedRoleContent(turnContainer)) {
+          if (scrollSteps % 8 === 0) {
+            await yieldToEventLoop(budget.signal);
+          }
+          continue;
+        }
+
+        mutationTracker.dirtyLogicalKeys.delete(logicalKey);
+        duplicateCount += collectStepMessages(
+          turnContainer,
+          options.extractMessages,
+          messages,
+          dedupeState,
+          options.turnTrackingState,
+          linkedActivityElements,
+          logicalKey
+        );
+
+        if (options.turnTrackingState.extractedTurnContainerIds.has(logicalKey)) {
+          budget.recordProgress();
+        }
+
+        if (scrollSteps % 8 === 0) {
+          await yieldToEventLoop(budget.signal);
+        }
+      }
+
+      if (budget.isExhausted() || options.mainSignal?.aborted) {
+        break;
+      }
+
+      if (scrollSteps >= options.maxSteps) {
+        break;
+      }
+
+      setScrollTop(options.container, getScrollHeight(options.container));
+      scrollSteps += 1;
+      await waitForDomSettle(budget.signal);
+
+      if (waitForBottomHydration !== undefined && !isAtTop(options.container)) {
+        const bottomHydration = await waitForBottomHydration(budget.signal);
+        unresolvedBottomHydration = bottomHydration.unresolved;
+      }
+
+      reachedBottom = isAtBottom(options.container);
+      mutationTracker.flush();
+      const bottomInventory = reconcileTurnTrackingState(
+        options.container,
+        options.turnTrackingState
+      );
+      inventoryAmbiguous ||= bottomInventory.ambiguous;
+
+      const discoveredTurns =
+        options.turnTrackingState.expectedTurnContainerIds.length - expectedBeforePass;
+      const extractedTurns =
+        options.turnTrackingState.extractedTurnContainerIds.size - extractedBeforePass;
+
+      if (discoveredTurns > 0) {
+        budget.recordProgress();
+      }
+
+      if (
+        getMissingTurnContainerIds(options.turnTrackingState).length === 0 &&
+        mutationTracker.dirtyLogicalKeys.size === 0
+      ) {
+        break;
+      }
+
+      if (discoveredTurns === 0 && extractedTurns === 0) {
+        break;
+      }
+    }
+
+    aborted = options.mainSignal?.aborted ?? false;
+    mutationTracker.flush();
+    const finalInventory = reconcileTurnTrackingState(options.container, options.turnTrackingState);
+    inventoryAmbiguous ||= finalInventory.ambiguous;
+    const missingTurnContainerIds = getMissingTurnContainerIds(options.turnTrackingState);
+    const orderedMessages = orderMessagesByTurnContainer(
+      messages,
+      dedupeState,
+      options.turnTrackingState
+    );
+
+    reachedBottom = reachedBottom || isAtBottom(options.container);
+
+    if (aborted) {
+      warnings.push("Scan was cancelled.");
+    }
+
+    if (missingTurnContainerIds.length > 0) {
+      warnings.push(
+        `ChatGPT did not hydrate ${missingTurnContainerIds.length} conversation ${
+          missingTurnContainerIds.length === 1 ? "turn" : "turns"
+        } before the scan timeout.`
+      );
+    }
+
+    if (budget.reason() === "hard_deadline") {
+      warnings.push("ChatGPT turn traversal stopped at its bounded wall-clock budget.");
+    }
+
+    if (budget.reason() === "inactivity") {
+      warnings.push(
+        "ChatGPT turn traversal stopped after no new turns hydrated within its progress window."
+      );
+    }
+
+    if (unresolvedBottomHydration) {
+      warnings.push("ChatGPT's final turn window did not finish loading before the scan timeout.");
+    }
+
+    if (inventoryAmbiguous) {
+      warnings.push("ChatGPT turn-container inventory was ambiguous during the scan.");
+    }
+
+    if (mutationTracker.dirtyLogicalKeys.size > 0) {
+      warnings.push("ChatGPT changed extracted turns before the final quiet pass completed.");
+    }
+
+    if (scrollSteps >= options.maxSteps && missingTurnContainerIds.length > 0) {
+      warnings.push("Scan reached the maximum scroll step limit.");
+    }
+
+    const failClosed =
+      budget.reason() !== undefined ||
+      missingTurnContainerIds.length > 0 ||
+      inventoryAmbiguous ||
+      mutationTracker.dirtyLogicalKeys.size > 0 ||
+      unresolvedBottomHydration ||
+      !reachedTop ||
+      !reachedBottom;
+    const completenessBase = buildCompletenessReport({
+      duplicateCount,
+      messages: orderedMessages,
+      platformWarnings: [],
+      reachedBottom,
+      reachedTop,
+      scanWarnings: warnings,
+      scrollSteps,
+      virtualized: failClosed
+    });
+    const completeness =
+      failClosed && completenessBase.status !== "unknown"
+        ? { ...completenessBase, status: "partial" as const }
+        : completenessBase;
+
+    return {
+      aborted,
+      completeness,
+      duplicateCount,
+      messages: orderedMessages.map((message, index) => ({ ...message, index })),
+      reachedBottom,
+      reachedTop,
+      scrollSteps,
+      stalls: 0,
+      warnings
+    };
+  } finally {
+    mutationTracker.dispose();
+    activityElementIndex.dispose();
+    budget.dispose();
+  }
+}
+
 function collectStepMessages(
   root: ParentNode,
   extractMessages: ChatGptScrollCollectorOptions["extractMessages"],
   messages: ExportedMessage[],
   dedupeState: DedupeState,
-  turnTrackingState?: TurnTrackingState
+  turnTrackingState?: TurnTrackingState,
+  linkedActivityElements?: Iterable<Element>,
+  targetLogicalKey?: string
 ): number {
   if (turnTrackingState !== undefined) {
     refreshTurnTrackingState(root, turnTrackingState);
@@ -428,13 +877,19 @@ function collectStepMessages(
       },
       onStableMessageRevision: (messageId, revision) => {
         stepRevisions.set(messageId, revision);
-      }
+      },
+      linkedActivityElements
     });
   let duplicateCount = prefilteredDuplicateCount;
 
-  for (const message of visibleMessages) {
+  for (const [messageOrdinal, message] of visibleMessages.entries()) {
     const idKey = message.id.trim();
-    const logicalKey = turnTrackingState?.logicalKeyByMessageId.get(idKey) ?? idKey;
+    const turnLogicalKey =
+      targetLogicalKey ?? turnTrackingState?.logicalKeyByMessageId.get(idKey) ?? idKey;
+    const logicalKey =
+      targetLogicalKey === undefined
+        ? turnLogicalKey
+        : `${targetLogicalKey}\u001f${messageOrdinal}`;
     const fingerprint = getMessageFingerprint(message);
 
     if (logicalKey.length > 0) {
@@ -448,7 +903,7 @@ function collectStepMessages(
           dedupeState.messageFingerprintsByKey.set(logicalKey, fingerprint);
         }
 
-        turnTrackingState?.extractedTurnContainerIds.add(logicalKey);
+        turnTrackingState?.extractedTurnContainerIds.add(turnLogicalKey);
 
         const revision = stepRevisions.get(idKey);
         if (revision !== undefined) {
@@ -461,7 +916,9 @@ function collectStepMessages(
       dedupeState.messageFingerprintsByKey.set(logicalKey, fingerprint);
       dedupeState.messageIndexesByKey.set(logicalKey, messageIndex);
       dedupeState.logicalKeysByMessageIndex.push(logicalKey);
-      turnTrackingState?.extractedTurnContainerIds.add(logicalKey);
+      dedupeState.messageOrdinalsByIndex.push(messageOrdinal);
+      dedupeState.turnLogicalKeysByMessageIndex.push(turnLogicalKey);
+      turnTrackingState?.extractedTurnContainerIds.add(turnLogicalKey);
       const revision = stepRevisions.get(idKey);
       if (revision !== undefined) {
         dedupeState.revisions.set(idKey, revision);
@@ -487,7 +944,9 @@ interface DedupeState {
   readonly logicalKeysByMessageIndex: string[];
   readonly messageFingerprintsByKey: Map<string, string>;
   readonly messageIndexesByKey: Map<string, number>;
+  readonly messageOrdinalsByIndex: number[];
   readonly revisions: Map<string, string>;
+  readonly turnLogicalKeysByMessageIndex: string[];
 }
 
 function createDedupeState(): DedupeState {
@@ -496,7 +955,9 @@ function createDedupeState(): DedupeState {
     logicalKeysByMessageIndex: [],
     messageFingerprintsByKey: new Map<string, string>(),
     messageIndexesByKey: new Map<string, number>(),
-    revisions: new Map<string, string>()
+    messageOrdinalsByIndex: [],
+    revisions: new Map<string, string>(),
+    turnLogicalKeysByMessageIndex: []
   };
 }
 
@@ -522,17 +983,23 @@ function createTurnTrackingState(root: ParentNode): TurnTrackingState {
 }
 
 function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): void {
-  state.turnContainersByLogicalKey.clear();
-
   for (const turnContainer of getTrackableTurnContainers(root)) {
     registerTrackableTurnContainer(turnContainer, state);
   }
 }
 
 function getTrackableTurnContainers(root: ParentNode): readonly Element[] {
-  return Array.from(root.querySelectorAll(TURN_CONTAINER_SELECTOR)).filter(
-    isTrackableTurnContainer
-  );
+  const rootElement = getParentNodeElement(root);
+  const candidates = [
+    ...(rootElement?.matches(TURN_CONTAINER_SELECTOR) === true ? [rootElement] : []),
+    ...Array.from(root.querySelectorAll(TURN_CONTAINER_SELECTOR))
+  ];
+
+  return candidates.filter(isTrackableTurnContainer);
+}
+
+function getParentNodeElement(root: ParentNode): Element | undefined {
+  return root.nodeType === 1 ? (root as Element) : undefined;
 }
 
 function isTrackableTurnContainer(element: Element): boolean {
@@ -561,10 +1028,7 @@ function isTrackableTurnContainer(element: Element): boolean {
   );
 }
 
-function registerTrackableTurnContainer(
-  turnContainer: Element,
-  state: TurnTrackingState
-): void {
+function registerTrackableTurnContainer(turnContainer: Element, state: TurnTrackingState): void {
   if (!isTrackableTurnContainer(turnContainer)) {
     return;
   }
@@ -599,6 +1063,59 @@ function registerTrackableTurnContainer(
       state.logicalKeyByMessageId.set(turnId, logicalKey);
     }
   }
+}
+
+interface TurnInventoryReconciliation {
+  readonly ambiguous: boolean;
+  readonly duplicateLogicalKeys: readonly string[];
+  readonly unavailableLogicalKeys: readonly string[];
+}
+
+function reconcileTurnTrackingState(
+  root: ParentNode,
+  state: TurnTrackingState
+): TurnInventoryReconciliation {
+  const orderedContainers = getTrackableTurnContainers(root);
+  const orderedLogicalKeys: string[] = [];
+  const seen = new Set<string>();
+  const duplicateLogicalKeys = new Set<string>();
+
+  for (const turnContainer of orderedContainers) {
+    const logicalKey = getTurnContainerLogicalKey(turnContainer);
+
+    if (logicalKey === undefined) {
+      continue;
+    }
+
+    if (seen.has(logicalKey)) {
+      duplicateLogicalKeys.add(logicalKey);
+      continue;
+    }
+
+    seen.add(logicalKey);
+    orderedLogicalKeys.push(logicalKey);
+    registerTrackableTurnContainer(turnContainer, state);
+  }
+
+  const unavailableLogicalKeys = state.expectedTurnContainerIds.filter(
+    (logicalKey) => !seen.has(logicalKey)
+  );
+
+  for (const logicalKey of unavailableLogicalKeys) {
+    orderedLogicalKeys.push(logicalKey);
+  }
+
+  state.expectedTurnContainerIds.splice(
+    0,
+    state.expectedTurnContainerIds.length,
+    ...orderedLogicalKeys
+  );
+
+  return {
+    ambiguous: duplicateLogicalKeys.size > 0 || unavailableLogicalKeys.length > 0,
+    duplicateLogicalKeys: [...duplicateLogicalKeys],
+    unavailableLogicalKeys
+  };
 }
 
 function registerTurnContainersFromMutations(
@@ -697,10 +1214,105 @@ interface WallClockBudget {
   readonly signal: AbortSignal;
 }
 
-function createWallClockBudget(
-  maximumMs: number,
-  parentSignal?: AbortSignal
-): WallClockBudget {
+type ProgressWatchdogReason = "hard_deadline" | "inactivity" | "parent";
+
+interface ProgressWatchdog {
+  readonly dispose: () => void;
+  readonly isExhausted: () => boolean;
+  readonly reason: () => ProgressWatchdogReason | undefined;
+  readonly recordProgress: () => void;
+  readonly signal: AbortSignal;
+}
+
+function createProgressWatchdog(options: {
+  readonly inactivityMs: number;
+  readonly maximumMs: number;
+  readonly parentSignal?: AbortSignal;
+}): ProgressWatchdog {
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const hardDeadline = startedAt + options.maximumMs;
+  let disposed = false;
+  let inactivityTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let reason: ProgressWatchdogReason | undefined;
+
+  const abort = (nextReason: ProgressWatchdogReason) => {
+    if (reason === undefined) {
+      reason = nextReason;
+    }
+    controller.abort();
+  };
+  const abortForParent = () => abort("parent");
+  const abortForHardDeadline = () => abort("hard_deadline");
+  const abortForInactivity = () => abort("inactivity");
+  const hardDeadlineTimer =
+    options.maximumMs > 0
+      ? globalThis.setTimeout(abortForHardDeadline, options.maximumMs)
+      : undefined;
+
+  const armInactivityTimer = () => {
+    if (inactivityTimer !== undefined) {
+      globalThis.clearTimeout(inactivityTimer);
+    }
+
+    inactivityTimer =
+      options.inactivityMs > 0
+        ? globalThis.setTimeout(abortForInactivity, options.inactivityMs)
+        : undefined;
+  };
+
+  const checkDeadlines = () => {
+    if (reason !== undefined || disposed) {
+      return reason !== undefined;
+    }
+
+    const now = Date.now();
+    if (options.maximumMs <= 0 || now >= hardDeadline) {
+      abortForHardDeadline();
+    }
+
+    return reason !== undefined;
+  };
+
+  options.parentSignal?.addEventListener("abort", abortForParent, { once: true });
+
+  if (options.parentSignal?.aborted) {
+    abortForParent();
+  } else if (options.maximumMs <= 0) {
+    abortForHardDeadline();
+  } else if (options.inactivityMs <= 0) {
+    abortForInactivity();
+  } else {
+    armInactivityTimer();
+  }
+
+  return {
+    dispose: () => {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      if (hardDeadlineTimer !== undefined) {
+        globalThis.clearTimeout(hardDeadlineTimer);
+      }
+      if (inactivityTimer !== undefined) {
+        globalThis.clearTimeout(inactivityTimer);
+      }
+      options.parentSignal?.removeEventListener("abort", abortForParent);
+    },
+    isExhausted: checkDeadlines,
+    reason: () => reason,
+    recordProgress: () => {
+      if (reason === undefined && !disposed && options.maximumMs > 0 && Date.now() < hardDeadline) {
+        armInactivityTimer();
+      }
+    },
+    signal: controller.signal
+  };
+}
+
+function createWallClockBudget(maximumMs: number, parentSignal?: AbortSignal): WallClockBudget {
   const controller = new AbortController();
   const deadline = Date.now() + maximumMs;
   let disposed = false;
@@ -720,8 +1332,7 @@ function createWallClockBudget(
 
     return expired;
   };
-  const timeout =
-    maximumMs > 0 ? globalThis.setTimeout(abortForDeadline, maximumMs) : undefined;
+  const timeout = maximumMs > 0 ? globalThis.setTimeout(abortForDeadline, maximumMs) : undefined;
 
   parentSignal?.addEventListener("abort", abortForParent, { once: true });
 
@@ -789,9 +1400,7 @@ function createMissingTurnRecoveryBudget(
     return wallBudgetExhausted;
   };
   const timeout =
-    options.maximumMs > 0
-      ? globalThis.setTimeout(abortForDeadline, options.maximumMs)
-      : undefined;
+    options.maximumMs > 0 ? globalThis.setTimeout(abortForDeadline, options.maximumMs) : undefined;
 
   options.parentSignal?.addEventListener("abort", abortForParent, { once: true });
 
@@ -847,10 +1456,7 @@ interface MissingTurnRecoveryOptions {
   readonly messages: ExportedMessage[];
   readonly turnTrackingState: TurnTrackingState;
   readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
-  readonly waitForTurnHydration?: (
-    logicalKey: string,
-    signal?: AbortSignal
-  ) => Promise<void>;
+  readonly waitForTurnHydration?: (logicalKey: string, signal?: AbortSignal) => Promise<void>;
 }
 
 interface MissingTurnRecoveryResult {
@@ -906,18 +1512,35 @@ async function recoverMissingTurnContainers(
 
 function findTrackableTurnContainer(
   state: TurnTrackingState,
-  logicalKey: string
+  logicalKey: string,
+  root?: ParentNode
 ): Element | undefined {
-  return state.turnContainersByLogicalKey.get(logicalKey);
+  const tracked = state.turnContainersByLogicalKey.get(logicalKey);
+
+  if (tracked !== undefined && (root === undefined || root.contains(tracked))) {
+    return tracked;
+  }
+
+  if (root === undefined) {
+    return undefined;
+  }
+
+  refreshTurnTrackingState(root, state);
+  const refreshed = state.turnContainersByLogicalKey.get(logicalKey);
+  return refreshed !== undefined && root.contains(refreshed) ? refreshed : undefined;
 }
 
-function scrollTurnContainerIntoView(container: Element, turnContainer: Element): void {
+function scrollTurnContainerIntoView(
+  container: Element,
+  turnContainer: Element,
+  scrollBy: (container: Element, pixels: number) => void = scrollDownBy
+): void {
   const containerTop = container.getBoundingClientRect().top;
   const turnTop = turnContainer.getBoundingClientRect().top;
   const topPadding = Math.min(64, Math.max(0, getClientHeight(container) * 0.1));
   const targetScrollTop = getScrollTop(container) + turnTop - containerTop - topPadding;
 
-  setScrollTop(container, Math.max(0, targetScrollTop));
+  scrollBy(container, Math.max(0, targetScrollTop) - getScrollTop(container));
 }
 
 function orderMessagesByTurnContainer(
@@ -935,8 +1558,12 @@ function orderMessagesByTurnContainer(
 
   return messages
     .map((message, originalIndex) => ({
-      logicalKey: dedupeState.logicalKeysByMessageIndex[originalIndex] ?? message.id,
+      logicalKey:
+        dedupeState.turnLogicalKeysByMessageIndex[originalIndex] ??
+        dedupeState.logicalKeysByMessageIndex[originalIndex] ??
+        message.id,
       message,
+      messageOrdinal: dedupeState.messageOrdinalsByIndex[originalIndex] ?? 0,
       originalIndex
     }))
     .sort((left, right) => {
@@ -955,7 +1582,7 @@ function orderMessagesByTurnContainer(
         return -1;
       }
 
-      return leftOrder - rightOrder;
+      return leftOrder - rightOrder || left.messageOrdinal - right.messageOrdinal;
     })
     .map(({ message }) => message);
 }
@@ -1014,6 +1641,32 @@ function createDelayWait(delayMs: number): (signal?: AbortSignal) => Promise<voi
       }
     });
   };
+}
+
+function yieldToEventLoop(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    let finished = false;
+    const finish = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      channel.port1.close();
+      channel.port2.close();
+      signal?.removeEventListener("abort", finish);
+      resolve();
+    };
+
+    channel.port1.addEventListener("message", finish, { once: true });
+    channel.port1.start();
+    signal?.addEventListener("abort", finish, { once: true });
+    channel.port2.postMessage(undefined);
+  });
 }
 
 function createDomHydrationWait(
@@ -1264,11 +1917,7 @@ function createTurnContainerHydrationWait(
     return new Promise((resolve) => {
       let finished = false;
       let observer: MutationObserver | undefined;
-      let signature = getTurnContainerHydrationSignature(
-        container,
-        turnTrackingState,
-        logicalKey
-      );
+      let signature = getTurnContainerHydrationSignature(container, turnTrackingState, logicalKey);
       let lastChangeAt = Date.now();
 
       const finish = () => {
@@ -1355,9 +2004,7 @@ function getTurnContainerHydrationSignature(
     return "missing";
   }
 
-  const roleElements = Array.from(
-    turnContainer.querySelectorAll(chatGptSelectors.messageByRole)
-  );
+  const roleElements = Array.from(turnContainer.querySelectorAll(chatGptSelectors.messageByRole));
   const text = turnContainer.textContent ?? "";
 
   return [
@@ -1545,6 +2192,16 @@ function hasHydratedRoleContent(turn: Element): boolean {
     (roleElement) =>
       (roleElement.textContent ?? "").trim().length > 0 ||
       roleElement.querySelector("img, pre, table, [role='group']") !== null
+  );
+}
+
+function hasStableRoleMessageIdentity(turn: Element): boolean {
+  return Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole)).some((roleElement) =>
+    [
+      roleElement.getAttribute("data-message-id"),
+      roleElement.getAttribute("data-message-id-testid"),
+      roleElement.id
+    ].some((value) => value !== null && value.trim().length > 0)
   );
 }
 

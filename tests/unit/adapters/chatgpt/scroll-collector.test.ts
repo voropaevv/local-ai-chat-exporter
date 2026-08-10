@@ -362,7 +362,7 @@ describe("collectChatGptConversation", () => {
       id: "hydrated-message-id",
       text: "Complete answer"
     });
-    expect(result.duplicateCount).toBeGreaterThan(0);
+    expect(result.duplicateCount).toBe(0);
   });
 
   test("hydrates missing virtual turn containers and restores conversation order", async () => {
@@ -463,6 +463,220 @@ describe("collectChatGptConversation", () => {
     expect(result.completeness.lastMessagePreview).toBe("Fourth");
   });
 
+  test("directly hydrates and extracts all 332 stable virtual turn containers", async () => {
+    const turnCount = 332;
+    const turnHeight = 72;
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    container.innerHTML = Array.from({ length: turnCount }, (_, index) => {
+      const turnNumber = index + 1;
+      const hydrated = index < 9;
+      return `<div data-turn-id-container="logical-turn-${turnNumber}"
+        style="--last-known-height: ${turnHeight}px">
+        ${
+          hydrated
+            ? `<article data-testid="conversation-turn-${turnNumber}">
+                <div data-message-author-role="${index % 2 === 0 ? "user" : "assistant"}"
+                  data-message-id="m${turnNumber}">
+                  <div class="markdown"><p>Message ${turnNumber}</p></div>
+                </div>
+              </article>`
+            : ""
+        }
+      </div>`;
+    }).join("");
+
+    const wrappers = Array.from(container.querySelectorAll("[data-turn-id-container]"));
+    const hydrateVisibleWindow = (scrollTop: number) => {
+      const first = Math.max(0, Math.floor(scrollTop / turnHeight));
+      const last = Math.min(turnCount - 1, first + 6);
+
+      for (let index = first; index <= last; index += 1) {
+        const wrapper = wrappers[index];
+        if (wrapper.childElementCount > 0) {
+          continue;
+        }
+        const turnNumber = index + 1;
+        wrapper.innerHTML = `<article data-testid="conversation-turn-${turnNumber}">
+          <div data-message-author-role="${index % 2 === 0 ? "user" : "assistant"}"
+            data-message-id="m${turnNumber}">
+            <div class="markdown"><p>Message ${turnNumber}</p></div>
+          </div>
+        </article>`;
+      }
+    };
+
+    setScrollMetrics(container, {
+      clientHeight: turnHeight * 6,
+      onScrollTopChange: hydrateVisibleWindow,
+      scrollHeight: turnHeight * turnCount,
+      scrollTop: turnHeight * 160
+    });
+    Object.defineProperty(container, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: turnHeight * 6,
+        height: turnHeight * 6,
+        left: 0,
+        right: 500,
+        top: 0,
+        width: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      })
+    });
+    wrappers.forEach((wrapper, index) => {
+      Object.defineProperty(wrapper, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({
+          bottom: (index + 1) * turnHeight - container.scrollTop,
+          height: turnHeight,
+          left: 0,
+          right: 500,
+          top: index * turnHeight - container.scrollTop,
+          width: 500,
+          x: 0,
+          y: index * turnHeight - container.scrollTop,
+          toJSON: () => ({})
+        })
+      });
+    });
+
+    const containerQuerySpy = vi.spyOn(container, "querySelectorAll");
+    const documentQuerySpy = vi.spyOn(document, "querySelectorAll");
+
+    try {
+      const result = await collectChatGptConversation({
+        document,
+        scrollContainer: container,
+        waitForDomSettle: () => Promise.resolve()
+      });
+      const fullMessageScans = containerQuerySpy.mock.calls.filter(([selector]) =>
+        String(selector).includes("data-message-author-role")
+      );
+      const activityIndexScans = documentQuerySpy.mock.calls.filter(([selector]) =>
+        String(selector).includes("activity")
+      );
+
+      expect(result.messages).toHaveLength(turnCount);
+      expect(result.messages.map((message) => message.id)).toEqual(
+        Array.from({ length: turnCount }, (_, index) => `m${index + 1}`)
+      );
+      expect(result.completeness.status).toBe("complete");
+      expect(fullMessageScans).toHaveLength(0);
+      expect(activityIndexScans).toHaveLength(1);
+      expect(result.scrollSteps).toBeLessThan(turnCount);
+      expect(container.scrollTop).toBe(turnHeight * 160);
+    } finally {
+      containerQuerySpy.mockRestore();
+      documentQuerySpy.mockRestore();
+    }
+  });
+
+  test("indexes activity panels that mount while a target turn hydrates", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>First</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px"></div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 200, scrollTop: 0 });
+    let hydrated = false;
+    const result = await collectChatGptConversation({
+      document,
+      scrollBy: (element, pixels) => {
+        element.scrollTop += pixels;
+        if (hydrated) {
+          return;
+        }
+        hydrated = true;
+        const target = container.querySelector("[data-turn-id-container='logical-turn-2']");
+        if (target !== null) {
+          target.innerHTML = `<article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">
+              <div class="markdown"><p>Second</p></div>
+            </div>
+          </article>`;
+        }
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          `<aside data-jelluvi-advanced-kind="activity" data-message-id="m2">
+            <h3>Activity</h3><p>Loaded linked result.</p>
+          </aside>`
+        );
+      },
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages[1]?.thinkingBlocks).toEqual([
+      { title: "Activity", text: "Loaded linked result." }
+    ]);
+  });
+
+  test("cancels a 332-turn direct traversal and clears its watchdog timers", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+      const controller = new AbortController();
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      container.innerHTML = Array.from(
+        { length: 332 },
+        (_, index) =>
+          `<div data-turn-id-container="logical-turn-${index + 1}"
+          style="--last-known-height: 100px">${
+            index === 0
+              ? `<article data-testid="conversation-turn-1">
+                  <div data-message-author-role="user" data-message-id="m1">
+                    <div class="markdown"><p>First</p></div>
+                  </div>
+                </article>`
+              : ""
+          }</div>`
+      ).join("");
+      setScrollMetrics(container, { clientHeight: 100, scrollHeight: 33_200, scrollTop: 0 });
+
+      const result = await collectChatGptConversation({
+        document,
+        scrollBy: () => controller.abort(),
+        scrollContainer: container,
+        signal: controller.signal,
+        waitForDomSettle: () => Promise.resolve()
+      });
+
+      expect(result.aborted).toBe(true);
+      expect(result.completeness.status).toBe("partial");
+      expect(result.warnings).toContain("Scan was cancelled.");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("does not report complete when a tracked turn container stays unhydrated", async () => {
     const document = createDocument(`
       <main id="chat-scroll">
@@ -491,7 +705,7 @@ describe("collectChatGptConversation", () => {
     });
 
     expect(result.messages.map((message) => message.id)).toEqual(["m1"]);
-    expect(result.completeness.status).toBe("probably_complete");
+    expect(result.completeness.status).toBe("partial");
     expect(result.completeness.warnings).toContain(
       "ChatGPT did not hydrate 1 conversation turn before the scan timeout."
     );
@@ -500,7 +714,7 @@ describe("collectChatGptConversation", () => {
     );
   });
 
-  test("shares the missing-turn attempt budget across completion passes", async () => {
+  test("keeps newly discovered missing turns fail-closed across completion passes", async () => {
     const document = createDocument(`
       <main id="chat-scroll">
         <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
@@ -530,9 +744,7 @@ describe("collectChatGptConversation", () => {
         waitCalls += 1;
 
         if (waitCalls === 2) {
-          const missingTurn = container.querySelector(
-            "[data-turn-id-container='logical-turn-2']"
-          );
+          const missingTurn = container.querySelector("[data-turn-id-container='logical-turn-2']");
           if (missingTurn !== null) {
             missingTurn.innerHTML = `
               <article data-testid="conversation-turn-2">
@@ -556,12 +768,9 @@ describe("collectChatGptConversation", () => {
       }
     });
 
-    expect(waitCalls).toBe(3);
+    expect(waitCalls).toBe(5);
     expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
-    expect(result.scrollSteps).toBe(2);
-    expect(result.warnings).toContain(
-      "ChatGPT missing-turn recovery stopped at its bounded scan budget."
-    );
+    expect(result.scrollSteps).toBe(4);
     expect(result.warnings).toContain(
       "ChatGPT did not hydrate 1 conversation turn before the scan timeout."
     );
@@ -610,8 +819,7 @@ describe("collectChatGptConversation", () => {
       });
 
       await vi.advanceTimersByTimeAsync(1_100);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(100);
+      expect(settled).toBe(true);
 
       const result = await resultPromise;
       const fullTurnInventoryScans = querySelectorAllSpy.mock.calls.filter(
@@ -621,7 +829,7 @@ describe("collectChatGptConversation", () => {
       expect(result.aborted).toBe(false);
       expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
       expect(result.warnings).toContain(
-        "ChatGPT missing-turn recovery stopped at its bounded scan budget."
+        "ChatGPT turn traversal stopped at its bounded wall-clock budget."
       );
       expect(fullTurnInventoryScans.length).toBeLessThan(10);
       expect(vi.getTimerCount()).toBe(0);
@@ -1135,9 +1343,7 @@ describe("collectChatGptConversation", () => {
           element.scrollTop += pixels;
           scrollCalls += 1;
           scrollMetrics.scrollHeight = scrollCalls % 2 === 0 ? 2_000 : 2_001;
-          const answer = container.querySelector(
-            "[data-message-id='2'] .markdown p"
-          );
+          const answer = container.querySelector("[data-message-id='2'] .markdown p");
           if (answer !== null) {
             answer.textContent = `Rich answer revision ${scrollCalls}`;
           }

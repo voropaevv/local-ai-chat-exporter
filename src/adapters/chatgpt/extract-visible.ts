@@ -18,6 +18,7 @@ const CHATGPT_PROVIDER = getProviderDefinition("chatgpt");
 
 export interface ExtractVisibleChatGptMessagesOptions {
   readonly knownStableMessageRevisions?: ReadonlyMap<string, string>;
+  readonly linkedActivityElements?: Iterable<Element>;
   readonly onExcludedStableMessage?: (messageId: string) => void;
   readonly onStableMessageRevision?: (messageId: string, revision: string) => void;
 }
@@ -65,7 +66,9 @@ export function extractVisibleChatGptMessages(
     }
 
     const role = normalizeRole(messageElement.getAttribute("data-message-author-role"));
-    const advancedContent = extractChatGptAdvancedContent(messageElement);
+    const advancedContent = extractChatGptAdvancedContent(messageElement, {
+      linkedActivityElements: options.linkedActivityElements
+    });
     const attachments = extractChatGptAttachments(messageElement, turn);
     const cleanedNode = cleanMessageContent(messageElement, turn, role);
 
