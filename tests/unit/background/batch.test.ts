@@ -108,7 +108,12 @@ describe("batch export background flow", () => {
       messageCount: 2,
       status: "success"
     });
-    expect(response.zipFile?.format).toBe("zip");
+    expect(response.zipFile).toMatchObject({
+      encoding: "binary",
+      format: "zip",
+      transportEncoding: "base64"
+    });
+    expect(typeof response.zipFile?.bytes).toBe("string");
     expect(response.zipFilename).toMatch(/jelluvi-\d{4}-\d{2}-\d{2}\.zip/u);
   });
 

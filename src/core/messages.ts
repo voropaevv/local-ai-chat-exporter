@@ -171,6 +171,11 @@ export interface SerializedRenderedFile {
   readonly filename: string;
   readonly format: RenderedFile<RenderedBytes>["format"];
   readonly mimeType: string;
+  /**
+   * Binary files use base64 in new runtime messages. When omitted, `bytes`
+   * retains the legacy meaning: text is a string and binary is a number array.
+   */
+  readonly transportEncoding?: "base64";
 }
 
 export type RuntimeResponse<T> =
