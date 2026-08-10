@@ -44,12 +44,15 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchSource).not.toContain("CONTENT_SCAN_MESSAGE");
   expect(controllerSource).toContain("DEFAULT_BATCH_TAB_TIMEOUT_MS = 240_000");
   expect(controllerSource).toContain("CONTENT_CANCEL_SCAN_MESSAGE");
+  expect(controllerSource).toContain("signal?: AbortSignal");
   expect(controllerSource).toContain("for (const [index, tab] of input.tabs.entries())");
   expect(popupSource).not.toContain("requestBatchDiscoveryPermission");
   expect(popupSource).not.toContain("requestBatchHostPermissions");
   expect(optionsSource).toContain("requestBatchDiscoveryPermission");
   expect(optionsSource).toContain("requestBatchHostPermissions");
   expect(optionsSource).toContain("runBatchExport");
+  expect(optionsSource).toContain("new AbortController()");
+  expect(optionsSource).toContain("abortController.abort()");
   expect(batchUiSource).toContain("Find ChatGPT tabs");
   expect(batchUiSource).toContain("More providers");
   expect(batchUiSource).toContain("Chats stay local");
@@ -59,6 +62,7 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchUiSource).toContain("Select all");
   expect(batchUiSource).toContain("Clear selection");
   expect(batchUiSource).toContain("Export selected to ZIP");
+  expect(batchUiSource).toContain("Cancel batch export");
   expect(batchUiSource).toContain("formatBatchTabSummary");
   expect(batchUiSource).toContain("formatBatchTabContext");
   expect(batchUiSource).not.toContain("Export already-open AI chat tabs.");

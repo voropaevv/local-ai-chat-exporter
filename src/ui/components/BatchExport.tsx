@@ -5,7 +5,10 @@ export type BatchStatusTone = "error" | "neutral" | "progress" | "success" | "wa
 
 interface BatchExportProps {
   readonly busy: boolean;
+  readonly canCancel: boolean;
+  readonly cancelRequested: boolean;
   readonly candidates: readonly BatchCandidateTab[];
+  readonly onCancel: () => void;
   readonly onClearSelection: () => void;
   readonly onExportSelected: () => void;
   readonly onLoadAllCandidates: () => void;
@@ -21,7 +24,10 @@ interface BatchExportProps {
 
 export function BatchExport({
   busy,
+  canCancel,
+  cancelRequested,
   candidates,
+  onCancel,
   onClearSelection,
   onExportSelected,
   onLoadAllCandidates,
@@ -75,10 +81,30 @@ export function BatchExport({
             <span />
           </div>
           {progressLabel === undefined ? null : (
-            <p aria-live="polite" className="status-text" role="status">
+            <p
+              aria-live="polite"
+              className="status-text"
+              id="batch-export-progress-status"
+              role="status"
+            >
               {progressLabel}
             </p>
           )}
+          {canCancel || cancelRequested ? (
+            <div className="button-row">
+              <button
+                aria-describedby={
+                  progressLabel === undefined ? undefined : "batch-export-progress-status"
+                }
+                className="secondary-action compact-action danger-action"
+                disabled={!canCancel || cancelRequested}
+                onClick={onCancel}
+                type="button"
+              >
+                {cancelRequested ? "Cancelling..." : "Cancel batch export"}
+              </button>
+            </div>
+          ) : null}
         </>
       ) : null}
       {candidates.length > 0 ? (
@@ -152,9 +178,11 @@ export function BatchExport({
               <strong>{result.title}</strong>: {result.status}
               {result.status === "failed"
                 ? ` - ${result.error}`
-                : ` - ${result.messageCount} messages${
-                    result.completenessStatus !== "complete" ? " - may be partial" : ""
-                  }`}
+                : result.status === "skipped"
+                  ? " - batch was cancelled"
+                  : ` - ${result.messageCount} messages${
+                      result.completenessStatus !== "complete" ? " - may be partial" : ""
+                    }`}
             </li>
           ))}
         </ul>
@@ -198,8 +226,12 @@ export function formatBatchTabSummary(tab: BatchCandidateTab): string {
   }
 }
 
-export function formatBatchExportSummary(exportedCount: number, failedCount: number): string {
-  return `${exportedCount} exported, ${failedCount} failed`;
+export function formatBatchExportSummary(
+  exportedCount: number,
+  failedCount: number,
+  skippedCount = 0
+): string {
+  return `${exportedCount} exported, ${failedCount} failed, ${skippedCount} skipped`;
 }
 
 export function formatBatchProgress(progress: BatchExportProgress): string {
@@ -217,7 +249,9 @@ function formatBatchProgressPhase(phase: BatchExportProgressPhase): string {
     case "complete":
       return "ready";
     case "cancelling":
-      return "time limit reached; cancelling safely";
+      return "stopping the current scan safely";
+    case "cancelled":
+      return "cancelled; completed chats will be saved";
     case "failed":
       return "skipped after an error";
     case "packaging":

@@ -38,6 +38,7 @@ export type BatchExportProgressPhase =
   | "rendering"
   | "complete"
   | "cancelling"
+  | "cancelled"
   | "failed"
   | "packaging";
 
@@ -50,6 +51,7 @@ export interface BatchExportProgress {
 export interface BatchExportControllerInput {
   readonly onProgress?: (progress: BatchExportProgress) => void;
   readonly options?: Partial<ExportOptions>;
+  readonly signal?: AbortSignal;
   readonly tabs: readonly BatchCandidateTab[];
   readonly timing?: Partial<BatchExportTiming>;
 }
@@ -60,6 +62,7 @@ export interface BatchExportTiming {
 }
 
 export interface BatchExportControllerResult {
+  readonly cancelled: boolean;
   readonly results: readonly BatchManifestResult[];
   readonly zipFile?: RenderedFile<Uint8Array>;
 }
@@ -123,14 +126,37 @@ export async function runBatchExport(
   };
   const exportedAt = dependencies.now();
   const results: BatchZipResult[] = [];
+  let cancelled = input.signal?.aborted ?? false;
 
   for (const [index, tab] of input.tabs.entries()) {
     const progress = (phase: BatchExportProgressPhase) =>
       input.onProgress?.({ phase, position: index + 1, total: input.tabs.length });
 
+    if (cancelled || input.signal?.aborted === true) {
+      cancelled = true;
+      progress("cancelled");
+      results.push(...input.tabs.slice(index).map(skippedResult));
+      break;
+    }
+
     progress("preparing");
-    const result = await exportTabWithTimeout(tab, input.options, timing, dependencies, progress);
+    const result = await exportTabWithTimeout(
+      tab,
+      input.options,
+      input.signal,
+      timing,
+      dependencies,
+      progress
+    );
     results.push(result);
+
+    if (result.status === "skipped") {
+      cancelled = true;
+      progress("cancelled");
+      results.push(...input.tabs.slice(index + 1).map(skippedResult));
+      break;
+    }
+
     progress(result.status === "success" ? "complete" : "failed");
   }
 
@@ -145,12 +171,13 @@ export async function runBatchExport(
   );
 
   if (!hasSuccessfulFiles) {
-    return { results: manifestResults };
+    return { cancelled, results: manifestResults };
   }
 
   input.onProgress?.({ phase: "packaging", position: input.tabs.length, total: input.tabs.length });
 
   return {
+    cancelled,
     results: manifestResults,
     zipFile: renderer.renderBatchZip({ exportedAt, results })
   };
@@ -159,11 +186,19 @@ export async function runBatchExport(
 async function exportTabWithTimeout(
   tab: BatchCandidateTab,
   requestedOptions: Partial<ExportOptions> | undefined,
+  signal: AbortSignal | undefined,
   timing: BatchExportTiming,
   dependencies: BatchExportControllerDependencies,
   onProgress: (phase: BatchExportProgressPhase) => void
 ): Promise<BatchZipResult> {
-  const task = exportTab(tab, requestedOptions, dependencies, onProgress);
+  const operationController = new AbortController();
+  const task = exportTab(
+    tab,
+    requestedOptions,
+    operationController.signal,
+    dependencies,
+    onProgress
+  );
   const timed = task.then(
     (result) => ({ result, status: "settled" as const }),
     (error: unknown) => ({ error, status: "rejected" as const })
@@ -175,10 +210,33 @@ async function exportTabWithTimeout(
       timing.tabTimeoutMs
     );
   });
-  const outcome = await Promise.race([timed, timeout]);
+  let abortListener: (() => void) | undefined;
+  const cancelled = new Promise<{ readonly status: "cancelled" }>((resolve) => {
+    if (signal?.aborted === true) {
+      resolve({ status: "cancelled" });
+      return;
+    }
 
-  if (timeoutHandle !== undefined) {
-    dependencies.clearTimeout(timeoutHandle);
+    if (signal !== undefined) {
+      abortListener = () => resolve({ status: "cancelled" });
+      signal.addEventListener("abort", abortListener, { once: true });
+    }
+  });
+  let outcome:
+    | Awaited<typeof timed>
+    | { readonly status: "cancelled" }
+    | { readonly status: "timeout" };
+
+  try {
+    outcome = await Promise.race([timed, timeout, cancelled]);
+  } finally {
+    if (timeoutHandle !== undefined) {
+      dependencies.clearTimeout(timeoutHandle);
+    }
+
+    if (abortListener !== undefined) {
+      signal?.removeEventListener("abort", abortListener);
+    }
   }
 
   if (outcome.status === "settled") {
@@ -189,16 +247,18 @@ async function exportTabWithTimeout(
     return failedResult(tab, outcome.error);
   }
 
+  operationController.abort();
   onProgress("cancelling");
   const cancelRequest = dependencies
     .sendContentMessage(tab.id, {
       type: CONTENT_CANCEL_SCAN_MESSAGE
     } satisfies ContentCancelScanRequest)
     .catch(() => undefined);
-  await Promise.race([
-    Promise.allSettled([timed, cancelRequest]),
-    delay(timing.cancelGraceMs, dependencies)
-  ]);
+  await settleWithinGrace([timed, cancelRequest], timing.cancelGraceMs, dependencies);
+
+  if (outcome.status === "cancelled") {
+    return skippedResult(tab);
+  }
 
   return {
     error: `Timed out after ${formatDuration(timing.tabTimeoutMs)}. The scan was cancelled and this chat was skipped so the batch could continue.`,
@@ -211,16 +271,19 @@ async function exportTabWithTimeout(
 async function exportTab(
   tab: BatchCandidateTab,
   requestedOptions: Partial<ExportOptions> | undefined,
+  signal: AbortSignal,
   dependencies: BatchExportControllerDependencies,
   onProgress: (phase: BatchExportProgressPhase) => void
 ): Promise<BatchZipResult> {
   try {
     await dependencies.ensureContentScript(tab.id);
+    throwIfCancelled(signal);
     onProgress("scanning");
 
     const scanResponse = (await dependencies.sendContentMessage(tab.id, {
       type: CONTENT_SCAN_MESSAGE
     } satisfies ContentScanRequest)) as RuntimeResponse<ScanSummary>;
+    throwIfCancelled(signal);
 
     if (!scanResponse.ok) {
       throw new ExportPipelineError(scanResponse.error.code, scanResponse.error.message);
@@ -230,6 +293,7 @@ async function exportTab(
       ...(scanResponse.value.scanId !== undefined ? { scanId: scanResponse.value.scanId } : {}),
       type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
     } satisfies ContentGetCachedConversationRequest)) as RuntimeResponse<CachedConversationResult>;
+    throwIfCancelled(signal);
 
     if (!response.ok) {
       throw new ExportPipelineError(response.error.code, response.error.message);
@@ -246,6 +310,7 @@ async function exportTab(
 
     onProgress("rendering");
     const renderer = await dependencies.loadRenderers();
+    throwIfCancelled(signal);
     const options = { ...renderer.defaultExportOptions, ...requestedOptions };
     const conversation = response.value.conversation;
 
@@ -276,13 +341,38 @@ function failedResult(tab: BatchCandidateTab, error: unknown): BatchZipResult {
   };
 }
 
-function delay(
-  delayMs: number,
-  dependencies: Pick<BatchExportControllerDependencies, "setTimeout">
+function skippedResult(tab: BatchCandidateTab): BatchZipResult {
+  return {
+    reason: "batch_cancelled",
+    status: "skipped",
+    tab,
+    warnings: []
+  };
+}
+
+function throwIfCancelled(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw new ExportPipelineError("scan_cancelled", "The batch export was cancelled.");
+  }
+}
+
+async function settleWithinGrace(
+  promises: readonly Promise<unknown>[],
+  graceMs: number,
+  dependencies: Pick<BatchExportControllerDependencies, "clearTimeout" | "setTimeout">
 ): Promise<void> {
-  return new Promise((resolve) => {
-    dependencies.setTimeout(resolve, delayMs);
+  let graceHandle: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const grace = new Promise<void>((resolve) => {
+    graceHandle = dependencies.setTimeout(resolve, graceMs);
   });
+
+  try {
+    await Promise.race([Promise.allSettled(promises).then(() => undefined), grace]);
+  } finally {
+    if (graceHandle !== undefined) {
+      dependencies.clearTimeout(graceHandle);
+    }
+  }
 }
 
 function formatDuration(durationMs: number): string {

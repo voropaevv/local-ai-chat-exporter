@@ -249,6 +249,18 @@ describe("renderBatchZip", () => {
           url: "https://chatgpt.com/c/two"
         },
         warnings: ["Skipped after failure"]
+      },
+      {
+        reason: "batch_cancelled",
+        status: "skipped",
+        tab: {
+          id: 3,
+          platform: "chatgpt",
+          platformLabel: "ChatGPT",
+          title: "Third chat",
+          url: "https://chatgpt.com/c/three"
+        },
+        warnings: []
       }
     ];
 
@@ -268,6 +280,7 @@ describe("renderBatchZip", () => {
             readonly status: "success";
           }
         | { readonly error?: string; readonly status: "failed" }
+        | { readonly reason?: string; readonly status: "skipped" }
       )[];
     };
 
@@ -277,9 +290,7 @@ describe("renderBatchZip", () => {
       "jelluvi-2026-05-31/chatgpt-first-chat-1.md",
       "jelluvi-2026-05-31/manifest.json"
     ]);
-    expect(strFromU8(zip["jelluvi-2026-05-31/chatgpt-first-chat-1.md"])).toBe(
-      "# First\n"
-    );
+    expect(strFromU8(zip["jelluvi-2026-05-31/chatgpt-first-chat-1.md"])).toBe("# First\n");
     expect(manifest.results).toMatchObject([
       {
         files: [
@@ -310,6 +321,15 @@ describe("renderBatchZip", () => {
         title: "Second chat",
         url: "https://chatgpt.com/c/two",
         warnings: ["Skipped after failure"]
+      },
+      {
+        platform: "chatgpt",
+        reason: "batch_cancelled",
+        status: "skipped",
+        tabId: 3,
+        title: "Third chat",
+        url: "https://chatgpt.com/c/three",
+        warnings: []
       }
     ]);
     expect(

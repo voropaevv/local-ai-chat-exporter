@@ -166,8 +166,8 @@ describe("batch export core helpers", () => {
   });
 
   test("formats batch export result summary without noisy tab nouns", () => {
-    expect(formatBatchExportSummary(3, 1)).toBe("3 exported, 1 failed");
-    expect(formatBatchExportSummary(0, 2)).toBe("0 exported, 2 failed");
+    expect(formatBatchExportSummary(3, 1)).toBe("3 exported, 1 failed, 0 skipped");
+    expect(formatBatchExportSummary(0, 2, 4)).toBe("0 exported, 2 failed, 4 skipped");
   });
 
   test("creates a manifest with success files and failed tabs", () => {
@@ -202,6 +202,18 @@ describe("batch export core helpers", () => {
           url: "https://chatgpt.com/c/two"
         },
         warnings: []
+      },
+      {
+        reason: "batch_cancelled",
+        status: "skipped",
+        tab: {
+          id: 3,
+          platform: "chatgpt",
+          platformLabel: "ChatGPT",
+          title: "Third",
+          url: "https://chatgpt.com/c/three"
+        },
+        warnings: []
       }
     ];
 
@@ -214,7 +226,7 @@ describe("batch export core helpers", () => {
     ).toEqual({
       exportedAt: "2026-05-31T10:20:30.000Z",
       generatedBy: "jelluvi",
-      resultCount: 2,
+      resultCount: 3,
       rootDirectory: "jelluvi-2026-05-31",
       results: [
         {
@@ -240,6 +252,15 @@ describe("batch export core helpers", () => {
           tabId: 2,
           title: "Second",
           url: "https://chatgpt.com/c/two",
+          warnings: []
+        },
+        {
+          platform: "chatgpt",
+          reason: "batch_cancelled",
+          status: "skipped",
+          tabId: 3,
+          title: "Third",
+          url: "https://chatgpt.com/c/three",
           warnings: []
         }
       ]

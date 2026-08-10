@@ -6,6 +6,7 @@ import {
   createBatchRootDirectory,
   type BatchExportFailure,
   type BatchExportResult,
+  type BatchExportSkipped,
   type BatchExportSuccess,
   type BatchManifestFile
 } from "../core/batch";
@@ -127,7 +128,8 @@ export type BatchZipResult =
   | (Omit<BatchExportSuccess, "files"> & {
       readonly files: readonly RenderedFile<string | Uint8Array>[];
     })
-  | BatchExportFailure;
+  | BatchExportFailure
+  | BatchExportSkipped;
 
 export function renderBatchZip(input: BatchZipInput): RenderedFile<Uint8Array> {
   const rootDirectory = createBatchRootDirectory(input.exportedAt);
@@ -136,13 +138,13 @@ export function renderBatchZip(input: BatchZipInput): RenderedFile<Uint8Array> {
   let fileCount = 0;
 
   input.results.forEach((result, index) => {
-    if (result.status === "failed") {
+    if (result.status !== "success") {
       return;
     }
 
     const manifestResult = manifestResults[index];
 
-    if (manifestResult.status === "failed") {
+    if (manifestResult.status !== "success") {
       return;
     }
 
@@ -179,7 +181,7 @@ export function createBatchZipManifestResults(
   results: readonly BatchZipResult[]
 ): readonly BatchExportResult[] {
   return results.map((result, index) => {
-    if (result.status === "failed") {
+    if (result.status !== "success") {
       return result;
     }
 

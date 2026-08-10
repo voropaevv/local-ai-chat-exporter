@@ -48,7 +48,14 @@ export interface BatchExportFailure {
   readonly warnings: readonly string[];
 }
 
-export type BatchExportResult = BatchExportSuccess | BatchExportFailure;
+export interface BatchExportSkipped {
+  readonly reason: "batch_cancelled";
+  readonly status: "skipped";
+  readonly tab: BatchCandidateTab;
+  readonly warnings: readonly string[];
+}
+
+export type BatchExportResult = BatchExportSuccess | BatchExportFailure | BatchExportSkipped;
 
 export interface BatchManifestInput {
   readonly exportedAt: string;
@@ -80,6 +87,15 @@ export type BatchManifestResult =
       readonly error: string;
       readonly platform: BatchPlatform;
       readonly status: "failed";
+      readonly tabId: number;
+      readonly title: string;
+      readonly url: string;
+      readonly warnings: readonly string[];
+    }
+  | {
+      readonly platform: BatchPlatform;
+      readonly reason: "batch_cancelled";
+      readonly status: "skipped";
       readonly tabId: number;
       readonly title: string;
       readonly url: string;
@@ -178,9 +194,21 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
         };
       }
 
+      if (result.status === "failed") {
+        return {
+          error: result.error,
+          platform: result.tab.platform,
+          status: result.status,
+          tabId: result.tab.id,
+          title: result.tab.title,
+          url: result.tab.url,
+          warnings: result.warnings
+        };
+      }
+
       return {
-        error: result.error,
         platform: result.tab.platform,
+        reason: result.reason,
         status: result.status,
         tabId: result.tab.id,
         title: result.tab.title,

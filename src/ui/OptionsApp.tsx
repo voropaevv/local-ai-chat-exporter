@@ -14,7 +14,7 @@ import {
 } from "lucide-preact";
 import type { LucideIcon } from "lucide-preact";
 import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 
 import {
   CHATGPT_CHAT_ORIGINS,
@@ -95,8 +95,11 @@ const FILENAME_PATTERN_PRESETS = [
 ] as const;
 
 export function OptionsApp() {
+  const batchAbortControllerRef = useRef<AbortController | undefined>(undefined);
   const [exportSettings, setExportSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
   const [batchBusy, setBatchBusy] = useState(false);
+  const [batchCanCancel, setBatchCanCancel] = useState(false);
+  const [batchCancelRequested, setBatchCancelRequested] = useState(false);
   const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
   const [batchDiscoveryOrigins, setBatchDiscoveryOrigins] =
     useState<readonly string[]>(CHATGPT_CHAT_ORIGINS);
@@ -116,6 +119,13 @@ export function OptionsApp() {
     applyThemePreference(themePreference);
     writeThemePreference(themePreference);
   }, [themePreference]);
+
+  useEffect(
+    () => () => {
+      batchAbortControllerRef.current?.abort();
+    },
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -186,6 +196,8 @@ export function OptionsApp() {
       origins.every((origin, index) => origin === CHATGPT_CHAT_ORIGINS[index]);
 
     setBatchBusy(true);
+    setBatchCanCancel(false);
+    setBatchCancelRequested(false);
     setBatchProgress(undefined);
     setBatchStatusTone("progress");
     setBatchStatus(
@@ -263,6 +275,8 @@ export function OptionsApp() {
     }
 
     setBatchBusy(true);
+    setBatchCanCancel(false);
+    setBatchCancelRequested(false);
     setBatchProgress(undefined);
     setBatchStatusTone("progress");
     setBatchStatus("Waiting for Brave to confirm access to the selected chat sites...");
@@ -287,40 +301,73 @@ export function OptionsApp() {
 
     setBatchStatusTone("progress");
     setBatchStatus("Exporting selected tabs locally into one ZIP...");
+    const abortController = new AbortController();
+    batchAbortControllerRef.current = abortController;
+    setBatchCanCancel(true);
 
     try {
       const response = await runBatchExport({
         onProgress: setBatchProgress,
         options: buildBatchExportOptions(buildSettingsPopupState(exportSettings, redaction)),
+        signal: abortController.signal,
         tabs: preflightedTabs
       });
       const successCount = response.results.filter((result) => result.status === "success").length;
-      const failedCount = response.results.length - successCount;
+      const failedCount = response.results.filter((result) => result.status === "failed").length;
+      const skippedCount = response.results.filter((result) => result.status === "skipped").length;
       const partialCount = response.results.filter(
         (result) => result.status === "success" && result.completenessStatus !== "complete"
       ).length;
-      const resultSummary = formatBatchExportSummary(successCount, failedCount);
+      const resultSummary = formatBatchExportSummary(successCount, failedCount, skippedCount);
       const completenessSummary =
         partialCount > 0 ? ` ${formatCount(partialCount, "export")} may be partial.` : "";
+      const cancellationSummary = response.cancelled
+        ? response.zipFile === undefined
+          ? " Batch cancelled before any chat completed."
+          : " Batch cancelled; completed exports were preserved."
+        : "";
 
       setBatchResults(response.results);
       if (response.zipFile === undefined) {
-        setBatchStatusTone("error");
-        setBatchStatus(`No ZIP downloaded. ${resultSummary}.${completenessSummary}`);
+        setBatchStatusTone(response.cancelled ? "warning" : "error");
+        setBatchStatus(
+          `No ZIP downloaded. ${resultSummary}.${completenessSummary}${cancellationSummary}`
+        );
       } else {
         await downloadRenderedFiles([response.zipFile]);
-        setBatchStatusTone(failedCount > 0 || partialCount > 0 ? "warning" : "success");
+        setBatchStatusTone(
+          failedCount > 0 || skippedCount > 0 || partialCount > 0 ? "warning" : "success"
+        );
         setBatchStatus(
-          `Saved one ZIP: ${response.zipFile.filename}. ${resultSummary}.${completenessSummary}`
+          `Saved one ZIP: ${response.zipFile.filename}. ${resultSummary}.${completenessSummary}${cancellationSummary}`
         );
       }
     } catch (error) {
       setBatchStatusTone("error");
       setBatchStatus(error instanceof Error ? error.message : "Batch export failed.");
     } finally {
+      if (batchAbortControllerRef.current === abortController) {
+        batchAbortControllerRef.current = undefined;
+      }
       setBatchProgress(undefined);
+      setBatchCanCancel(false);
+      setBatchCancelRequested(false);
       setBatchBusy(false);
     }
+  }
+
+  function handleCancelBatchExport() {
+    const abortController = batchAbortControllerRef.current;
+
+    if (abortController === undefined || abortController.signal.aborted) {
+      return;
+    }
+
+    setBatchCanCancel(false);
+    setBatchCancelRequested(true);
+    setBatchStatusTone("progress");
+    setBatchStatus("Cancelling safely. Completed chats will still be saved to the ZIP...");
+    abortController.abort();
   }
 
   async function preflightBatchTabs(
@@ -431,7 +478,10 @@ export function OptionsApp() {
       <SettingsCard icon={Braces} title="Batch export">
         <BatchExport
           busy={batchBusy}
+          canCancel={batchCanCancel}
+          cancelRequested={batchCancelRequested}
           candidates={batchCandidates}
+          onCancel={handleCancelBatchExport}
           onClearSelection={handleClearBatchSelection}
           onExportSelected={handleBatchExport}
           onLoadAllCandidates={() => handleLoadBatchCandidates(SUPPORTED_CHAT_ORIGINS)}

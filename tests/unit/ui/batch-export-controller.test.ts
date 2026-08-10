@@ -166,6 +166,133 @@ describe("batch export controller", () => {
     expect(progress).toContainEqual({ phase: "scanning", position: 3, total: 3 });
     expect(progress.at(-1)).toEqual({ phase: "packaging", position: 3, total: 3 });
   });
+
+  test("manual cancellation during tab two preserves tab one and never starts later tabs", async () => {
+    vi.useFakeTimers();
+    const abortController = new AbortController();
+    const addAbortListener = vi.spyOn(abortController.signal, "addEventListener");
+    const removeAbortListener = vi.spyOn(abortController.signal, "removeEventListener");
+    const progress: BatchExportProgress[] = [];
+    const tabs = [
+      makeTab(1, "First private title", "first"),
+      makeTab(2, "Second private title", "second"),
+      makeTab(3, "Third private title", "third"),
+      makeTab(4, "Fourth private title", "fourth")
+    ];
+    const lateScan = createDeferred<RuntimeResponse<unknown>>();
+    const ensureContentScript = vi.fn(async (tabId: number) => {
+      void tabId;
+    });
+    const sendContentMessage = vi.fn(
+      async (
+        tabId: number,
+        request: { readonly type: string }
+      ): Promise<RuntimeResponse<unknown>> => {
+        if (request.type === CONTENT_CANCEL_SCAN_MESSAGE) {
+          return { ok: true, value: { cancelled: true } };
+        }
+
+        if (tabId === 2 && request.type === CONTENT_SCAN_MESSAGE) {
+          return lateScan.promise;
+        }
+
+        if (request.type === CONTENT_SCAN_MESSAGE) {
+          return { ok: true, value: makeScanSummary(tabId) };
+        }
+
+        return {
+          ok: true,
+          value: {
+            conversation: makeConversation(tabId),
+            hasConversation: true,
+            scanId: `scan-${tabId}`
+          }
+        };
+      }
+    );
+    const setTimeoutSpy = vi.fn((callback: () => void, delayMs: number) =>
+      globalThis.setTimeout(callback, delayMs)
+    );
+    const clearTimeoutSpy = vi.fn((handle: ReturnType<typeof globalThis.setTimeout>) =>
+      globalThis.clearTimeout(handle)
+    );
+    const pending = runBatchExport(
+      {
+        onProgress: (next) => progress.push(next),
+        options: { formats: ["md"] },
+        signal: abortController.signal,
+        tabs,
+        timing: { cancelGraceMs: 5, tabTimeoutMs: 1_000 }
+      },
+      {
+        clearTimeout: clearTimeoutSpy,
+        ensureContentScript,
+        now: () => "2026-08-10T22:00:00.000Z",
+        sendContentMessage,
+        setTimeout: setTimeoutSpy
+      }
+    );
+
+    await waitForProgress(progress, (entry) => entry.position === 2 && entry.phase === "scanning");
+    abortController.abort();
+    await waitForProgress(
+      progress,
+      (entry) => entry.position === 2 && entry.phase === "cancelling"
+    );
+    await vi.advanceTimersByTimeAsync(5);
+    const result = await pending;
+
+    expect(result.cancelled).toBe(true);
+    expect(result.results.map((entry) => entry.status)).toEqual([
+      "success",
+      "skipped",
+      "skipped",
+      "skipped"
+    ]);
+    expect(result.results.slice(1)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ reason: "batch_cancelled", status: "skipped", tabId: 2 }),
+        expect.objectContaining({ reason: "batch_cancelled", status: "skipped", tabId: 3 }),
+        expect.objectContaining({ reason: "batch_cancelled", status: "skipped", tabId: 4 })
+      ])
+    );
+    expect(result.zipFile).toBeDefined();
+    expect(ensureContentScript.mock.calls.map(([tabId]) => tabId)).toEqual([1, 2]);
+    expect(sendContentMessage).toHaveBeenCalledWith(2, { type: CONTENT_CANCEL_SCAN_MESSAGE });
+    expect(sendContentMessage.mock.calls.some(([tabId]) => tabId === 3 || tabId === 4)).toBe(false);
+    expect(progress.map((entry) => entry.phase)).toEqual([
+      "preparing",
+      "scanning",
+      "rendering",
+      "complete",
+      "preparing",
+      "scanning",
+      "cancelling",
+      "cancelled",
+      "packaging"
+    ]);
+    expect(JSON.stringify(progress)).not.toContain("private title");
+    expect(JSON.stringify(progress)).not.toContain("chatgpt.com");
+    expect(addAbortListener).toHaveBeenCalledTimes(2);
+    expect(removeAbortListener).toHaveBeenCalledTimes(2);
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(3);
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(3);
+
+    const callsBeforeLateResponse = sendContentMessage.mock.calls.length;
+    const progressBeforeLateResponse = [...progress];
+    lateScan.resolve({ ok: true, value: makeScanSummary(2) });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendContentMessage).toHaveBeenCalledTimes(callsBeforeLateResponse);
+    expect(progress).toEqual(progressBeforeLateResponse);
+    expect(
+      sendContentMessage.mock.calls.some(
+        ([tabId, request]) =>
+          tabId === 2 && request.type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+      )
+    ).toBe(false);
+  });
 });
 
 async function waitForProgress(
@@ -207,6 +334,21 @@ function makeSuccessfulContentMessenger() {
       return { ok: true, value: { cancelled: true } };
     }
   );
+}
+
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+
+  return {
+    promise,
+    resolve: (value) => resolvePromise?.(value)
+  };
 }
 
 function makeTab(id: number, title: string, slug: string): BatchCandidateTab {
