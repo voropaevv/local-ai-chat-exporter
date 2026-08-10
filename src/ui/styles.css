@@ -177,7 +177,7 @@ a:hover {
 }
 
 .app-shell--options {
-  width: min(820px, 100vw);
+  width: min(1080px, 100vw);
   margin-inline: auto;
   min-height: 100vh;
   align-content: start;
@@ -464,7 +464,8 @@ h3 {
 }
 
 .warning-text,
-.error-text {
+.error-text,
+.success-text {
   border-radius: 8px;
   padding: 9px 10px;
   font-size: 12px;
@@ -480,6 +481,12 @@ h3 {
   border: 1px solid var(--color-border);
   background: var(--color-danger-soft);
   color: var(--color-danger);
+}
+
+.success-text {
+  border: 1px solid var(--color-success-soft);
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .pdf-settings-grid {
@@ -554,7 +561,7 @@ h3 {
 .batch-tab-list,
 .batch-result-list {
   display: grid;
-  max-height: 150px;
+  max-height: 280px;
   gap: 8px;
   margin: 0;
   overflow: auto;
@@ -577,6 +584,10 @@ h3 {
 
 .batch-tab-list .check-row {
   font-weight: 560;
+}
+
+.batch-scope-note {
+  margin: 0;
 }
 
 .preview-page-header {
@@ -1032,6 +1043,12 @@ h3 {
   pointer-events: none;
 }
 
+.zip-toggle input:focus-visible + .switch-track,
+.settings-zip-toggle input:focus-visible + .switch-track {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .switch-track {
   position: relative;
   width: 34px;
@@ -1164,7 +1181,7 @@ h3 {
 
 .settings-card {
   display: grid;
-  grid-template-columns: minmax(190px, 0.45fr) minmax(0, 1fr);
+  grid-template-columns: minmax(160px, 0.3fr) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
   padding: 14px;

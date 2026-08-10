@@ -1,5 +1,7 @@
 import type { BatchCandidateTab, BatchManifestResult } from "../../core/batch";
 
+export type BatchStatusTone = "error" | "neutral" | "progress" | "success" | "warning";
+
 interface BatchExportProps {
   readonly busy: boolean;
   readonly candidates: readonly BatchCandidateTab[];
@@ -12,6 +14,7 @@ interface BatchExportProps {
   readonly results: readonly BatchManifestResult[];
   readonly selectedTabIds: readonly number[];
   readonly status: string;
+  readonly statusTone: BatchStatusTone;
 }
 
 export function BatchExport({
@@ -25,13 +28,20 @@ export function BatchExport({
   onToggleTab,
   results,
   selectedTabIds,
-  status
+  status,
+  statusTone
 }: BatchExportProps) {
+  const statusClassName = getBatchStatusClassName(statusTone);
+
   return (
-    <div className="settings-control-stack">
+    <div className="settings-control-stack" aria-busy={busy}>
+      <p className="batch-scope-note status-text" id="batch-chatgpt-scope-note">
+        ChatGPT only requests access to chatgpt.com and legacy chat.openai.com. Chats stay local.
+      </p>
       <div className="button-row">
         <button
-          className="secondary-action compact-action"
+          aria-describedby="batch-chatgpt-scope-note"
+          className="primary-action compact-action"
           disabled={busy}
           onClick={onLoadChatGptCandidates}
           type="button"
@@ -44,9 +54,18 @@ export function BatchExport({
           onClick={onLoadAllCandidates}
           type="button"
         >
-          Find all AI tabs
+          More providers
         </button>
       </div>
+      {busy ? (
+        <div
+          aria-label={status || "Batch export in progress"}
+          className="progress-bar progress-bar--active"
+          role="progressbar"
+        >
+          <span />
+        </div>
+      ) : null}
       {candidates.length > 0 ? (
         <div className="button-row">
           <button
@@ -65,7 +84,9 @@ export function BatchExport({
           >
             Clear selection
           </button>
-          <span className="status-text">{selectedTabIds.length} selected</span>
+          <span aria-live="polite" className="status-text">
+            {selectedTabIds.length} selected
+          </span>
         </div>
       ) : null}
       {candidates.length > 0 ? (
@@ -101,7 +122,11 @@ export function BatchExport({
         </div>
       ) : null}
       {status ? (
-        <p className="status-text" role="status">
+        <p
+          aria-live={statusTone === "error" ? "assertive" : "polite"}
+          className={statusClassName}
+          role={statusTone === "error" ? "alert" : "status"}
+        >
           {status}
         </p>
       ) : null}
@@ -119,6 +144,22 @@ export function BatchExport({
       ) : null}
     </div>
   );
+}
+
+function getBatchStatusClassName(statusTone: BatchStatusTone): string {
+  if (statusTone === "error") {
+    return "error-text";
+  }
+
+  if (statusTone === "warning") {
+    return "warning-text";
+  }
+
+  if (statusTone === "success") {
+    return "success-text";
+  }
+
+  return "status-text";
 }
 
 export function formatBatchTabContext(

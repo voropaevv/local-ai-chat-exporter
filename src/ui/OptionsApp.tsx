@@ -35,7 +35,11 @@ import type { ExportFormat } from "../core/schema";
 import { downloadRenderedFiles } from "../utils/download";
 import { deserializeRenderedFile } from "../core/rendered-file-transport";
 import { requestBatchDiscoveryPermission, requestBatchHostPermissions } from "./batch-permissions";
-import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
+import {
+  BatchExport,
+  formatBatchExportSummary,
+  type BatchStatusTone
+} from "./components/BatchExport";
 import { BrandIcon } from "./components/BrandIcon";
 import { ContentSettingsControls } from "./components/ContentSettingsControls";
 import { LocalLibraryPanel } from "./components/LocalLibraryPanel";
@@ -99,6 +103,7 @@ export function OptionsApp() {
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
   const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
   const [batchStatus, setBatchStatus] = useState("");
+  const [batchStatusTone, setBatchStatusTone] = useState<BatchStatusTone>("neutral");
   const [diagnosticBusy, setDiagnosticBusy] = useState(false);
   const [diagnosticStatus, setDiagnosticStatus] = useState("");
   const [filenameSaveStatus, setFilenameSaveStatus] = useState("");
@@ -175,16 +180,29 @@ export function OptionsApp() {
   }
 
   async function handleLoadBatchCandidates(origins: readonly string[]) {
+    const chatGptOnly =
+      origins.length === CHATGPT_CHAT_ORIGINS.length &&
+      origins.every((origin, index) => origin === CHATGPT_CHAT_ORIGINS[index]);
+
+    setBatchBusy(true);
+    setBatchStatusTone("progress");
+    setBatchStatus(
+      chatGptOnly
+        ? "Waiting for Brave to approve ChatGPT site access..."
+        : "Waiting for Brave to approve the selected AI site access..."
+    );
     const permission = await requestBatchDiscoveryPermission(origins);
 
     setBatchResults([]);
 
     if (!permission.granted) {
+      setBatchStatusTone("error");
       setBatchStatus(permission.message ?? "Site access was not granted.");
+      setBatchBusy(false);
       return;
     }
 
-    setBatchBusy(true);
+    setBatchStatusTone("progress");
     setBatchStatus("Looking for open AI chat tabs...");
     setBatchDiscoveryOrigins(origins);
 
@@ -194,8 +212,14 @@ export function OptionsApp() {
       const tabs = response.value.tabs;
       setBatchCandidates(tabs);
       setBatchSelectedTabIds(tabs.map((tab) => tab.id));
-      setBatchStatus(`Found ${formatCount(tabs.length, "open AI chat tab")}. All selected.`);
+      setBatchStatusTone(tabs.length > 0 ? "success" : "neutral");
+      setBatchStatus(
+        tabs.length > 0
+          ? `Found ${formatCount(tabs.length, "open AI chat tab")}. All selected.`
+          : "No open AI chat tabs were found for the approved sites."
+      );
     } else {
+      setBatchStatusTone("error");
       setBatchStatus(response.error.message);
     }
 
@@ -220,6 +244,7 @@ export function OptionsApp() {
 
   async function handleBatchExport() {
     if (batchSelectedTabIds.length === 0) {
+      setBatchStatusTone("warning");
       setBatchStatus("Select at least one open tab.");
       return;
     }
@@ -228,20 +253,26 @@ export function OptionsApp() {
 
     if (selectedTabs.length !== batchSelectedTabIds.length) {
       setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatusTone("warning");
       setBatchStatus(
         "Some selected tabs are no longer available. Review the updated selection and export again."
       );
       return;
     }
 
+    setBatchBusy(true);
+    setBatchStatusTone("progress");
+    setBatchStatus("Waiting for Brave to confirm access to the selected chat sites...");
     const permission = await requestBatchHostPermissions(selectedTabs);
 
     if (!permission.granted) {
+      setBatchStatusTone("error");
       setBatchStatus(permission.message ?? "Site access was not granted.");
+      setBatchBusy(false);
       return;
     }
 
-    setBatchBusy(true);
+    setBatchStatusTone("progress");
     setBatchStatus("Checking selected open tabs...");
 
     const preflightedTabs = await preflightBatchTabs(batchSelectedTabIds);
@@ -251,6 +282,7 @@ export function OptionsApp() {
       return;
     }
 
+    setBatchStatusTone("progress");
     setBatchStatus("Exporting selected tabs locally into one ZIP...");
 
     const response = await sendRuntimeMessage<BatchExportSuccess>(
@@ -270,16 +302,20 @@ export function OptionsApp() {
       try {
         setBatchResults(response.value.results);
         if (response.value.zipFile === undefined || response.value.zipFilename === undefined) {
+          setBatchStatusTone("error");
           setBatchStatus(`No ZIP downloaded. ${resultSummary}.`);
         } else {
           await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
+          setBatchStatusTone(failedCount > 0 ? "warning" : "success");
           setBatchStatus(`Saved one ZIP: ${response.value.zipFilename}. ${resultSummary}.`);
         }
       } catch (error) {
         setBatchResults(response.value.results);
+        setBatchStatusTone("error");
         setBatchStatus(error instanceof Error ? error.message : "Download failed.");
       }
     } else {
+      setBatchStatusTone("error");
       setBatchStatus(response.error.message);
     }
 
@@ -294,6 +330,7 @@ export function OptionsApp() {
     );
 
     if (!response.ok) {
+      setBatchStatusTone("error");
       setBatchStatus(response.error.message);
       return undefined;
     }
@@ -304,6 +341,7 @@ export function OptionsApp() {
 
     if (selectedTabs.length !== selectedTabIds.length) {
       setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatusTone("warning");
       setBatchStatus(
         "Some selected tabs are no longer available. Review the updated selection and export again."
       );
@@ -389,6 +427,23 @@ export function OptionsApp() {
         />
       </SettingsCard>
 
+      <SettingsCard icon={Braces} title="Batch export">
+        <BatchExport
+          busy={batchBusy}
+          candidates={batchCandidates}
+          onClearSelection={handleClearBatchSelection}
+          onExportSelected={handleBatchExport}
+          onLoadAllCandidates={() => handleLoadBatchCandidates(SUPPORTED_CHAT_ORIGINS)}
+          onLoadChatGptCandidates={() => handleLoadBatchCandidates(CHATGPT_CHAT_ORIGINS)}
+          onSelectAll={handleSelectAllBatchTabs}
+          onToggleTab={handleToggleBatchTab}
+          results={batchResults}
+          selectedTabIds={batchSelectedTabIds}
+          status={batchStatus}
+          statusTone={batchStatusTone}
+        />
+      </SettingsCard>
+
       <SettingsCard icon={FileCode} title="Content">
         <ContentSettingsControls onChange={updateExportSettings} settings={exportSettings} />
       </SettingsCard>
@@ -442,22 +497,6 @@ export function OptionsApp() {
 
       <SettingsCard icon={FileArchive} title="Library">
         <LocalLibraryPanel />
-      </SettingsCard>
-
-      <SettingsCard icon={Braces} title="Batch">
-        <BatchExport
-          busy={batchBusy}
-          candidates={batchCandidates}
-          onClearSelection={handleClearBatchSelection}
-          onExportSelected={handleBatchExport}
-          onLoadAllCandidates={() => handleLoadBatchCandidates(SUPPORTED_CHAT_ORIGINS)}
-          onLoadChatGptCandidates={() => handleLoadBatchCandidates(CHATGPT_CHAT_ORIGINS)}
-          onSelectAll={handleSelectAllBatchTabs}
-          onToggleTab={handleToggleBatchTab}
-          results={batchResults}
-          selectedTabIds={batchSelectedTabIds}
-          status={batchStatus}
-        />
       </SettingsCard>
 
       <SettingsCard icon={Bug} title="Diagnostics">

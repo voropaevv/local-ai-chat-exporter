@@ -42,7 +42,11 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(optionsSource).toContain("requestBatchDiscoveryPermission");
   expect(optionsSource).toContain("requestBatchHostPermissions");
   expect(batchUiSource).toContain("Find ChatGPT tabs");
-  expect(batchUiSource).toContain("Find all AI tabs");
+  expect(batchUiSource).toContain("More providers");
+  expect(batchUiSource).toContain("Chats stay local");
+  expect(batchUiSource).toContain('className="primary-action compact-action"');
+  expect(batchUiSource).toContain("progress-bar progress-bar--active");
+  expect(batchUiSource).toContain("statusTone");
   expect(batchUiSource).toContain("Select all");
   expect(batchUiSource).toContain("Clear selection");
   expect(batchUiSource).toContain("Export selected to ZIP");
@@ -54,7 +58,11 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchUiSource).not.toContain("Tab ID");
   expect(batchUiSource).not.toContain("<details");
   expect(optionsSource).toContain("Checking selected open tabs");
+  expect(optionsSource).toContain("Waiting for Brave to approve ChatGPT site access");
   expect(optionsSource).toContain("formatBatchExportSummary");
+  expect(optionsSource.indexOf('title="Batch export"')).toBeLessThan(
+    optionsSource.indexOf('title="Content"')
+  );
   expect(optionsSource.indexOf("requestBatchHostPermissions(selectedTabs)")).toBeLessThan(
     optionsSource.indexOf("await preflightBatchTabs(batchSelectedTabIds)")
   );
