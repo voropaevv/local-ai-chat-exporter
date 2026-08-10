@@ -2,14 +2,12 @@ import type { ExportOptions } from "../../core/export-options";
 import type { RedactionPreset, RedactionSettings } from "../../core/redaction";
 import {
   POPUP_CANCEL_SCAN_MESSAGE,
-  POPUP_BATCH_EXPORT_MESSAGE,
   POPUP_BATCH_LIST_MESSAGE,
   POPUP_GET_ACTIVE_TAB_INFO_MESSAGE,
   POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   POPUP_OPEN_PREVIEW_MESSAGE,
   POPUP_EXPORT_MESSAGE,
   POPUP_SCAN_MESSAGE,
-  type PopupBatchExportRequest,
   type PopupBatchListRequest,
   type PopupCancelScanRequest,
   type PopupGetActiveTabInfoRequest,
@@ -405,15 +403,8 @@ export function buildBatchListRequest(origins: readonly string[]): PopupBatchLis
   return { origins, type: POPUP_BATCH_LIST_MESSAGE };
 }
 
-export function buildBatchExportRequest(
-  state: PopupState,
-  tabIds: readonly number[]
-): PopupBatchExportRequest {
-  return {
-    options: buildExportOptions(state, getBatchExportFormats(state)),
-    tabIds,
-    type: POPUP_BATCH_EXPORT_MESSAGE
-  };
+export function buildBatchExportOptions(state: PopupState): ExportOptions {
+  return buildExportOptions(state, getBatchExportFormats(state));
 }
 
 export function buildDownloadRequest(state: PopupState, sourceTabId?: number): PopupExportRequest {

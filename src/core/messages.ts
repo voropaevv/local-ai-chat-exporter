@@ -1,7 +1,7 @@
 import type { SerializedExportError } from "./export-errors";
 import type { ExportOptions } from "./export-options";
 import type { DiagnosticReport } from "./diagnostics";
-import type { BatchCandidateTab, BatchManifestResult } from "./batch";
+import type { BatchCandidateTab } from "./batch";
 import type { CompletenessReport, ConversationExport, ExportFormat } from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
@@ -9,7 +9,6 @@ export const POPUP_SCAN_MESSAGE = "jelluvi/scan-current-tab";
 export const POPUP_CANCEL_SCAN_MESSAGE = "jelluvi/cancel-scan";
 export const POPUP_EXPORT_MESSAGE = "jelluvi/export-current-tab";
 export const POPUP_BATCH_LIST_MESSAGE = "jelluvi/list-open-chat-tabs";
-export const POPUP_BATCH_EXPORT_MESSAGE = "jelluvi/export-open-chat-tabs";
 export const POPUP_GET_ACTIVE_TAB_INFO_MESSAGE = "jelluvi/get-active-tab-info";
 export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/get-scan-cache-summary";
 export const POPUP_OPEN_PREVIEW_MESSAGE = "jelluvi/open-preview";
@@ -51,12 +50,6 @@ export interface PopupExportRequest {
 export interface PopupBatchListRequest {
   readonly origins: readonly string[];
   readonly type: typeof POPUP_BATCH_LIST_MESSAGE;
-}
-
-export interface PopupBatchExportRequest {
-  readonly options?: Partial<ExportOptions>;
-  readonly tabIds: readonly number[];
-  readonly type: typeof POPUP_BATCH_EXPORT_MESSAGE;
 }
 
 export interface PopupGetScanCacheSummaryRequest {
@@ -156,13 +149,6 @@ export interface PreviewOpenSuccess {
 
 export interface BatchListSuccess {
   readonly tabs: readonly BatchCandidateTab[];
-}
-
-export interface BatchExportSuccess {
-  readonly downloaded: readonly string[];
-  readonly results: readonly BatchManifestResult[];
-  readonly zipFile?: SerializedRenderedFile;
-  readonly zipFilename?: string;
 }
 
 export interface SerializedRenderedFile {

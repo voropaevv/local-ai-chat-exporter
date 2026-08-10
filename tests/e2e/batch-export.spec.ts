@@ -12,6 +12,10 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
     readonly permissions?: readonly string[];
   };
   const batchSource = await readFile(resolve(projectRoot, "extension/background/batch.ts"), "utf8");
+  const controllerSource = await readFile(
+    resolve(projectRoot, "src/ui/batch-export-controller.ts"),
+    "utf8"
+  );
   const optionsSource = await readFile(resolve(projectRoot, "src/ui/OptionsApp.tsx"), "utf8");
   const popupSource = await readFile(resolve(projectRoot, "src/ui/PopupApp.tsx"), "utf8");
   const permissionSource = await readFile(
@@ -37,10 +41,15 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchSource).not.toContain("Downloads permission is required");
   expect(batchSource).not.toContain("setInterval");
   expect(batchSource).not.toContain("chrome.history");
+  expect(batchSource).not.toContain("CONTENT_SCAN_MESSAGE");
+  expect(controllerSource).toContain("DEFAULT_BATCH_TAB_TIMEOUT_MS = 240_000");
+  expect(controllerSource).toContain("CONTENT_CANCEL_SCAN_MESSAGE");
+  expect(controllerSource).toContain("for (const [index, tab] of input.tabs.entries())");
   expect(popupSource).not.toContain("requestBatchDiscoveryPermission");
   expect(popupSource).not.toContain("requestBatchHostPermissions");
   expect(optionsSource).toContain("requestBatchDiscoveryPermission");
   expect(optionsSource).toContain("requestBatchHostPermissions");
+  expect(optionsSource).toContain("runBatchExport");
   expect(batchUiSource).toContain("Find ChatGPT tabs");
   expect(batchUiSource).toContain("More providers");
   expect(batchUiSource).toContain("Chats stay local");

@@ -1,4 +1,5 @@
 import type { BatchCandidateTab, BatchManifestResult } from "../../core/batch";
+import type { BatchExportProgress, BatchExportProgressPhase } from "../batch-export-controller";
 
 export type BatchStatusTone = "error" | "neutral" | "progress" | "success" | "warning";
 
@@ -11,6 +12,7 @@ interface BatchExportProps {
   readonly onLoadChatGptCandidates: () => void;
   readonly onSelectAll: () => void;
   readonly onToggleTab: (tabId: number) => void;
+  readonly progress?: BatchExportProgress;
   readonly results: readonly BatchManifestResult[];
   readonly selectedTabIds: readonly number[];
   readonly status: string;
@@ -26,12 +28,14 @@ export function BatchExport({
   onLoadChatGptCandidates,
   onSelectAll,
   onToggleTab,
+  progress,
   results,
   selectedTabIds,
   status,
   statusTone
 }: BatchExportProps) {
   const statusClassName = getBatchStatusClassName(statusTone);
+  const progressLabel = progress === undefined ? undefined : formatBatchProgress(progress);
 
   return (
     <div className="settings-control-stack" aria-busy={busy}>
@@ -58,13 +62,24 @@ export function BatchExport({
         </button>
       </div>
       {busy ? (
-        <div
-          aria-label={status || "Batch export in progress"}
-          className="progress-bar progress-bar--active"
-          role="progressbar"
-        >
-          <span />
-        </div>
+        <>
+          <div
+            aria-label={(progressLabel ?? status) || "Batch export in progress"}
+            aria-valuemax={progress?.total}
+            aria-valuemin={progress === undefined ? undefined : 1}
+            aria-valuenow={progress?.position}
+            aria-valuetext={progressLabel}
+            className="progress-bar progress-bar--active"
+            role="progressbar"
+          >
+            <span />
+          </div>
+          {progressLabel === undefined ? null : (
+            <p aria-live="polite" className="status-text" role="status">
+              {progressLabel}
+            </p>
+          )}
+        </>
       ) : null}
       {candidates.length > 0 ? (
         <div className="button-row">
@@ -137,7 +152,9 @@ export function BatchExport({
               <strong>{result.title}</strong>: {result.status}
               {result.status === "failed"
                 ? ` - ${result.error}`
-                : ` - ${result.messageCount} messages`}
+                : ` - ${result.messageCount} messages${
+                    result.completenessStatus !== "complete" ? " - may be partial" : ""
+                  }`}
             </li>
           ))}
         </ul>
@@ -183,6 +200,29 @@ export function formatBatchTabSummary(tab: BatchCandidateTab): string {
 
 export function formatBatchExportSummary(exportedCount: number, failedCount: number): string {
   return `${exportedCount} exported, ${failedCount} failed`;
+}
+
+export function formatBatchProgress(progress: BatchExportProgress): string {
+  return `Chat ${progress.position} of ${progress.total}: ${formatBatchProgressPhase(progress.phase)}`;
+}
+
+function formatBatchProgressPhase(phase: BatchExportProgressPhase): string {
+  switch (phase) {
+    case "preparing":
+      return "preparing the tab";
+    case "scanning":
+      return "scanning the full conversation";
+    case "rendering":
+      return "creating local files";
+    case "complete":
+      return "ready";
+    case "cancelling":
+      return "time limit reached; cancelling safely";
+    case "failed":
+      return "skipped after an error";
+    case "packaging":
+      return "building the ZIP";
+  }
 }
 
 function formatBatchTabHostPath(tab: BatchCandidateTab): string {

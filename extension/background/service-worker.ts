@@ -6,7 +6,6 @@ import {
 import { ExportPipelineError, serializeExportError } from "../../src/core/export-errors";
 import { createDiagnosticReport, type DiagnosticReport } from "../../src/core/diagnostics";
 import {
-  POPUP_BATCH_EXPORT_MESSAGE,
   POPUP_BATCH_LIST_MESSAGE,
   CONTENT_CANCEL_SCAN_MESSAGE,
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
@@ -26,9 +25,7 @@ import {
   type ContentGetCachedConversationRequest,
   type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
-  type BatchExportSuccess,
   type BatchListSuccess,
-  type PopupBatchExportRequest,
   type PopupBatchListRequest,
   type PopupCancelScanRequest,
   type PopupExportRequest,
@@ -49,7 +46,7 @@ import { getSupportedChatPageInfo } from "../../src/core/batch";
 import { serializeRenderedFile } from "../../src/core/rendered-file-transport";
 import { buildPreviewPageUrl } from "../../src/ui/preview-url";
 import { ensureContentScript } from "../../src/utils/content-script";
-import { handlePopupBatchExportRequest, handlePopupBatchListRequest } from "./batch";
+import { handlePopupBatchListRequest } from "./batch";
 import {
   readDiagnosticContext,
   readDiagnosticErrors,
@@ -89,7 +86,6 @@ async function handlePopupRequest(
     | PopupCancelScanRequest
     | PopupExportRequest
     | PopupBatchListRequest
-    | PopupBatchExportRequest
     | PopupGetActiveTabInfoRequest
     | PopupGetScanCacheSummaryRequest
     | PopupOpenPreviewRequest
@@ -102,7 +98,6 @@ async function handlePopupRequest(
   | ScanCacheSummaryResult
   | PopupExportSuccess
   | BatchListSuccess
-  | BatchExportSuccess
   | CachedConversationResult
   | DiagnosticReport
   | PreviewOpenSuccess
@@ -139,10 +134,6 @@ async function handlePopupRequest(
 
   if (request.type === POPUP_BATCH_LIST_MESSAGE) {
     return handlePopupBatchListRequest(request.origins);
-  }
-
-  if (request.type === POPUP_BATCH_EXPORT_MESSAGE) {
-    return handlePopupBatchExportRequest(request);
   }
 
   if (request.type === SETTINGS_GET_DIAGNOSTICS_MESSAGE) {
@@ -416,7 +407,6 @@ function isPopupRequest(
   | PopupCancelScanRequest
   | PopupExportRequest
   | PopupBatchListRequest
-  | PopupBatchExportRequest
   | PopupGetActiveTabInfoRequest
   | PopupGetScanCacheSummaryRequest
   | PopupOpenPreviewRequest
@@ -434,7 +424,6 @@ function isPopupRequest(
       message.type === PREVIEW_GET_CACHED_CONVERSATION_MESSAGE ||
       message.type === PREVIEW_RETURN_TO_SOURCE_MESSAGE ||
       message.type === POPUP_BATCH_LIST_MESSAGE ||
-      message.type === POPUP_BATCH_EXPORT_MESSAGE ||
       message.type === SETTINGS_GET_DIAGNOSTICS_MESSAGE)
   );
 }

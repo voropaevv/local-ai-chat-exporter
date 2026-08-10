@@ -23,7 +23,7 @@ import {
   type BatchManifestResult
 } from "../core/batch";
 import type { DiagnosticReport } from "../core/diagnostics";
-import type { BatchExportSuccess, BatchListSuccess, RuntimeResponse } from "../core/messages";
+import type { BatchListSuccess, RuntimeResponse } from "../core/messages";
 import { SETTINGS_GET_DIAGNOSTICS_MESSAGE } from "../core/messages";
 import {
   DEFAULT_REDACTION_SETTINGS,
@@ -33,7 +33,7 @@ import {
 } from "../core/redaction";
 import type { ExportFormat } from "../core/schema";
 import { downloadRenderedFiles } from "../utils/download";
-import { deserializeRenderedFile } from "../core/rendered-file-transport";
+import { runBatchExport, type BatchExportProgress } from "./batch-export-controller";
 import { requestBatchDiscoveryPermission, requestBatchHostPermissions } from "./batch-permissions";
 import {
   BatchExport,
@@ -59,7 +59,7 @@ import { formatCount } from "./pluralize";
 import { POPUP_EXPORT_FORMATS, POPUP_FORMAT_ICONS } from "./popup-format-options";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
 import {
-  buildBatchExportRequest,
+  buildBatchExportOptions,
   buildBatchListRequest,
   createInitialPopupState,
   type PopupState
@@ -101,6 +101,7 @@ export function OptionsApp() {
   const [batchDiscoveryOrigins, setBatchDiscoveryOrigins] =
     useState<readonly string[]>(CHATGPT_CHAT_ORIGINS);
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
+  const [batchProgress, setBatchProgress] = useState<BatchExportProgress>();
   const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
   const [batchStatus, setBatchStatus] = useState("");
   const [batchStatusTone, setBatchStatusTone] = useState<BatchStatusTone>("neutral");
@@ -185,6 +186,7 @@ export function OptionsApp() {
       origins.every((origin, index) => origin === CHATGPT_CHAT_ORIGINS[index]);
 
     setBatchBusy(true);
+    setBatchProgress(undefined);
     setBatchStatusTone("progress");
     setBatchStatus(
       chatGptOnly
@@ -261,6 +263,7 @@ export function OptionsApp() {
     }
 
     setBatchBusy(true);
+    setBatchProgress(undefined);
     setBatchStatusTone("progress");
     setBatchStatus("Waiting for Brave to confirm access to the selected chat sites...");
     const permission = await requestBatchHostPermissions(selectedTabs);
@@ -285,41 +288,39 @@ export function OptionsApp() {
     setBatchStatusTone("progress");
     setBatchStatus("Exporting selected tabs locally into one ZIP...");
 
-    const response = await sendRuntimeMessage<BatchExportSuccess>(
-      buildBatchExportRequest(
-        buildSettingsPopupState(exportSettings, redaction),
-        batchSelectedTabIds
-      )
-    );
-
-    if (response.ok) {
-      const successCount = response.value.results.filter(
-        (result) => result.status === "success"
+    try {
+      const response = await runBatchExport({
+        onProgress: setBatchProgress,
+        options: buildBatchExportOptions(buildSettingsPopupState(exportSettings, redaction)),
+        tabs: preflightedTabs
+      });
+      const successCount = response.results.filter((result) => result.status === "success").length;
+      const failedCount = response.results.length - successCount;
+      const partialCount = response.results.filter(
+        (result) => result.status === "success" && result.completenessStatus !== "complete"
       ).length;
-      const failedCount = response.value.results.length - successCount;
       const resultSummary = formatBatchExportSummary(successCount, failedCount);
+      const completenessSummary =
+        partialCount > 0 ? ` ${formatCount(partialCount, "export")} may be partial.` : "";
 
-      try {
-        setBatchResults(response.value.results);
-        if (response.value.zipFile === undefined || response.value.zipFilename === undefined) {
-          setBatchStatusTone("error");
-          setBatchStatus(`No ZIP downloaded. ${resultSummary}.`);
-        } else {
-          await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
-          setBatchStatusTone(failedCount > 0 ? "warning" : "success");
-          setBatchStatus(`Saved one ZIP: ${response.value.zipFilename}. ${resultSummary}.`);
-        }
-      } catch (error) {
-        setBatchResults(response.value.results);
+      setBatchResults(response.results);
+      if (response.zipFile === undefined) {
         setBatchStatusTone("error");
-        setBatchStatus(error instanceof Error ? error.message : "Download failed.");
+        setBatchStatus(`No ZIP downloaded. ${resultSummary}.${completenessSummary}`);
+      } else {
+        await downloadRenderedFiles([response.zipFile]);
+        setBatchStatusTone(failedCount > 0 || partialCount > 0 ? "warning" : "success");
+        setBatchStatus(
+          `Saved one ZIP: ${response.zipFile.filename}. ${resultSummary}.${completenessSummary}`
+        );
       }
-    } else {
+    } catch (error) {
       setBatchStatusTone("error");
-      setBatchStatus(response.error.message);
+      setBatchStatus(error instanceof Error ? error.message : "Batch export failed.");
+    } finally {
+      setBatchProgress(undefined);
+      setBatchBusy(false);
     }
-
-    setBatchBusy(false);
   }
 
   async function preflightBatchTabs(
@@ -437,6 +438,7 @@ export function OptionsApp() {
           onLoadChatGptCandidates={() => handleLoadBatchCandidates(CHATGPT_CHAT_ORIGINS)}
           onSelectAll={handleSelectAllBatchTabs}
           onToggleTab={handleToggleBatchTab}
+          progress={batchProgress}
           results={batchResults}
           selectedTabIds={batchSelectedTabIds}
           status={batchStatus}

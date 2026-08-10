@@ -1,4 +1,5 @@
 import type { LocalRendererFormat } from "../renderers/types";
+import type { CompletenessStatus } from "./schema";
 import {
   getProviderByUrl,
   getProviderDefinition,
@@ -32,6 +33,7 @@ export interface BatchManifestFile {
 }
 
 export interface BatchExportSuccess {
+  readonly completenessStatus?: CompletenessStatus;
   readonly files: readonly BatchManifestFile[];
   readonly messageCount: number;
   readonly status: "success";
@@ -65,6 +67,7 @@ export interface BatchManifest {
 export type BatchManifestResult =
   | {
       readonly files: readonly BatchManifestFile[];
+      readonly completenessStatus?: CompletenessStatus;
       readonly messageCount: number;
       readonly platform: BatchPlatform;
       readonly status: "success";
@@ -161,6 +164,9 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
     results: input.results.map((result) => {
       if (result.status === "success") {
         return {
+          ...(result.completenessStatus !== undefined
+            ? { completenessStatus: result.completenessStatus }
+            : {}),
           files: result.files,
           messageCount: result.messageCount,
           platform: result.tab.platform,
