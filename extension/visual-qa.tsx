@@ -208,7 +208,7 @@ Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
               sourceUrlIncluded: false,
               titleIncluded: false
             },
-            extensionVersion: "0.2.0",
+            extensionVersion: "0.2.1",
             generatedAt: "2026-07-18T14:30:00.000Z",
             provider: { id: "chatgpt", label: "ChatGPT" },
             recentErrors: [],
