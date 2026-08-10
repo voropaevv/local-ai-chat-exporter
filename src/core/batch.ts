@@ -187,8 +187,9 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
 
 function slugify(value: string): string {
   const slug = value
+    .normalize("NFKC")
     .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 72);
 

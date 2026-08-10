@@ -108,6 +108,21 @@ describe("batch export core helpers", () => {
     ).toBe("chatgpt-api-auth-plan-3");
   });
 
+  test("preserves Unicode chat titles in batch entry names", () => {
+    expect(
+      createBatchEntryBase(
+        {
+          id: 8,
+          platform: "chatgpt",
+          platformLabel: "ChatGPT",
+          title: "Карта Кошачьих Пу镜",
+          url: "https://chatgpt.com/c/unicode"
+        },
+        0
+      )
+    ).toBe("chatgpt-карта-кошачьих-пу镜-1");
+  });
+
   test("formats batch tab summary with host only", () => {
     const tab = {
       id: 9,
