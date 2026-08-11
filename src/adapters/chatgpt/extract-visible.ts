@@ -48,107 +48,148 @@ export function extractVisibleChatGptMessages(
   options: ExtractVisibleChatGptMessagesOptions = {}
 ): readonly ExportedMessage[] {
   const messages: ExportedMessage[] = [];
-  const messageElements = Array.from(root.querySelectorAll(chatGptSelectors.messageByRole));
 
-  for (const messageElement of messageElements) {
-    if (!isVisibleChatGptMessageElement(messageElement)) {
+  for (const candidate of getChatGptMessageCandidates(root)) {
+    if (!isVisibleChatGptMessageElement(candidate.element)) {
       continue;
     }
 
-    const stableId = getStableMessageId(messageElement);
-    const turn = messageElement.closest(chatGptSelectors.conversationTurn);
-    const stableRevision =
-      stableId === undefined ? undefined : getCheapStableMessageRevision(messageElement, turn);
+    const message = extractChatGptMessageCandidate(
+      prepareChatGptMessageCandidate(candidate),
+      messages.length,
+      options
+    );
 
-    if (
-      stableId !== undefined &&
-      stableRevision !== undefined &&
-      options.knownStableMessageRevisions?.get(stableId) === stableRevision
-    ) {
-      options.onExcludedStableMessage?.(stableId);
-      continue;
-    }
-
-    const role = normalizeRole(messageElement.getAttribute("data-message-author-role"));
-    const advancedContent = extractChatGptAdvancedContent(messageElement, {
-      linkedActivityElements: options.linkedActivityElements
-    });
-    const attachments = extractChatGptAttachments(messageElement, turn);
-    const cleanedNode = cleanMessageContent(messageElement, turn, role);
-
-    if (
-      cleanedNode.text.length === 0 &&
-      cleanedNode.codeBlocks.length === 0 &&
-      cleanedNode.images.length === 0 &&
-      attachments.length === 0
-    ) {
-      continue;
-    }
-
-    const id =
-      stableId ??
-      `${role}-${stableHash(
-        `${cleanedNode.text}\n${attachments.map((attachment) => attachment.name).join("\n")}`
-      )}`;
-
-    if (stableId !== undefined && stableRevision !== undefined) {
-      options.onStableMessageRevision?.(stableId, stableRevision);
-    }
-
-    messages.push({
-      id,
-      index: messages.length,
-      role,
-      authorLabel:
-        role === "assistant"
-          ? "ChatGPT"
-          : (advancedContent.participant ?? defaultAuthorLabel(role)),
-      ...(advancedContent.participant !== undefined
-        ? { participant: advancedContent.participant }
-        : {}),
-      text: cleanedNode.text,
-      markdown: cleanedNode.markdown,
-      html: cleanedNode.html,
-      codeBlocks: cleanedNode.codeBlocks,
-      images: cleanedNode.images,
-      ...(attachments.length > 0 ? { attachments } : {}),
-      ...(advancedContent.sources.length > 0 ? { sources: advancedContent.sources } : {}),
-      ...(advancedContent.thinkingBlocks.length > 0
-        ? { thinkingBlocks: advancedContent.thinkingBlocks }
-        : {}),
-      ...(advancedContent.canvas.length > 0 ? { canvas: advancedContent.canvas } : {}),
-      ...(advancedContent.createdAt !== undefined ? { createdAt: advancedContent.createdAt } : {}),
-      ...(advancedContent.model !== undefined ? { model: advancedContent.model } : {}),
-      metadata: {
-        ...(advancedContent.contentKind !== undefined
-          ? { contentKind: advancedContent.contentKind }
-          : {}),
-        ...(advancedContent.displayTimestamp !== undefined
-          ? { displayTimestamp: advancedContent.displayTimestamp }
-          : {})
-      }
-    });
-  }
-
-  for (const turn of getRolelessChatGptTurns(root)) {
-    const role = getRolelessChatGptTurnRole(turn);
-
-    if (role === undefined || !isVisibleChatGptMessageElement(turn)) {
-      continue;
-    }
-
-    const syntheticRoot = turn.ownerDocument.createElement("div");
-    const syntheticMessage = turn.cloneNode(true) as Element;
-    syntheticMessage.setAttribute("data-message-author-role", role);
-    getDirectRolelessTurnHeading(syntheticMessage)?.remove();
-    syntheticRoot.appendChild(syntheticMessage);
-
-    for (const message of extractVisibleChatGptMessages(syntheticRoot, options)) {
-      messages.push({ ...message, index: messages.length });
+    if (message !== undefined) {
+      messages.push(message);
     }
   }
 
   return messages;
+}
+
+interface ChatGptMessageCandidate {
+  readonly element: Element;
+  readonly rolelessRole?: ChatRole;
+}
+
+export function getChatGptMessageCandidateCount(root: ParentNode): number {
+  return getChatGptMessageCandidates(root).length;
+}
+
+function getChatGptMessageCandidates(root: ParentNode): readonly ChatGptMessageCandidate[] {
+  const rootElement = root.nodeType === 1 ? (root as Element) : undefined;
+  const selector = `${chatGptSelectors.messageByRole}, ${chatGptSelectors.conversationTurn}`;
+  const elements = [
+    ...(rootElement?.matches(selector) === true ? [rootElement] : []),
+    ...Array.from(root.querySelectorAll(selector))
+  ];
+
+  return elements.flatMap((element): readonly ChatGptMessageCandidate[] => {
+    if (element.matches(chatGptSelectors.messageByRole)) {
+      const nestedRoleElement = element.parentElement?.closest(chatGptSelectors.messageByRole);
+      return nestedRoleElement === null || nestedRoleElement === undefined ? [{ element }] : [];
+    }
+
+    const rolelessRole = getRolelessChatGptTurnRole(element);
+    return rolelessRole === undefined ? [] : [{ element, rolelessRole }];
+  });
+}
+
+function prepareChatGptMessageCandidate(candidate: ChatGptMessageCandidate): Element {
+  if (candidate.rolelessRole === undefined) {
+    return candidate.element;
+  }
+
+  const syntheticMessage = candidate.element.cloneNode(true) as Element;
+
+  for (const nested of getChatGptMessageCandidates(syntheticMessage)) {
+    if (nested.element !== syntheticMessage) {
+      nested.element.remove();
+    }
+  }
+
+  syntheticMessage.setAttribute("data-message-author-role", candidate.rolelessRole);
+  getDirectRolelessTurnHeading(syntheticMessage)?.remove();
+  return syntheticMessage;
+}
+
+function extractChatGptMessageCandidate(
+  messageElement: Element,
+  index: number,
+  options: ExtractVisibleChatGptMessagesOptions
+): ExportedMessage | undefined {
+  const stableId = getStableMessageId(messageElement);
+  const turn = messageElement.closest(chatGptSelectors.conversationTurn);
+  const stableRevision =
+    stableId === undefined ? undefined : getCheapStableMessageRevision(messageElement, turn);
+
+  if (
+    stableId !== undefined &&
+    stableRevision !== undefined &&
+    options.knownStableMessageRevisions?.get(stableId) === stableRevision
+  ) {
+    options.onExcludedStableMessage?.(stableId);
+    return undefined;
+  }
+
+  const role = normalizeRole(messageElement.getAttribute("data-message-author-role"));
+  const advancedContent = extractChatGptAdvancedContent(messageElement, {
+    linkedActivityElements: options.linkedActivityElements
+  });
+  const attachments = extractChatGptAttachments(messageElement, turn);
+  const cleanedNode = cleanMessageContent(messageElement, turn, role);
+
+  if (
+    cleanedNode.text.length === 0 &&
+    cleanedNode.codeBlocks.length === 0 &&
+    cleanedNode.images.length === 0 &&
+    attachments.length === 0
+  ) {
+    return undefined;
+  }
+
+  const id =
+    stableId ??
+    `${role}-${stableHash(
+      `${cleanedNode.text}\n${attachments.map((attachment) => attachment.name).join("\n")}`
+    )}`;
+
+  if (stableId !== undefined && stableRevision !== undefined) {
+    options.onStableMessageRevision?.(stableId, stableRevision);
+  }
+
+  return {
+    id,
+    index,
+    role,
+    authorLabel:
+      role === "assistant" ? "ChatGPT" : (advancedContent.participant ?? defaultAuthorLabel(role)),
+    ...(advancedContent.participant !== undefined
+      ? { participant: advancedContent.participant }
+      : {}),
+    text: cleanedNode.text,
+    markdown: cleanedNode.markdown,
+    html: cleanedNode.html,
+    codeBlocks: cleanedNode.codeBlocks,
+    images: cleanedNode.images,
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(advancedContent.sources.length > 0 ? { sources: advancedContent.sources } : {}),
+    ...(advancedContent.thinkingBlocks.length > 0
+      ? { thinkingBlocks: advancedContent.thinkingBlocks }
+      : {}),
+    ...(advancedContent.canvas.length > 0 ? { canvas: advancedContent.canvas } : {}),
+    ...(advancedContent.createdAt !== undefined ? { createdAt: advancedContent.createdAt } : {}),
+    ...(advancedContent.model !== undefined ? { model: advancedContent.model } : {}),
+    metadata: {
+      ...(advancedContent.contentKind !== undefined
+        ? { contentKind: advancedContent.contentKind }
+        : {}),
+      ...(advancedContent.displayTimestamp !== undefined
+        ? { displayTimestamp: advancedContent.displayTimestamp }
+        : {})
+    }
+  };
 }
 
 export function getRolelessChatGptTurnRole(turn: Element): ChatRole | undefined {
@@ -173,16 +214,6 @@ function getDirectRolelessTurnHeading(turn: Element): Element | undefined {
     const label = child.textContent?.replace(/\s+/gu, " ").trim();
     return label !== undefined && ROLELESS_TURN_LABELS[label] !== undefined;
   });
-}
-
-function getRolelessChatGptTurns(root: ParentNode): readonly Element[] {
-  const rootElement = root.nodeType === 1 ? (root as Element) : undefined;
-  const turns = [
-    ...(rootElement?.matches(chatGptSelectors.conversationTurn) === true ? [rootElement] : []),
-    ...Array.from(root.querySelectorAll(chatGptSelectors.conversationTurn))
-  ];
-
-  return turns.filter((turn) => getRolelessChatGptTurnRole(turn) !== undefined);
 }
 
 function cleanMessageContent(

@@ -69,9 +69,9 @@ describe("batch permission prompts", () => {
   test("requests all selected host origins in one prompt", async () => {
     const permissions = makePermissionsApi(true);
     const tabs = getBatchCandidateTabs([
-      { id: 1, title: "One", url: "https://chatgpt.com/c/one" },
-      { id: 2, title: "Two", url: "https://chatgpt.com/c/two" },
-      { id: 3, title: "Claude", url: "https://claude.ai/chat/three" }
+      { id: 1, title: "One", url: "https://chatgpt.com/c/one", windowId: 1 },
+      { id: 2, title: "Two", url: "https://chatgpt.com/c/two", windowId: 1 },
+      { id: 3, title: "Claude", url: "https://claude.ai/chat/three", windowId: 1 }
     ]);
 
     await expect(requestBatchHostPermissions(tabs, permissions)).resolves.toEqual({
@@ -85,7 +85,9 @@ describe("batch permission prompts", () => {
 
   test("returns a user-readable denial message when host access is rejected", async () => {
     const permissions = makePermissionsApi(false);
-    const tabs = getBatchCandidateTabs([{ id: 1, title: "One", url: "https://chatgpt.com/c/one" }]);
+    const tabs = getBatchCandidateTabs([
+      { id: 1, title: "One", url: "https://chatgpt.com/c/one", windowId: 1 }
+    ]);
 
     await expect(requestBatchHostPermissions(tabs, permissions)).resolves.toEqual({
       granted: false,

@@ -4,6 +4,7 @@ import { stableHash } from "../../utils/hash";
 import { CHATGPT_ACTIVITY_SELECTORS } from "./extract-advanced";
 import {
   extractVisibleChatGptMessages,
+  getChatGptMessageCandidateCount,
   getRolelessChatGptTurnRole,
   isVisibleChatGptMessageElement
 } from "./extract-visible";
@@ -1129,7 +1130,7 @@ function isTrackableTurnContainer(element: Element): boolean {
     return false;
   }
 
-  if (element.querySelector(chatGptSelectors.messageByRole) !== null) {
+  if (getChatGptMessageCandidateCount(element) > 0) {
     return true;
   }
 
@@ -2305,12 +2306,18 @@ function hasIncompleteFinalTurn(
 function hasHydratedRoleContent(turn: Element): boolean {
   const roleElements = Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole));
 
-  return roleElements.some(
-    (roleElement) =>
-      isVisibleChatGptMessageElement(roleElement) &&
-      ((roleElement.textContent ?? "").trim().length > 0 ||
-        roleElement.querySelector("img, pre, table, [role='group']") !== null)
-  );
+  if (
+    roleElements.some(
+      (roleElement) =>
+        isVisibleChatGptMessageElement(roleElement) &&
+        ((roleElement.textContent ?? "").trim().length > 0 ||
+          roleElement.querySelector("img, pre, table, [role='group']") !== null)
+    )
+  ) {
+    return true;
+  }
+
+  return extractVisibleChatGptMessages(turn).length > 0;
 }
 
 function hasStableRoleMessageIdentity(turn: Element): boolean {

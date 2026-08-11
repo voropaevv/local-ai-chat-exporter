@@ -61,6 +61,54 @@ describe("extractVisibleChatGptMessages", () => {
     expect(extractVisibleChatGptMessages(document)).toEqual([]);
   });
 
+  test("keeps roleful and exact-label roleless turns in document order", () => {
+    const document = new JSDOM(
+      `<main>
+        <section data-testid="conversation-turn-1">
+          <div data-message-author-role="user" data-message-id="m1"><p>First</p></div>
+        </section>
+        <section data-testid="conversation-turn-2">
+          <h4 class="sr-only">ChatGPT said:</h4><div><p>Second</p></div>
+        </section>
+        <section data-testid="conversation-turn-3">
+          <div data-message-author-role="user" data-message-id="m3"><p>Third</p></div>
+        </section>
+      </main>`,
+      { url: "https://chatgpt.com/c/mixed-roleless" }
+    ).window.document;
+
+    expect(
+      extractVisibleChatGptMessages(document).map(({ id, role, text }) => ({ id, role, text }))
+    ).toEqual([
+      { id: "m1", role: "user", text: "First" },
+      { id: "conversation-turn-2", role: "assistant", text: "Second" },
+      { id: "m3", role: "user", text: "Third" }
+    ]);
+  });
+
+  test("extracts nested exact-label turns separately without absorbing the inner turn", () => {
+    const document = new JSDOM(
+      `<main>
+        <section data-testid="conversation-turn-1">
+          <h4 class="sr-only">ChatGPT said:</h4>
+          <p>Outer answer</p>
+          <section data-testid="conversation-turn-2">
+            <h4 class="sr-only">You said:</h4>
+            <p>Inner prompt</p>
+          </section>
+        </section>
+      </main>`,
+      { url: "https://chatgpt.com/c/nested-roleless" }
+    ).window.document;
+
+    expect(
+      extractVisibleChatGptMessages(document).map(({ id, role, text }) => ({ id, role, text }))
+    ).toEqual([
+      { id: "conversation-turn-1", role: "assistant", text: "Outer answer" },
+      { id: "conversation-turn-2", role: "user", text: "Inner prompt" }
+    ]);
+  });
+
   test("preserves code block whitespace and visible language", () => {
     const [message] = extractVisibleChatGptMessages(loadFixture("code-block.html"));
 

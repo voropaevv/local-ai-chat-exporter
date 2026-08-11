@@ -60,7 +60,10 @@ describe("batch export controller", () => {
 
   test("activates every source tab before scanning and restores the original tab", async () => {
     const calls: string[] = [];
-    const tabs = [makeTab(41, "Private alpha", "alpha"), makeTab(42, "Private beta", "beta")];
+    const tabs = [
+      makeTab(41, "Private alpha", "alpha", 10),
+      makeTab(42, "Private beta", "beta", 20)
+    ];
     const sendContentMessage = makeSuccessfulContentMessenger((tabId, type) => {
       calls.push(`${type}:${tabId}`);
     });
@@ -74,7 +77,7 @@ describe("batch export controller", () => {
         ensureContentScript: vi.fn(async (tabId) => {
           calls.push(`inject:${tabId}`);
         }),
-        getActiveTabId: vi.fn(async () => 900),
+        getActiveTabId: vi.fn(async (windowId) => (windowId === 10 ? 900 : 901)),
         now: () => "2026-08-10T22:00:00.000Z",
         sendContentMessage
       }
@@ -90,11 +93,12 @@ describe("batch export controller", () => {
       "inject:42",
       `${CONTENT_SCAN_MESSAGE}:42`,
       `${CONTENT_GET_CACHED_CONVERSATION_MESSAGE}:42`,
-      "activate:900"
+      "activate:900",
+      "activate:901"
     ]);
   });
 
-  test("restores the original tab when source activation fails", async () => {
+  test("restores both original window tabs when one source activation fails", async () => {
     const activateTab = vi.fn(async (tabId: number) => {
       if (tabId === 41) {
         throw new Error("Tab disappeared");
@@ -102,18 +106,68 @@ describe("batch export controller", () => {
     });
 
     const result = await runBatchExport(
-      { tabs: [makeTab(41, "Private alpha", "alpha")] },
+      {
+        tabs: [makeTab(41, "Private alpha", "alpha", 10), makeTab(42, "Private beta", "beta", 20)]
+      },
       {
         activateTab,
         ensureContentScript: vi.fn(async () => undefined),
-        getActiveTabId: vi.fn(async () => 900),
+        getActiveTabId: vi.fn(async (windowId) => (windowId === 10 ? 900 : 901)),
         now: () => "2026-08-10T22:00:00.000Z",
         sendContentMessage: makeSuccessfulContentMessenger()
       }
     );
 
-    expect(result.results[0]?.status).toBe("failed");
-    expect(activateTab.mock.calls.map(([tabId]) => tabId)).toEqual([41, 900]);
+    expect(result.results.map((entry) => entry.status)).toEqual(["failed", "success"]);
+    expect(activateTab.mock.calls.map(([tabId]) => tabId)).toEqual([41, 42, 900, 901]);
+  });
+
+  test("continues restoring other windows when one restore fails", async () => {
+    const activateTab = vi.fn(async (tabId: number) => {
+      if (tabId === 900) {
+        throw new Error("Original tab disappeared");
+      }
+    });
+
+    const result = await runBatchExport(
+      {
+        tabs: [makeTab(41, "Private alpha", "alpha", 10), makeTab(42, "Private beta", "beta", 20)]
+      },
+      {
+        activateTab,
+        ensureContentScript: vi.fn(async () => undefined),
+        getActiveTabId: vi.fn(async (windowId) => (windowId === 10 ? 900 : 901)),
+        now: () => "2026-08-10T22:00:00.000Z",
+        sendContentMessage: makeSuccessfulContentMessenger()
+      }
+    );
+
+    expect(result.results.map((entry) => entry.status)).toEqual(["success", "success"]);
+    expect(result.zipFile).toBeDefined();
+    expect(activateTab.mock.calls.map(([tabId]) => tabId)).toEqual([41, 42, 900, 901]);
+  });
+
+  test("does not activate a source tab when the per-window snapshot fails", async () => {
+    const activateTab = vi.fn(async () => undefined);
+
+    await expect(
+      runBatchExport(
+        {
+          tabs: [makeTab(41, "Private alpha", "alpha", 10), makeTab(42, "Private beta", "beta", 20)]
+        },
+        {
+          activateTab,
+          getActiveTabId: vi.fn(async (windowId) => {
+            if (windowId === 20) {
+              throw new Error("Window disappeared");
+            }
+
+            return 900;
+          })
+        }
+      )
+    ).rejects.toThrow("Window disappeared");
+    expect(activateTab).not.toHaveBeenCalled();
   });
 
   test("cancels a stuck scan after the long-chat timeout and records an explicit failure", async () => {
@@ -169,10 +223,11 @@ describe("batch export controller", () => {
     vi.useFakeTimers();
     const progress: BatchExportProgress[] = [];
     const tabs = [
-      makeTab(1, "First", "first"),
-      makeTab(2, "Stuck", "stuck"),
-      makeTab(3, "Last", "last")
+      makeTab(1, "First", "first", 10),
+      makeTab(2, "Stuck", "stuck", 20),
+      makeTab(3, "Last", "last", 10)
     ];
+    const activationCalls: number[] = [];
     const sendContentMessage = vi.fn(
       async (
         tabId: number,
@@ -208,7 +263,11 @@ describe("batch export controller", () => {
         timing: { cancelGraceMs: 5, tabTimeoutMs: 20 }
       },
       {
+        activateTab: vi.fn(async (tabId) => {
+          activationCalls.push(tabId);
+        }),
         ensureContentScript: vi.fn(async () => undefined),
+        getActiveTabId: vi.fn(async (windowId) => (windowId === 10 ? 900 : 901)),
         now: () => "2026-08-10T22:00:00.000Z",
         sendContentMessage
       }
@@ -223,6 +282,7 @@ describe("batch export controller", () => {
     expect(result.zipFile).toBeDefined();
     expect(progress).toContainEqual({ phase: "scanning", position: 3, total: 3 });
     expect(progress.at(-1)).toEqual({ phase: "packaging", position: 3, total: 3 });
+    expect(activationCalls).toEqual([1, 2, 3, 900, 901]);
   });
 
   test("manual cancellation during tab two preserves tab one and never starts later tabs", async () => {
@@ -232,11 +292,12 @@ describe("batch export controller", () => {
     const removeAbortListener = vi.spyOn(abortController.signal, "removeEventListener");
     const progress: BatchExportProgress[] = [];
     const tabs = [
-      makeTab(1, "First private title", "first"),
-      makeTab(2, "Second private title", "second"),
-      makeTab(3, "Third private title", "third"),
-      makeTab(4, "Fourth private title", "fourth")
+      makeTab(1, "First private title", "first", 10),
+      makeTab(2, "Second private title", "second", 20),
+      makeTab(3, "Third private title", "third", 10),
+      makeTab(4, "Fourth private title", "fourth", 20)
     ];
+    const activationCalls: number[] = [];
     const lateScan = createDeferred<RuntimeResponse<unknown>>();
     const ensureContentScript = vi.fn(async (tabId: number) => {
       void tabId;
@@ -283,8 +344,12 @@ describe("batch export controller", () => {
         timing: { cancelGraceMs: 5, tabTimeoutMs: 1_000 }
       },
       {
+        activateTab: vi.fn(async (tabId) => {
+          activationCalls.push(tabId);
+        }),
         clearTimeout: clearTimeoutSpy,
         ensureContentScript,
+        getActiveTabId: vi.fn(async (windowId) => (windowId === 10 ? 900 : 901)),
         now: () => "2026-08-10T22:00:00.000Z",
         sendContentMessage,
         setTimeout: setTimeoutSpy
@@ -335,6 +400,7 @@ describe("batch export controller", () => {
     expect(removeAbortListener).toHaveBeenCalledTimes(2);
     expect(setTimeoutSpy).toHaveBeenCalledTimes(3);
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(3);
+    expect(activationCalls).toEqual([1, 2, 900, 901]);
 
     const callsBeforeLateResponse = sendContentMessage.mock.calls.length;
     const progressBeforeLateResponse = [...progress];
@@ -411,13 +477,14 @@ function createDeferred<T>(): {
   };
 }
 
-function makeTab(id: number, title: string, slug: string): BatchCandidateTab {
+function makeTab(id: number, title: string, slug: string, windowId = 1): BatchCandidateTab {
   return {
     id,
     platform: "chatgpt",
     platformLabel: "ChatGPT",
     title,
-    url: `https://chatgpt.com/c/${slug}`
+    url: `https://chatgpt.com/c/${slug}`,
+    windowId
   };
 }
 

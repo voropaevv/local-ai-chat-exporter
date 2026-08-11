@@ -234,7 +234,8 @@ describe("renderBatchZip", () => {
           platform: "chatgpt",
           platformLabel: "ChatGPT",
           title: "First chat",
-          url: "https://chatgpt.com/c/one"
+          url: "https://chatgpt.com/c/one",
+          windowId: 1
         },
         warnings: []
       },
@@ -246,7 +247,8 @@ describe("renderBatchZip", () => {
           platform: "chatgpt",
           platformLabel: "ChatGPT",
           title: "Second chat",
-          url: "https://chatgpt.com/c/two"
+          url: "https://chatgpt.com/c/two",
+          windowId: 1
         },
         warnings: ["Skipped after failure"]
       },
@@ -258,7 +260,8 @@ describe("renderBatchZip", () => {
           platform: "chatgpt",
           platformLabel: "ChatGPT",
           title: "Third chat",
-          url: "https://chatgpt.com/c/three"
+          url: "https://chatgpt.com/c/three",
+          windowId: 1
         },
         warnings: []
       }
@@ -353,7 +356,8 @@ describe("renderBatchZip", () => {
               platform: "chatgpt",
               platformLabel: "ChatGPT",
               title: "Failed chat",
-              url: "https://chatgpt.com/c/failed"
+              url: "https://chatgpt.com/c/failed",
+              windowId: 1
             },
             warnings: []
           }

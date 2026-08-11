@@ -81,7 +81,7 @@ interface BatchExportControllerDependencies {
   readonly activateTab: (tabId: number) => Promise<void>;
   readonly clearTimeout: (handle: ReturnType<typeof globalThis.setTimeout>) => void;
   readonly ensureContentScript: (tabId: number) => Promise<void>;
-  readonly getActiveTabId: () => Promise<number | undefined>;
+  readonly getActiveTabId: (windowId: number) => Promise<number | undefined>;
   readonly loadRenderers: () => Promise<BatchRendererModules>;
   readonly now: () => string;
   readonly sendContentMessage: (
@@ -104,13 +104,19 @@ const defaultDependencies: BatchExportControllerDependencies = {
   },
   clearTimeout: (handle) => globalThis.clearTimeout(handle),
   ensureContentScript,
-  getActiveTabId: async () => {
+  getActiveTabId: async (windowId) => {
     if (typeof chrome === "undefined" || chrome.tabs?.query === undefined) {
       return undefined;
     }
 
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tabs[0]?.id;
+    const tabs = await chrome.tabs.query({ active: true, windowId });
+    const activeTabId = tabs[0]?.id;
+
+    if (activeTabId === undefined) {
+      throw new Error(`Could not preserve the active tab for browser window ${windowId}.`);
+    }
+
+    return activeTabId;
   },
   loadRenderers: async () => {
     const [exportOptions, zip] = await Promise.all([
@@ -144,7 +150,7 @@ export async function runBatchExport(
   const exportedAt = dependencies.now();
   const results: BatchZipResult[] = [];
   let cancelled = input.signal?.aborted ?? false;
-  const originalActiveTabId = await dependencies.getActiveTabId().catch(() => undefined);
+  const originalActiveTabs = await captureOriginalActiveTabs(input.tabs, dependencies);
 
   try {
     for (const [index, tab] of input.tabs.entries()) {
@@ -179,8 +185,8 @@ export async function runBatchExport(
       progress(result.status === "success" ? "complete" : "failed");
     }
   } finally {
-    if (originalActiveTabId !== undefined) {
-      await dependencies.activateTab(originalActiveTabId).catch(() => undefined);
+    for (const activeTabId of originalActiveTabs.values()) {
+      await dependencies.activateTab(activeTabId).catch(() => undefined);
     }
   }
 
@@ -205,6 +211,23 @@ export async function runBatchExport(
     results: manifestResults,
     zipFile: renderer.renderBatchZip({ exportedAt, results })
   };
+}
+
+async function captureOriginalActiveTabs(
+  tabs: readonly BatchCandidateTab[],
+  dependencies: BatchExportControllerDependencies
+): Promise<ReadonlyMap<number, number>> {
+  const activeTabs = new Map<number, number>();
+
+  for (const windowId of new Set(tabs.map((tab) => tab.windowId))) {
+    const activeTabId = await dependencies.getActiveTabId(windowId);
+
+    if (activeTabId !== undefined) {
+      activeTabs.set(windowId, activeTabId);
+    }
+  }
+
+  return activeTabs;
 }
 
 async function exportTabWithTimeout(

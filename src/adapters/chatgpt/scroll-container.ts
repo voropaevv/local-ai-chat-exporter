@@ -1,16 +1,21 @@
-import { chatGptSelectors } from "./selectors";
+import { getChatGptMessageCandidateCount } from "./extract-visible";
 
 const SCROLL_EPSILON_PX = 2;
 
 export function findChatGptScrollContainer(root: Document = getCurrentDocument()): Element {
   const candidates = Array.from(root.querySelectorAll("*")).filter((element) => {
-    return isScrollable(element) && Boolean(element.querySelector(chatGptSelectors.messageByRole));
+    return isScrollable(element) && getChatGptMessageCandidateCount(element) > 0;
   });
 
   const bestCandidate = candidates.sort((left, right) => {
-    const leftMessages = left.querySelectorAll(chatGptSelectors.messageByRole).length;
-    const rightMessages = right.querySelectorAll(chatGptSelectors.messageByRole).length;
-    return rightMessages - leftMessages;
+    const messageCountDifference =
+      getChatGptMessageCandidateCount(right) - getChatGptMessageCandidateCount(left);
+
+    if (messageCountDifference !== 0) {
+      return messageCountDifference;
+    }
+
+    return getElementDepth(right) - getElementDepth(left);
   })[0];
 
   if (bestCandidate) {
@@ -18,6 +23,18 @@ export function findChatGptScrollContainer(root: Document = getCurrentDocument()
   }
 
   return root.scrollingElement ?? root.documentElement;
+}
+
+function getElementDepth(element: Element): number {
+  let depth = 0;
+  let current = element.parentElement;
+
+  while (current !== null) {
+    depth += 1;
+    current = current.parentElement;
+  }
+
+  return depth;
 }
 
 export function isAtTop(container: Element): boolean {

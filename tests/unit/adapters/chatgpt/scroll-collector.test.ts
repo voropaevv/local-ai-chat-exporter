@@ -75,6 +75,56 @@ describe("findChatGptScrollContainer", () => {
     expect(findChatGptScrollContainer(document)).toBe(chatScroll);
   });
 
+  test("includes exact-label roleless turns in scroll-root eligibility and scoring", () => {
+    const document = createDocument(`
+      <main>
+        <section id="roleful-scroll">
+          <div data-message-author-role="assistant">One roleful message</div>
+        </section>
+        <section id="roleless-scroll">
+          <article data-testid="conversation-turn-1">
+            <h4 class="sr-only">ChatGPT said:</h4><p>First roleless answer</p>
+          </article>
+          <article data-testid="conversation-turn-2">
+            <h4 class="sr-only">You said:</h4><p>Second roleless prompt</p>
+          </article>
+        </section>
+      </main>
+    `);
+    const rolefulScroll = document.getElementById("roleful-scroll");
+    const rolelessScroll = document.getElementById("roleless-scroll");
+
+    if (!rolefulScroll || !rolelessScroll) {
+      throw new Error("fixture missing scroll candidates");
+    }
+
+    setScrollMetrics(rolefulScroll, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+    setScrollMetrics(rolelessScroll, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+
+    expect(findChatGptScrollContainer(document)).toBe(rolelessScroll);
+  });
+
+  test("prefers the deepest nested scroll root when message scores tie", () => {
+    const document = createDocument(`
+      <main id="outer">
+        <section id="inner">
+          <div data-message-author-role="assistant">Tail answer</div>
+        </section>
+      </main>
+    `);
+    const outer = document.getElementById("outer");
+    const inner = document.getElementById("inner");
+
+    if (!outer || !inner) {
+      throw new Error("fixture missing nested scroll candidates");
+    }
+
+    setScrollMetrics(outer, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+    setScrollMetrics(inner, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+
+    expect(findChatGptScrollContainer(document)).toBe(inner);
+  });
+
   test("falls back to document.scrollingElement", () => {
     const document = createDocument("<main>No messages yet</main>");
 
@@ -1188,7 +1238,10 @@ describe("collectChatGptConversation", () => {
             finalPlaceholderMounted = true;
             container.insertAdjacentHTML(
               "beforeend",
-              `<article data-testid="conversation-turn-3"><div class="loading"></div></article>`
+              `<article data-testid="conversation-turn-3">
+                <h4 class="sr-only">ChatGPT said:</h4>
+                <div class="loading"></div>
+              </article>`
             );
           }
         },
@@ -1205,6 +1258,62 @@ describe("collectChatGptConversation", () => {
       );
       expect(result.completeness.warnings).toContain(
         "Platform virtualization may hide unloaded messages."
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("treats a substantive exact-label roleless final turn as hydrated", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 100, scrollHeight: 300, scrollTop: 0 });
+      renderMessages(container, [
+        "1|user|First user message",
+        "2|assistant|First assistant message"
+      ]);
+      let finalTurnMounted = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollBy: (element, pixels) => {
+          element.scrollTop += pixels;
+
+          if (!finalTurnMounted && element.scrollTop >= 200) {
+            finalTurnMounted = true;
+            container.insertAdjacentHTML(
+              "beforeend",
+              `<article data-testid="conversation-turn-3">
+                <h4 class="sr-only">ChatGPT said:</h4>
+                <div class="text-base"><p>Hydrated roleless final answer</p></div>
+              </article>`
+            );
+          }
+        },
+        scrollContainer: container
+      });
+
+      await vi.advanceTimersByTimeAsync(3_600);
+
+      const result = await resultPromise;
+      expect(result.messages.map((message) => message.id)).toEqual([
+        "1",
+        "2",
+        "conversation-turn-3"
+      ]);
+      expect(result.messages.at(-1)).toMatchObject({
+        role: "assistant",
+        text: "Hydrated roleless final answer"
+      });
+      expect(result.completeness.warnings).not.toContain(
+        "ChatGPT's final turn window did not finish loading before the scan timeout."
       );
     } finally {
       vi.useRealTimers();

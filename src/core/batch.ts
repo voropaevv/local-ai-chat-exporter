@@ -12,6 +12,7 @@ export interface BatchTabLike {
   readonly id?: number;
   readonly title?: string;
   readonly url?: string;
+  readonly windowId?: number;
 }
 
 type BatchPlatform = ProviderId;
@@ -22,6 +23,7 @@ export interface BatchCandidateTab {
   readonly platformLabel: string;
   readonly title: string;
   readonly url: string;
+  readonly windowId: number;
 }
 
 export interface BatchManifestFile {
@@ -123,7 +125,7 @@ export function getAllowedBatchDiscoveryOrigins(
 
 export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly BatchCandidateTab[] {
   return tabs.flatMap((tab) => {
-    if (tab.id === undefined || tab.url === undefined) {
+    if (tab.id === undefined || tab.url === undefined || tab.windowId === undefined) {
       return [];
     }
 
@@ -139,7 +141,8 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
         platform: provider.id,
         platformLabel: provider.label,
         title: tab.title?.trim() || "Untitled chat",
-        url: tab.url
+        url: tab.url,
+        windowId: tab.windowId
       }
     ];
   });

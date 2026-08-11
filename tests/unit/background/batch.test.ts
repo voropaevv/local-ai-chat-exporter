@@ -9,7 +9,8 @@ describe("batch discovery background flow", () => {
       {
         id: 10,
         title: "Scoped ChatGPT chat",
-        url: "https://chatgpt.com/c/scoped"
+        url: "https://chatgpt.com/c/scoped",
+        windowId: 20
       }
     ]);
 
@@ -25,5 +26,6 @@ describe("batch discovery background flow", () => {
     expect(query).toHaveBeenCalledWith({ url: [...CHATGPT_CHAT_ORIGINS] });
     expect(response.tabs).toHaveLength(1);
     expect(response.tabs[0]?.platform).toBe("chatgpt");
+    expect(response.tabs[0]?.windowId).toBe(20);
   });
 });
