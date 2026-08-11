@@ -6,12 +6,13 @@ import {
 } from "../../../extension/content/listener-registration";
 
 describe("content listener registration", () => {
-  test("an older listener state cannot block the V6 listener", () => {
+  test("an older listener state cannot block the V7 listener", () => {
     const state: Record<string, unknown> = {
       __jelluviContentV2ListenerRegistered: true,
       __jelluviContentV3ListenerRegistered: true,
       __jelluviContentV4ListenerRegistered: true,
-      __jelluviContentV5ListenerRegistered: true
+      __jelluviContentV5ListenerRegistered: true,
+      __jelluviContentV6ListenerRegistered: true
     };
     const register = vi.fn();
 
@@ -23,6 +24,7 @@ describe("content listener registration", () => {
       __jelluviContentV3ListenerRegistered: true,
       __jelluviContentV4ListenerRegistered: true,
       __jelluviContentV5ListenerRegistered: true,
+      __jelluviContentV6ListenerRegistered: true,
       [CONTENT_LISTENER_STATE_KEY]: true
     });
   });

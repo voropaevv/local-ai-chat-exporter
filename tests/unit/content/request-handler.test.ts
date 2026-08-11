@@ -297,6 +297,7 @@ describe("content request handler scan cache", () => {
     expect(isContentRequest({ type: "jelluvi/v3/content-scan" })).toBe(false);
     expect(isContentRequest({ type: "jelluvi/v4/content-scan" })).toBe(false);
     expect(isContentRequest({ type: "jelluvi/v5/content-scan" })).toBe(false);
+    expect(isContentRequest({ type: "jelluvi/v6/content-scan" })).toBe(false);
     expect(isContentRequest({ type: CONTENT_SCAN_MESSAGE })).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "jelluvi",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Jelluvi is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
   "type": "module",
   "private": true,
