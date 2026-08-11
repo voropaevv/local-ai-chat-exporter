@@ -80,6 +80,7 @@ export function getChatGptMessageCandidateCount(root: ParentNode): number {
 function getChatGptMessageCandidates(root: ParentNode): readonly ChatGptMessageCandidate[] {
   const rootElement = root.nodeType === 1 ? (root as Element) : undefined;
   const selector = `${chatGptSelectors.messageByRole}, ${chatGptSelectors.conversationTurn}`;
+  const roleElements = new Set(root.querySelectorAll(chatGptSelectors.messageByRole));
   const elements = [
     ...(rootElement?.matches(selector) === true ? [rootElement] : []),
     ...Array.from(root.querySelectorAll(selector))
@@ -87,8 +88,11 @@ function getChatGptMessageCandidates(root: ParentNode): readonly ChatGptMessageC
 
   return elements.flatMap((element): readonly ChatGptMessageCandidate[] => {
     if (element.matches(chatGptSelectors.messageByRole)) {
-      const nestedRoleElement = element.parentElement?.closest(chatGptSelectors.messageByRole);
-      return nestedRoleElement === null || nestedRoleElement === undefined ? [{ element }] : [];
+      // Preserve the original proven roleful path exactly: only role nodes
+      // selected inside this extraction root participate. Looking for role
+      // ancestors with `closest()` can escape a stable turn wrapper and drop
+      // its only hydrated message because of unrelated page chrome outside it.
+      return roleElements.has(element) ? [{ element }] : [];
     }
 
     const rolelessRole = getRolelessChatGptTurnRole(element);

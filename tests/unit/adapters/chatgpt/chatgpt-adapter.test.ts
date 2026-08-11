@@ -49,6 +49,35 @@ describe("extractVisibleChatGptMessages", () => {
     expect(messages[1].text).toBe("Sure. Here is a concise summary.");
   });
 
+  test("keeps roleful extraction bounded to a hydrated stable turn wrapper", () => {
+    const document = new JSDOM(
+      `<main data-message-author-role="assistant">
+        <div data-turn-id-container="logical-turn-1"
+          class="h-[var(--last-known-height,var(--estimated-turn-height,50vh))] min-h-14">
+          <section data-testid="conversation-turn-1">
+            <div data-message-author-role="user">
+              <div class="whitespace-pre-wrap">Hydrated wrapper message</div>
+            </div>
+          </section>
+        </div>
+      </main>`,
+      { url: "https://chatgpt.com/c/stable-wrapper" }
+    ).window.document;
+    const wrapper = document.querySelector("[data-turn-id-container]");
+
+    if (wrapper === null) {
+      throw new Error("fixture missing stable turn wrapper");
+    }
+
+    expect(extractVisibleChatGptMessages(wrapper)).toMatchObject([
+      {
+        id: "conversation-turn-1",
+        role: "user",
+        text: "Hydrated wrapper message"
+      }
+    ]);
+  });
+
   test("does not infer a role for unlabeled roleless turns", () => {
     const document = new JSDOM(
       `<section data-testid="conversation-turn-roleless">
