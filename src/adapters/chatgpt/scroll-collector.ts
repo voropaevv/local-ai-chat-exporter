@@ -2197,11 +2197,7 @@ function hasHydratedRoleContent(turn: Element): boolean {
 
 function hasStableRoleMessageIdentity(turn: Element): boolean {
   return Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole)).some((roleElement) =>
-    [
-      roleElement.getAttribute("data-message-id"),
-      roleElement.getAttribute("data-message-id-testid"),
-      roleElement.id
-    ].some((value) => value !== null && value.trim().length > 0)
+    Boolean(getMessageElementStableId(roleElement))
   );
 }
 

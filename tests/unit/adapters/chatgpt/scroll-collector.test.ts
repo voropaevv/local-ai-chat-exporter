@@ -322,7 +322,7 @@ describe("collectChatGptConversation", () => {
     const document = createDocument(`
       <main id="chat-scroll">
         <div data-turn-id-container="logical-turn-1" style="--last-known-height: 120px">
-          <article data-testid="conversation-turn-1">
+          <article>
             <div data-message-author-role="assistant">
               <div class="markdown"><p>Partial answer</p></div>
             </div>
@@ -463,7 +463,7 @@ describe("collectChatGptConversation", () => {
     expect(result.completeness.lastMessagePreview).toBe("Fourth");
   });
 
-  test("directly hydrates and extracts all 332 stable virtual turn containers", async () => {
+  test("directly hydrates 323 placeholders when 332 turns use ancestor identities", async () => {
     const turnCount = 332;
     const turnHeight = 72;
     const document = createDocument(`<main id="chat-scroll"></main>`);
@@ -481,8 +481,7 @@ describe("collectChatGptConversation", () => {
         ${
           hydrated
             ? `<article data-testid="conversation-turn-${turnNumber}">
-                <div data-message-author-role="${index % 2 === 0 ? "user" : "assistant"}"
-                  data-message-id="m${turnNumber}">
+                <div data-message-author-role="${index % 2 === 0 ? "user" : "assistant"}">
                   <div class="markdown"><p>Message ${turnNumber}</p></div>
                 </div>
               </article>`
@@ -503,8 +502,7 @@ describe("collectChatGptConversation", () => {
         }
         const turnNumber = index + 1;
         wrapper.innerHTML = `<article data-testid="conversation-turn-${turnNumber}">
-          <div data-message-author-role="${index % 2 === 0 ? "user" : "assistant"}"
-            data-message-id="m${turnNumber}">
+          <div data-message-author-role="${index % 2 === 0 ? "user" : "assistant"}">
             <div class="markdown"><p>Message ${turnNumber}</p></div>
           </div>
         </article>`;
@@ -566,7 +564,7 @@ describe("collectChatGptConversation", () => {
 
       expect(result.messages).toHaveLength(turnCount);
       expect(result.messages.map((message) => message.id)).toEqual(
-        Array.from({ length: turnCount }, (_, index) => `m${index + 1}`)
+        Array.from({ length: turnCount }, (_, index) => `conversation-turn-${index + 1}`)
       );
       expect(result.completeness.status).toBe("complete");
       expect(fullMessageScans).toHaveLength(0);
