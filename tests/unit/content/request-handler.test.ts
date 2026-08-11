@@ -98,6 +98,24 @@ describe("content request handler scan cache", () => {
     expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
   });
 
+  test("waits for the source tab layout before starting a scan", async () => {
+    const calls: string[] = [];
+    const scanCurrentConversationExport = vi.fn(async () => {
+      calls.push("scan");
+      return makeConversation();
+    });
+    const { handler } = createHandler({
+      scanCurrentConversationExport,
+      waitForScanReadiness: vi.fn(async () => {
+        calls.push("ready");
+      })
+    });
+
+    await handler({ type: CONTENT_SCAN_MESSAGE });
+
+    expect(calls).toEqual(["ready", "scan"]);
+  });
+
   test("cache summary request rehydrates popup state without rescanning", async () => {
     const { handler, scanCurrentConversationExport } = createHandler();
 

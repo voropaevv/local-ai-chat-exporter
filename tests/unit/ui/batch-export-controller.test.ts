@@ -58,6 +58,64 @@ describe("batch export controller", () => {
     expect(result.zipFile?.filename).toBe("jelluvi-2026-08-10.zip");
   });
 
+  test("activates every source tab before scanning and restores the original tab", async () => {
+    const calls: string[] = [];
+    const tabs = [makeTab(41, "Private alpha", "alpha"), makeTab(42, "Private beta", "beta")];
+    const sendContentMessage = makeSuccessfulContentMessenger((tabId, type) => {
+      calls.push(`${type}:${tabId}`);
+    });
+
+    const result = await runBatchExport(
+      { options: { formats: ["md"] }, tabs },
+      {
+        activateTab: vi.fn(async (tabId) => {
+          calls.push(`activate:${tabId}`);
+        }),
+        ensureContentScript: vi.fn(async (tabId) => {
+          calls.push(`inject:${tabId}`);
+        }),
+        getActiveTabId: vi.fn(async () => 900),
+        now: () => "2026-08-10T22:00:00.000Z",
+        sendContentMessage
+      }
+    );
+
+    expect(result.results.map((entry) => entry.status)).toEqual(["success", "success"]);
+    expect(calls).toEqual([
+      "activate:41",
+      "inject:41",
+      `${CONTENT_SCAN_MESSAGE}:41`,
+      `${CONTENT_GET_CACHED_CONVERSATION_MESSAGE}:41`,
+      "activate:42",
+      "inject:42",
+      `${CONTENT_SCAN_MESSAGE}:42`,
+      `${CONTENT_GET_CACHED_CONVERSATION_MESSAGE}:42`,
+      "activate:900"
+    ]);
+  });
+
+  test("restores the original tab when source activation fails", async () => {
+    const activateTab = vi.fn(async (tabId: number) => {
+      if (tabId === 41) {
+        throw new Error("Tab disappeared");
+      }
+    });
+
+    const result = await runBatchExport(
+      { tabs: [makeTab(41, "Private alpha", "alpha")] },
+      {
+        activateTab,
+        ensureContentScript: vi.fn(async () => undefined),
+        getActiveTabId: vi.fn(async () => 900),
+        now: () => "2026-08-10T22:00:00.000Z",
+        sendContentMessage: makeSuccessfulContentMessenger()
+      }
+    );
+
+    expect(result.results[0]?.status).toBe("failed");
+    expect(activateTab.mock.calls.map(([tabId]) => tabId)).toEqual([41, 900]);
+  });
+
   test("cancels a stuck scan after the long-chat timeout and records an explicit failure", async () => {
     vi.useFakeTimers();
     const progress: BatchExportProgress[] = [];
@@ -299,7 +357,7 @@ async function waitForProgress(
   progress: readonly BatchExportProgress[],
   predicate: (entry: BatchExportProgress) => boolean
 ): Promise<void> {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     if (progress.some(predicate)) {
       return;
     }
@@ -310,12 +368,14 @@ async function waitForProgress(
   throw new Error("Expected batch progress was not emitted.");
 }
 
-function makeSuccessfulContentMessenger() {
+function makeSuccessfulContentMessenger(onRequest?: (tabId: number, type: string) => void) {
   return vi.fn(
     async (
       tabId: number,
       request: { readonly type: string }
     ): Promise<RuntimeResponse<unknown>> => {
+      onRequest?.(tabId, request.type);
+
       if (request.type === CONTENT_SCAN_MESSAGE) {
         return { ok: true, value: makeScanSummary(tabId) };
       }

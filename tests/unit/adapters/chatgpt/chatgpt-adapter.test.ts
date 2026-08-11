@@ -49,6 +49,18 @@ describe("extractVisibleChatGptMessages", () => {
     expect(messages[1].text).toBe("Sure. Here is a concise summary.");
   });
 
+  test("does not infer a role for unlabeled roleless turns", () => {
+    const document = new JSDOM(
+      `<section data-testid="conversation-turn-roleless">
+        <h4 class="sr-only">Response:</h4>
+        <div>Unattributed content</div>
+      </section>`,
+      { url: "https://chatgpt.com/c/roleless" }
+    ).window.document;
+
+    expect(extractVisibleChatGptMessages(document)).toEqual([]);
+  });
+
   test("preserves code block whitespace and visible language", () => {
     const [message] = extractVisibleChatGptMessages(loadFixture("code-block.html"));
 

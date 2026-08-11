@@ -34,6 +34,7 @@ export interface ContentRequestHandlerDependencies {
   readonly scanCurrentConversationExport: (options?: {
     readonly signal?: AbortSignal;
   }) => Promise<ConversationExport>;
+  readonly waitForScanReadiness?: (signal?: AbortSignal) => Promise<void>;
 }
 
 export function createContentRequestHandler(
@@ -75,6 +76,9 @@ export function createContentRequestHandler(
     activeScanController = scanController;
 
     try {
+      if (dependencies.waitForScanReadiness !== undefined) {
+        await dependencies.waitForScanReadiness(scanController.signal);
+      }
       const conversation = await dependencies.scanCurrentConversationExport({
         signal: scanController.signal
       });

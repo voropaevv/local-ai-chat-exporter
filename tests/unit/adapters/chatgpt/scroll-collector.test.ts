@@ -577,6 +577,109 @@ describe("collectChatGptConversation", () => {
     }
   });
 
+  test("extracts exact accessible-label roleless turns without leaving them missing", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-306"
+          class="h-[var(--last-known-height,var(--estimated-turn-height,50vh))] min-h-14">
+          <section data-testid="conversation-turn-306">
+            <h4 class="sr-only select-none">ChatGPT said:</h4>
+            <div class="text-base my-auto mx-auto">First roleless assistant answer.</div>
+            <span class="sr-only">End of response</span>
+          </section>
+        </div>
+        <div data-turn-id-container="logical-turn-314"
+          class="h-[var(--last-known-height,var(--estimated-turn-height,50vh))] min-h-14">
+          <section data-testid="conversation-turn-314">
+            <h4 class="sr-only select-none"> ChatGPT   said: </h4>
+            <div class="text-base my-auto mx-auto">Second answer.</div>
+            <span class="sr-only">End of response</span>
+          </section>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 200, scrollHeight: 200, scrollTop: 0 });
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages).toMatchObject([
+      {
+        id: "conversation-turn-306",
+        role: "assistant",
+        text: "First roleless assistant answer."
+      },
+      {
+        id: "conversation-turn-314",
+        role: "assistant",
+        text: "Second answer."
+      }
+    ]);
+    expect(result.messages.every((message) => !message.text.includes("ChatGPT said:"))).toBe(true);
+    expect(result.completeness.status).toBe("complete");
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("re-extracts the final mounted window after the last quiet pass", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1"><p>First</p></div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2"><p>Second</p></div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    let bottomMounts = 0;
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: (scrollTop) => {
+        if (scrollTop !== 100) {
+          return;
+        }
+
+        bottomMounts += 1;
+        container
+          .querySelector("[data-turn-id-container='logical-turn-2']")
+          ?.insertAdjacentHTML("beforeend", `<span aria-label="mounted-${bottomMounts}"></span>`);
+      },
+      scrollHeight: 200,
+      scrollTop: 0
+    });
+
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(bottomMounts).toBe(2);
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.completeness.status).toBe("complete");
+    expect(result.warnings).not.toContain(
+      "ChatGPT changed extracted turns before the final quiet pass completed."
+    );
+  });
+
   test("waits for target-local exportable content after UI-only turn chrome", async () => {
     vi.useFakeTimers();
 

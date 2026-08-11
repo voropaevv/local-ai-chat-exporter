@@ -78,8 +78,10 @@ interface BatchRendererModules {
 }
 
 interface BatchExportControllerDependencies {
+  readonly activateTab: (tabId: number) => Promise<void>;
   readonly clearTimeout: (handle: ReturnType<typeof globalThis.setTimeout>) => void;
   readonly ensureContentScript: (tabId: number) => Promise<void>;
+  readonly getActiveTabId: () => Promise<number | undefined>;
   readonly loadRenderers: () => Promise<BatchRendererModules>;
   readonly now: () => string;
   readonly sendContentMessage: (
@@ -93,8 +95,23 @@ interface BatchExportControllerDependencies {
 }
 
 const defaultDependencies: BatchExportControllerDependencies = {
+  activateTab: async (tabId) => {
+    if (typeof chrome === "undefined" || chrome.tabs?.update === undefined) {
+      return;
+    }
+
+    await chrome.tabs.update(tabId, { active: true });
+  },
   clearTimeout: (handle) => globalThis.clearTimeout(handle),
   ensureContentScript,
+  getActiveTabId: async () => {
+    if (typeof chrome === "undefined" || chrome.tabs?.query === undefined) {
+      return undefined;
+    }
+
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tabs[0]?.id;
+  },
   loadRenderers: async () => {
     const [exportOptions, zip] = await Promise.all([
       import("../core/export-options"),
@@ -127,37 +144,44 @@ export async function runBatchExport(
   const exportedAt = dependencies.now();
   const results: BatchZipResult[] = [];
   let cancelled = input.signal?.aborted ?? false;
+  const originalActiveTabId = await dependencies.getActiveTabId().catch(() => undefined);
 
-  for (const [index, tab] of input.tabs.entries()) {
-    const progress = (phase: BatchExportProgressPhase) =>
-      input.onProgress?.({ phase, position: index + 1, total: input.tabs.length });
+  try {
+    for (const [index, tab] of input.tabs.entries()) {
+      const progress = (phase: BatchExportProgressPhase) =>
+        input.onProgress?.({ phase, position: index + 1, total: input.tabs.length });
 
-    if (cancelled || input.signal?.aborted === true) {
-      cancelled = true;
-      progress("cancelled");
-      results.push(...input.tabs.slice(index).map(skippedResult));
-      break;
+      if (cancelled || input.signal?.aborted === true) {
+        cancelled = true;
+        progress("cancelled");
+        results.push(...input.tabs.slice(index).map(skippedResult));
+        break;
+      }
+
+      progress("preparing");
+      const result = await exportTabWithTimeout(
+        tab,
+        input.options,
+        input.signal,
+        timing,
+        dependencies,
+        progress
+      );
+      results.push(result);
+
+      if (result.status === "skipped") {
+        cancelled = true;
+        progress("cancelled");
+        results.push(...input.tabs.slice(index + 1).map(skippedResult));
+        break;
+      }
+
+      progress(result.status === "success" ? "complete" : "failed");
     }
-
-    progress("preparing");
-    const result = await exportTabWithTimeout(
-      tab,
-      input.options,
-      input.signal,
-      timing,
-      dependencies,
-      progress
-    );
-    results.push(result);
-
-    if (result.status === "skipped") {
-      cancelled = true;
-      progress("cancelled");
-      results.push(...input.tabs.slice(index + 1).map(skippedResult));
-      break;
+  } finally {
+    if (originalActiveTabId !== undefined) {
+      await dependencies.activateTab(originalActiveTabId).catch(() => undefined);
     }
-
-    progress(result.status === "success" ? "complete" : "failed");
   }
 
   const renderer = await dependencies.loadRenderers();
@@ -276,6 +300,11 @@ async function exportTab(
   onProgress: (phase: BatchExportProgressPhase) => void
 ): Promise<BatchZipResult> {
   try {
+    // ChatGPT pauses its virtualized turn hydration in hidden tabs. Make the
+    // source tab active before asking the content script to traverse it; the
+    // batch runner restores the originally active Settings tab in `finally`.
+    await dependencies.activateTab(tab.id);
+    throwIfCancelled(signal);
     await dependencies.ensureContentScript(tab.id);
     throwIfCancelled(signal);
     onProgress("scanning");

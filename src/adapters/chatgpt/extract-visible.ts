@@ -15,6 +15,10 @@ import { CHATGPT_ATTACHMENT_SELECTORS, extractChatGptAttachments } from "./extra
 import { CHATGPT_FINAL_ANSWER_SELECTORS, chatGptSelectors } from "./selectors";
 
 const CHATGPT_PROVIDER = getProviderDefinition("chatgpt");
+const ROLELESS_TURN_LABELS: Readonly<Record<string, ChatRole>> = {
+  "ChatGPT said:": "assistant",
+  "You said:": "user"
+};
 
 export interface ExtractVisibleChatGptMessagesOptions {
   readonly knownStableMessageRevisions?: ReadonlyMap<string, string>;
@@ -126,7 +130,59 @@ export function extractVisibleChatGptMessages(
     });
   }
 
+  for (const turn of getRolelessChatGptTurns(root)) {
+    const role = getRolelessChatGptTurnRole(turn);
+
+    if (role === undefined || !isVisibleChatGptMessageElement(turn)) {
+      continue;
+    }
+
+    const syntheticRoot = turn.ownerDocument.createElement("div");
+    const syntheticMessage = turn.cloneNode(true) as Element;
+    syntheticMessage.setAttribute("data-message-author-role", role);
+    getDirectRolelessTurnHeading(syntheticMessage)?.remove();
+    syntheticRoot.appendChild(syntheticMessage);
+
+    for (const message of extractVisibleChatGptMessages(syntheticRoot, options)) {
+      messages.push({ ...message, index: messages.length });
+    }
+  }
+
   return messages;
+}
+
+export function getRolelessChatGptTurnRole(turn: Element): ChatRole | undefined {
+  if (
+    !turn.matches(chatGptSelectors.conversationTurn) ||
+    turn.querySelector(chatGptSelectors.messageByRole) !== null
+  ) {
+    return undefined;
+  }
+
+  const label = getDirectRolelessTurnHeading(turn)?.textContent?.replace(/\s+/gu, " ").trim();
+
+  return label === undefined ? undefined : ROLELESS_TURN_LABELS[label];
+}
+
+function getDirectRolelessTurnHeading(turn: Element): Element | undefined {
+  return Array.from(turn.children).find((child) => {
+    if (child.tagName.toLowerCase() !== "h4") {
+      return false;
+    }
+
+    const label = child.textContent?.replace(/\s+/gu, " ").trim();
+    return label !== undefined && ROLELESS_TURN_LABELS[label] !== undefined;
+  });
+}
+
+function getRolelessChatGptTurns(root: ParentNode): readonly Element[] {
+  const rootElement = root.nodeType === 1 ? (root as Element) : undefined;
+  const turns = [
+    ...(rootElement?.matches(chatGptSelectors.conversationTurn) === true ? [rootElement] : []),
+    ...Array.from(root.querySelectorAll(chatGptSelectors.conversationTurn))
+  ];
+
+  return turns.filter((turn) => getRolelessChatGptTurnRole(turn) !== undefined);
 }
 
 function cleanMessageContent(

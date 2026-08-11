@@ -4,6 +4,7 @@ import { stableHash } from "../../utils/hash";
 import { CHATGPT_ACTIVITY_SELECTORS } from "./extract-advanced";
 import {
   extractVisibleChatGptMessages,
+  getRolelessChatGptTurnRole,
   isVisibleChatGptMessageElement
 } from "./extract-visible";
 import {
@@ -37,6 +38,7 @@ const DEFAULT_MISSING_TURN_RECOVERY_BUDGET_MS = 20_000;
 const DEFAULT_TURN_TRAVERSAL_BUDGET_MS = 180_000;
 const DEFAULT_TURN_TRAVERSAL_INACTIVITY_MS = 20_000;
 const MAX_TURN_INVENTORY_COMPLETION_PASSES = 3;
+const MAX_FINAL_DIRTY_QUIET_PASSES = 2;
 const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]";
 
 export interface ChatGptScrollCollectorOptions {
@@ -792,6 +794,19 @@ async function collectStableTurnContainerConversation(
 
     aborted = options.mainSignal?.aborted ?? false;
     mutationTracker.flush();
+    duplicateCount += await reextractDirtyTurnContainers({
+      budget,
+      container: options.container,
+      dedupeState,
+      dirtyLogicalKeys: mutationTracker.dirtyLogicalKeys,
+      extractMessages: options.extractMessages,
+      isTurnExtractable,
+      linkedActivityElements,
+      messages,
+      turnTrackingState: options.turnTrackingState,
+      waitForDomSettle
+    });
+    mutationTracker.flush();
     const finalInventory = reconcileTurnTrackingState(options.container, options.turnTrackingState);
     inventoryAmbiguous ||= finalInventory.ambiguous;
     const missingTurnContainerIds = getMissingTurnContainerIds(options.turnTrackingState);
@@ -880,6 +895,76 @@ async function collectStableTurnContainerConversation(
     activityElementIndex.dispose();
     budget.dispose();
   }
+}
+
+interface DirtyTurnReextractionOptions {
+  readonly budget: ProgressWatchdog;
+  readonly container: Element;
+  readonly dedupeState: DedupeState;
+  readonly dirtyLogicalKeys: Set<string>;
+  readonly extractMessages: ChatGptScrollCollectorOptions["extractMessages"];
+  readonly isTurnExtractable: (turnContainer: Element) => boolean;
+  readonly linkedActivityElements?: Iterable<Element>;
+  readonly messages: ExportedMessage[];
+  readonly turnTrackingState: TurnTrackingState;
+  readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
+}
+
+async function reextractDirtyTurnContainers(
+  options: DirtyTurnReextractionOptions
+): Promise<number> {
+  let duplicateCount = 0;
+
+  for (
+    let pass = 0;
+    pass < MAX_FINAL_DIRTY_QUIET_PASSES && !options.budget.isExhausted();
+    pass += 1
+  ) {
+    const dirtyLogicalKeys = [...options.dirtyLogicalKeys];
+
+    if (dirtyLogicalKeys.length === 0) {
+      return duplicateCount;
+    }
+
+    let reextracted = 0;
+
+    for (const logicalKey of dirtyLogicalKeys) {
+      const turnContainer = findTrackableTurnContainer(
+        options.turnTrackingState,
+        logicalKey,
+        options.container
+      );
+
+      if (
+        turnContainer === undefined ||
+        !options.isTurnExtractable(turnContainer) ||
+        !hasStableRoleMessageIdentity(turnContainer)
+      ) {
+        continue;
+      }
+
+      options.dirtyLogicalKeys.delete(logicalKey);
+      duplicateCount += collectStepMessages(
+        turnContainer,
+        options.extractMessages,
+        options.messages,
+        options.dedupeState,
+        options.turnTrackingState,
+        options.linkedActivityElements,
+        logicalKey
+      );
+      reextracted += 1;
+    }
+
+    if (reextracted === 0) {
+      return duplicateCount;
+    }
+
+    options.budget.recordProgress();
+    await options.waitForDomSettle(options.budget.signal);
+  }
+
+  return duplicateCount;
 }
 
 function collectStepMessages(
@@ -2229,8 +2314,18 @@ function hasHydratedRoleContent(turn: Element): boolean {
 }
 
 function hasStableRoleMessageIdentity(turn: Element): boolean {
-  return Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole)).some((roleElement) =>
-    Boolean(getMessageElementStableId(roleElement))
+  if (
+    Array.from(turn.querySelectorAll(chatGptSelectors.messageByRole)).some((roleElement) =>
+      Boolean(getMessageElementStableId(roleElement))
+    )
+  ) {
+    return true;
+  }
+
+  return Array.from(turn.querySelectorAll(chatGptSelectors.conversationTurn)).some(
+    (conversationTurn) =>
+      getRolelessChatGptTurnRole(conversationTurn) !== undefined &&
+      Boolean(conversationTurn.getAttribute("data-testid")?.trim())
   );
 }
 
