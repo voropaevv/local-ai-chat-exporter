@@ -638,10 +638,15 @@ async function collectStableTurnContainerConversation(
       !options.mainSignal?.aborted;
       completionPass += 1
     ) {
+      mutationTracker.flush();
       const extractedBeforePass = options.turnTrackingState.extractedTurnContainerIds.size;
       const expectedBeforePass = options.turnTrackingState.expectedTurnContainerIds.length;
+      const traversalLogicalKeys = prioritizeTurnTraversalLogicalKeys(
+        options.turnTrackingState,
+        mutationTracker.dirtyLogicalKeys
+      );
 
-      for (const logicalKey of options.turnTrackingState.expectedTurnContainerIds) {
+      for (const logicalKey of traversalLogicalKeys) {
         mutationTracker.flush();
         const dirty = mutationTracker.dirtyLogicalKeys.has(logicalKey);
 
@@ -706,6 +711,11 @@ async function collectStableTurnContainerConversation(
         } else {
           await waitForDomSettle(budget.signal);
         }
+        // Consume the hydration mutations while this logical turn is still
+        // unresolved. If they are left queued until the next iteration, the
+        // observer sees the now-extracted key and falsely classifies its own
+        // first mount as a post-extraction revision.
+        mutationTracker.flush();
         refreshTurnTrackingState(options.container, options.turnTrackingState);
         turnContainer = findTrackableTurnContainer(
           options.turnTrackingState,
@@ -896,6 +906,24 @@ async function collectStableTurnContainerConversation(
     activityElementIndex.dispose();
     budget.dispose();
   }
+}
+
+function prioritizeTurnTraversalLogicalKeys(
+  turnTrackingState: TurnTrackingState,
+  dirtyLogicalKeys: ReadonlySet<string>
+): readonly string[] {
+  const unresolved: string[] = [];
+  const dirtyExtracted: string[] = [];
+
+  for (const logicalKey of turnTrackingState.expectedTurnContainerIds) {
+    if (!turnTrackingState.extractedTurnContainerIds.has(logicalKey)) {
+      unresolved.push(logicalKey);
+    } else if (dirtyLogicalKeys.has(logicalKey)) {
+      dirtyExtracted.push(logicalKey);
+    }
+  }
+
+  return [...unresolved, ...dirtyExtracted];
 }
 
 interface DirtyTurnReextractionOptions {

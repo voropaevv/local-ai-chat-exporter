@@ -648,6 +648,190 @@ describe("collectChatGptConversation", () => {
     }
   });
 
+  test("prioritizes a twice-hydrated roleless gap over buffered first-mount mutations", async () => {
+    const turnCount = 332;
+    const targetIndex = 313;
+    const turnHeight = 72;
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+    const ownerWindow = document.defaultView;
+
+    if (!container || ownerWindow === null) {
+      throw new Error("fixture missing browser context");
+    }
+
+    const observerInstances: BufferedMutationObserver[] = [];
+    class BufferedMutationObserver implements MutationObserver {
+      private records: MutationRecord[] = [];
+      observedTarget?: Node;
+
+      constructor() {
+        observerInstances.push(this);
+      }
+
+      disconnect(): void {
+        this.records = [];
+        this.observedTarget = undefined;
+      }
+
+      observe(target: Node): void {
+        this.observedTarget = target;
+      }
+
+      takeRecords(): MutationRecord[] {
+        const records = this.records;
+        this.records = [];
+        return records;
+      }
+
+      enqueueChildMount(target: Node, addedNodes: readonly Node[]): void {
+        this.records.push({
+          addedNodes: [...addedNodes],
+          attributeName: null,
+          attributeNamespace: null,
+          nextSibling: null,
+          oldValue: null,
+          previousSibling: null,
+          removedNodes: [],
+          target,
+          type: "childList"
+        } as unknown as MutationRecord);
+      }
+    }
+
+    const originalMutationObserver = ownerWindow.MutationObserver;
+    Object.defineProperty(ownerWindow, "MutationObserver", {
+      configurable: true,
+      value: BufferedMutationObserver
+    });
+
+    try {
+      container.innerHTML = Array.from({ length: turnCount }, (_, index) => {
+        const turnNumber = index + 1;
+        return `<div data-turn-id-container="logical-turn-${turnNumber}"
+          style="--last-known-height: ${turnHeight}px"></div>`;
+      }).join("");
+
+      const wrappers = Array.from(container.querySelectorAll("[data-turn-id-container]"));
+      const visitCounts = new Map<number, number>();
+      const visitOrder: number[] = [];
+      const hydrateTurn = (index: number) => {
+        const wrapper = wrappers[index];
+
+        if (wrapper === undefined) {
+          return;
+        }
+
+        visitOrder.push(index);
+        const visits = (visitCounts.get(index) ?? 0) + 1;
+        visitCounts.set(index, visits);
+
+        if (index === targetIndex && visits === 1) {
+          const earlierExtractedWrapper = wrappers[0];
+
+          earlierExtractedWrapper?.replaceChildren();
+          if (earlierExtractedWrapper !== undefined) {
+            observerInstances
+              .find((observer) => observer.observedTarget === container)
+              ?.enqueueChildMount(earlierExtractedWrapper, [document.createElement("span")]);
+          }
+        }
+
+        if (wrapper.childElementCount > 0 || (index === targetIndex && visits < 2)) {
+          return;
+        }
+
+        const turnNumber = index + 1;
+        wrapper.innerHTML =
+          index === targetIndex
+            ? `<section data-testid="conversation-turn-314">
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <div class="text-base my-auto mx-auto">Second answer.</div>
+              </section>`
+            : `<article data-testid="conversation-turn-${turnNumber}">
+                <div data-message-author-role="${index % 2 === 0 ? "user" : "assistant"}"
+                  data-message-id="message-${turnNumber}">
+                  <div class="markdown"><p>${
+                    index === 0 && visits > 1 ? "Message 1 revised" : `Message ${turnNumber}`
+                  }</p></div>
+                </div>
+              </article>`;
+
+        observerInstances
+          .find((observer) => observer.observedTarget === container)
+          ?.enqueueChildMount(wrapper, Array.from(wrapper.childNodes));
+      };
+
+      setScrollMetrics(container, {
+        clientHeight: turnHeight,
+        scrollHeight: turnHeight * turnCount,
+        scrollTop: turnHeight * 160
+      });
+      Object.defineProperty(container, "getBoundingClientRect", {
+        configurable: true,
+        value: () => ({
+          bottom: turnHeight,
+          height: turnHeight,
+          left: 0,
+          right: 500,
+          top: 0,
+          width: 500,
+          x: 0,
+          y: 0,
+          toJSON: () => ({})
+        })
+      });
+      wrappers.forEach((wrapper, index) => {
+        Object.defineProperty(wrapper, "getBoundingClientRect", {
+          configurable: true,
+          value: () => ({
+            bottom: (index + 1) * turnHeight - container.scrollTop,
+            height: turnHeight,
+            left: 0,
+            right: 500,
+            top: index * turnHeight - container.scrollTop,
+            width: 500,
+            x: 0,
+            y: index * turnHeight - container.scrollTop,
+            toJSON: () => ({})
+          })
+        });
+      });
+
+      const result = await collectChatGptConversation({
+        document,
+        scrollBy: (element, pixels) => {
+          element.scrollTop += pixels;
+          const target = Math.max(
+            0,
+            Math.min(turnCount - 1, Math.round((element.scrollTop + turnHeight * 0.1) / turnHeight))
+          );
+          hydrateTurn(target);
+        },
+        scrollContainer: container,
+        waitForDomSettle: () => Promise.resolve()
+      });
+
+      expect(visitCounts.get(targetIndex)).toBe(2);
+      expect(visitOrder[turnCount]).toBe(targetIndex);
+      expect(result.messages).toHaveLength(turnCount);
+      expect(result.messages.map((message) => message.id)).toEqual(
+        Array.from({ length: turnCount }, (_, index) =>
+          index === targetIndex ? "conversation-turn-314" : `message-${index + 1}`
+        )
+      );
+      expect(result.messages[0]?.text).toBe("Message 1 revised");
+      expect(result.duplicateCount).toBe(0);
+      expect(result.completeness.status).toBe("complete");
+      expect(result.warnings).toEqual([]);
+    } finally {
+      Object.defineProperty(ownerWindow, "MutationObserver", {
+        configurable: true,
+        value: originalMutationObserver
+      });
+    }
+  }, 15_000);
+
   test("extracts exact accessible-label roleless turns without leaving them missing", async () => {
     const document = createDocument(`
       <main id="chat-scroll">
