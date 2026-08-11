@@ -30,6 +30,15 @@ export interface PdfEncodedTextRun {
   readonly width: number;
 }
 
+const HORIZONTAL_BOX_DRAWING_CODE_POINTS = new Set([
+  0x2500, 0x2501, 0x2504, 0x2505, 0x2508, 0x2509, 0x254c, 0x254d, 0x2550, 0x2574,
+  0x2576, 0x2578, 0x257a, 0x257c, 0x257e
+]);
+const VERTICAL_BOX_DRAWING_CODE_POINTS = new Set([
+  0x2502, 0x2503, 0x2506, 0x2507, 0x250a, 0x250b, 0x254e, 0x254f, 0x2551, 0x2575,
+  0x2577, 0x2579, 0x257b, 0x257d, 0x257f
+]);
+
 interface FontTable {
   readonly length: number;
   readonly offset: number;
@@ -120,6 +129,12 @@ export function normalizePdfText(value: string): string {
   return [...value.replace(/\t/gu, "    ").replace(/\r\n?/gu, "\n")]
     .map((character) => {
       const codePoint = character.codePointAt(0) ?? 0;
+      const boxDrawingFallback = getBoxDrawingFallback(codePoint);
+
+      if (boxDrawingFallback !== undefined) {
+        return boxDrawingFallback;
+      }
+
       const controlCharacter =
         codePoint <= 0x08 ||
         codePoint === 0x0b ||
@@ -130,6 +145,34 @@ export function normalizePdfText(value: string): string {
       return controlCharacter ? " " : character;
     })
     .join("");
+}
+
+function getBoxDrawingFallback(codePoint: number): string | undefined {
+  if (codePoint < 0x2500 || codePoint > 0x257f) {
+    return undefined;
+  }
+
+  if (HORIZONTAL_BOX_DRAWING_CODE_POINTS.has(codePoint)) {
+    return "-";
+  }
+
+  if (VERTICAL_BOX_DRAWING_CODE_POINTS.has(codePoint)) {
+    return "|";
+  }
+
+  if (codePoint === 0x2571) {
+    return "/";
+  }
+
+  if (codePoint === 0x2572) {
+    return "\\";
+  }
+
+  if (codePoint === 0x2573) {
+    return "x";
+  }
+
+  return "+";
 }
 
 class TrueTypeFontProgram {

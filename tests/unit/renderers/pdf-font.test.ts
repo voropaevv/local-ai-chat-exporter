@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { PdfFontRegistry } from "../../../src/renderers/pdf-font";
+import { normalizePdfText, PdfFontRegistry } from "../../../src/renderers/pdf-font";
 
 describe("PdfFontRegistry", () => {
   test("splits missing proportional glyphs into measured monospace fallback runs", () => {
@@ -20,5 +20,11 @@ describe("PdfFontRegistry", () => {
     expect(runs.every((run) => run.width > 0)).toBe(true);
     expect(registry.hasUsedGlyphs("regular")).toBe(true);
     expect(registry.hasUsedGlyphs("mono")).toBe(true);
+  });
+
+  test("preserves directory-tree structure with ASCII fallbacks", () => {
+    expect(normalizePdfText("├── common/\n│   └── yt-dlp_macos")).toBe(
+      "+-- common/\n|   +-- yt-dlp_macos"
+    );
   });
 });

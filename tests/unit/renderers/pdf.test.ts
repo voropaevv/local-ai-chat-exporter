@@ -164,6 +164,25 @@ describe("renderPdf", () => {
     expect(text).not.toContain("????");
   });
 
+  test("renders box-drawing directory trees without replacement glyphs", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            markdown:
+              "```text\nResources/Tools/\n├── common/\n│   └── yt-dlp_macos\n└── arm64/\n    ├── ffmpeg\n    └── deno\n```"
+          })
+        ]
+      })
+    );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain("+-- common/");
+    expect(text).toContain("|   +-- yt-dlp_macos");
+    expect(text).toContain("+-- arm64/");
+    expect(text).not.toContain("�");
+  });
+
   test("preserves mathematical relations in headings, paragraphs, and table cells", () => {
     const rendered = renderPdf(
       makeConversation({

@@ -20,6 +20,9 @@ replacement character. They are produced with FontTools using this Unicode selec
 The selection is an upper bound: it cannot add glyphs missing from an original font. PDF text uses
 the bundled monospace font as a per-glyph fallback when Regular or Bold lacks a selected symbol, so
 operators such as `≤`, `≥`, and `≠` remain intact instead of becoming replacement characters.
+Box-drawing characters (`U+2500-257F`) are normalized to structural ASCII (`-`, `|`, `+`, `/`,
+`\\`, or `x`) before encoding because they are not present in the bundled subsets. This keeps
+directory trees readable instead of emitting replacement glyphs.
 
 The subsets retain layout features, names, symbol and legacy cmaps, and the recommended/notdef
 glyphs. Hinting is removed because PDF viewers render the vector outlines directly. Each subset is
