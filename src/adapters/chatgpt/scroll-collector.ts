@@ -33,7 +33,7 @@ const DEFAULT_DOM_INVENTORY_POLL_MS = 40;
 const EXPECTED_TOP_TURN_WINDOW = 4;
 const EXPECTED_BOTTOM_TURN_WINDOW = 4;
 const MAX_BOTTOM_HYDRATION_PASSES = 2;
-const MAX_MISSING_TURN_ATTEMPTS = 2;
+const MAX_MISSING_TURN_ATTEMPTS = 3;
 const DEFAULT_MAX_MISSING_TURN_RECOVERY_ATTEMPTS = 24;
 const DEFAULT_MISSING_TURN_RECOVERY_BUDGET_MS = 20_000;
 const DEFAULT_TURN_TRAVERSAL_BUDGET_MS = 180_000;
@@ -798,7 +798,13 @@ async function collectStableTurnContainerConversation(
         break;
       }
 
-      if (discoveredTurns === 0 && extractedTurns === 0) {
+      const hasRetriableMissingTurn = getMissingTurnContainerIds(options.turnTrackingState).some(
+        (logicalKey) => {
+          return (attemptsByLogicalKey.get(logicalKey) ?? 0) < MAX_MISSING_TURN_ATTEMPTS;
+        }
+      );
+
+      if (discoveredTurns === 0 && extractedTurns === 0 && !hasRetriableMissingTurn) {
         break;
       }
     }

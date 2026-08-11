@@ -648,7 +648,7 @@ describe("collectChatGptConversation", () => {
     }
   });
 
-  test("prioritizes a twice-hydrated roleless gap over buffered first-mount mutations", async () => {
+  test("hydrates a roleless gap on its third targeted visit before dirty extracted turns", async () => {
     const turnCount = 332;
     const targetIndex = 313;
     const turnHeight = 72;
@@ -737,7 +737,7 @@ describe("collectChatGptConversation", () => {
           }
         }
 
-        if (wrapper.childElementCount > 0 || (index === targetIndex && visits < 2)) {
+        if (wrapper.childElementCount > 0 || (index === targetIndex && visits < 3)) {
           return;
         }
 
@@ -812,8 +812,8 @@ describe("collectChatGptConversation", () => {
         waitForDomSettle: () => Promise.resolve()
       });
 
-      expect(visitCounts.get(targetIndex)).toBe(2);
-      expect(visitOrder[turnCount]).toBe(targetIndex);
+      expect(visitCounts.get(targetIndex)).toBe(3);
+      expect(visitOrder.slice(turnCount)).toEqual([targetIndex, 0, targetIndex]);
       expect(result.messages).toHaveLength(turnCount);
       expect(result.messages.map((message) => message.id)).toEqual(
         Array.from({ length: turnCount }, (_, index) =>
@@ -1205,9 +1205,9 @@ describe("collectChatGptConversation", () => {
       }
     });
 
-    expect(waitCalls).toBe(5);
+    expect(waitCalls).toBe(7);
     expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
-    expect(result.scrollSteps).toBe(4);
+    expect(result.scrollSteps).toBe(6);
     expect(result.warnings).toContain(
       "ChatGPT did not hydrate 1 conversation turn before the scan timeout."
     );
