@@ -6,9 +6,10 @@ import {
 } from "../../../extension/content/listener-registration";
 
 describe("content listener registration", () => {
-  test("a V2 listener state cannot block the V3 listener", () => {
+  test("an older listener state cannot block the V4 listener", () => {
     const state: Record<string, unknown> = {
-      __jelluviContentV2ListenerRegistered: true
+      __jelluviContentV2ListenerRegistered: true,
+      __jelluviContentV3ListenerRegistered: true
     };
     const register = vi.fn();
 
@@ -17,6 +18,7 @@ describe("content listener registration", () => {
     expect(register).toHaveBeenCalledTimes(1);
     expect(state).toMatchObject({
       __jelluviContentV2ListenerRegistered: true,
+      __jelluviContentV3ListenerRegistered: true,
       [CONTENT_LISTENER_STATE_KEY]: true
     });
   });
