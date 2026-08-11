@@ -54,7 +54,7 @@ describe("findChatGptScrollContainer", () => {
     const document = createDocument(`
       <main>
         <section id="not-chat"></section>
-        <section id="chat-scroll">
+        <section id="chat-scroll" style="overflow-y: auto">
           <div data-message-author-role="assistant">Hello</div>
         </section>
       </main>
@@ -78,10 +78,10 @@ describe("findChatGptScrollContainer", () => {
   test("includes exact-label roleless turns in scroll-root eligibility and scoring", () => {
     const document = createDocument(`
       <main>
-        <section id="roleful-scroll">
+        <section id="roleful-scroll" style="overflow-y: auto">
           <div data-message-author-role="assistant">One roleful message</div>
         </section>
-        <section id="roleless-scroll">
+        <section id="roleless-scroll" style="overflow-y: auto">
           <article data-testid="conversation-turn-1">
             <h4 class="sr-only">ChatGPT said:</h4><p>First roleless answer</p>
           </article>
@@ -106,8 +106,8 @@ describe("findChatGptScrollContainer", () => {
 
   test("prefers the deepest nested scroll root when message scores tie", () => {
     const document = createDocument(`
-      <main id="outer">
-        <section id="inner">
+      <main id="outer" style="overflow-y: auto">
+        <section id="inner" style="overflow-y: scroll">
           <div data-message-author-role="assistant">Tail answer</div>
         </section>
       </main>
@@ -123,6 +123,27 @@ describe("findChatGptScrollContainer", () => {
     setScrollMetrics(inner, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
 
     expect(findChatGptScrollContainer(document)).toBe(inner);
+  });
+
+  test("ignores a deeper overflow-visible element with inert scroll geometry", () => {
+    const document = createDocument(`
+      <main id="true-scroll-root" style="overflow-y: auto">
+        <section id="inert-content" style="overflow-y: visible">
+          <div data-message-author-role="assistant">Hydrated answer</div>
+        </section>
+      </main>
+    `);
+    const trueScrollRoot = document.getElementById("true-scroll-root");
+    const inertContent = document.getElementById("inert-content");
+
+    if (!trueScrollRoot || !inertContent) {
+      throw new Error("fixture missing overflow candidates");
+    }
+
+    setScrollMetrics(trueScrollRoot, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+    setScrollMetrics(inertContent, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+
+    expect(findChatGptScrollContainer(document)).toBe(trueScrollRoot);
   });
 
   test("falls back to document.scrollingElement", () => {

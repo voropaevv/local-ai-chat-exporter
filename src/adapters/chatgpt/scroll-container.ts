@@ -1,6 +1,7 @@
 import { getChatGptMessageCandidateCount } from "./extract-visible";
 
 const SCROLL_EPSILON_PX = 2;
+const SCROLLABLE_OVERFLOW_Y = new Set(["auto", "overlay", "scroll"]);
 
 export function findChatGptScrollContainer(root: Document = getCurrentDocument()): Element {
   const candidates = Array.from(root.querySelectorAll("*")).filter((element) => {
@@ -73,7 +74,18 @@ export function scrollDownBy(container: Element, pixels: number): void {
 }
 
 function isScrollable(element: Element): boolean {
-  return getScrollHeight(element) > getClientHeight(element) + SCROLL_EPSILON_PX;
+  if (getScrollHeight(element) <= getClientHeight(element) + SCROLL_EPSILON_PX) {
+    return false;
+  }
+
+  const ownerWindow = element.ownerDocument.defaultView;
+
+  if (ownerWindow === null) {
+    return false;
+  }
+
+  const overflowY = ownerWindow.getComputedStyle(element).overflowY.trim().toLowerCase();
+  return SCROLLABLE_OVERFLOW_Y.has(overflowY);
 }
 
 function getCurrentDocument(): Document {
