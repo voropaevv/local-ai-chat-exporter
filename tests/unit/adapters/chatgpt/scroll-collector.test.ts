@@ -577,6 +577,87 @@ describe("collectChatGptConversation", () => {
     }
   });
 
+  test("waits for target-local exportable content after UI-only turn chrome", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`
+        <main id="chat-scroll">
+          ${Array.from({ length: 4 }, (_, index) => {
+            const turnNumber = index + 1;
+            return `<div data-turn-id-container="logical-turn-${turnNumber}"
+              style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-${turnNumber}">
+                <div data-message-author-role="user" data-message-id="m${turnNumber}">
+                  <div class="markdown"><p>Message ${turnNumber}</p></div>
+                </div>
+              </article>
+            </div>`;
+          }).join("")}
+          <div data-turn-id-container="logical-turn-5" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-5">
+              <div data-message-author-role="assistant" data-message-id="m5">
+                <span class="screen-reader-user-query-label">Assistant response</span>
+                <button type="button">Copy</button>
+              </div>
+            </article>
+          </div>
+        </main>
+      `);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      let scrollAssignments = 0;
+      let finalContentScheduled = false;
+      setScrollMetrics(container, {
+        clientHeight: 100,
+        onScrollTopChange: () => {
+          scrollAssignments += 1;
+          if (scrollAssignments !== 2 || finalContentScheduled) {
+            return;
+          }
+          finalContentScheduled = true;
+          globalThis.setTimeout(() => {
+            const message = container.querySelector("[data-message-id='m5']");
+            message?.insertAdjacentHTML(
+              "beforeend",
+              `<div class="markdown"><p>Hydrated final answer</p></div>`
+            );
+          }, 250);
+        },
+        scrollHeight: 100,
+        scrollTop: 0
+      });
+
+      let settled = false;
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(350);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      const result = await resultPromise;
+      expect(result.messages).toHaveLength(5);
+      expect(result.messages[4]).toMatchObject({
+        id: "m5",
+        text: "Hydrated final answer"
+      });
+      expect(result.completeness.status).toBe("complete");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("indexes activity panels that mount while a target turn hydrates", async () => {
     const document = createDocument(`
       <main id="chat-scroll">

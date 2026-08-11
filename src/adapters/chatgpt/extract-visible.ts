@@ -47,7 +47,7 @@ export function extractVisibleChatGptMessages(
   const messageElements = Array.from(root.querySelectorAll(chatGptSelectors.messageByRole));
 
   for (const messageElement of messageElements) {
-    if (!isVisibleMessageElement(messageElement)) {
+    if (!isVisibleChatGptMessageElement(messageElement)) {
       continue;
     }
 
@@ -155,7 +155,7 @@ function cleanMessageContent(
 function collectFinalAnswerCandidates(turn: Element, messageElement: Element): readonly Element[] {
   const candidates = Array.from(turn.querySelectorAll(CHATGPT_FINAL_ANSWER_SELECTORS)).filter(
     (candidate) => {
-      if (!isVisibleMessageElement(candidate)) {
+      if (!isVisibleChatGptMessageElement(candidate)) {
         return false;
       }
 
@@ -384,7 +384,7 @@ function getCheapIframeDocumentSignal(iframe: HTMLIFrameElement | null): string 
   }
 }
 
-function isVisibleMessageElement(element: Element): boolean {
+export function isVisibleChatGptMessageElement(element: Element): boolean {
   if (element.closest("[hidden], [aria-hidden='true']")) {
     return false;
   }

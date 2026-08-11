@@ -2,7 +2,10 @@ import { buildCompletenessReport } from "../../core/completeness";
 import type { CompletenessReport, ExportedMessage } from "../../core/schema";
 import { stableHash } from "../../utils/hash";
 import { CHATGPT_ACTIVITY_SELECTORS } from "./extract-advanced";
-import { extractVisibleChatGptMessages } from "./extract-visible";
+import {
+  extractVisibleChatGptMessages,
+  isVisibleChatGptMessageElement
+} from "./extract-visible";
 import {
   findChatGptScrollContainer,
   getClientHeight,
@@ -574,9 +577,6 @@ async function collectStableTurnContainerConversation(
       : createDomHydrationWait(options.container));
   const usesDefaultDomWait =
     options.waitForDomSettle === undefined && options.settleDelayMs === undefined;
-  const waitForTurnHydration = usesDefaultDomWait
-    ? createTurnContainerHydrationWait(options.container, options.turnTrackingState)
-    : undefined;
   const waitForBottomHydration = usesDefaultDomWait
     ? createBottomHydrationWait(options.container)
     : undefined;
@@ -591,6 +591,21 @@ async function collectStableTurnContainerConversation(
   const activityElementIndex = createActivityElementIndex(options.container.ownerDocument);
   const linkedActivityElements =
     options.extractMessages === undefined ? activityElementIndex.elements : undefined;
+  const isTurnExtractable = (turnContainer: Element) =>
+    options.extractMessages === undefined
+      ? extractVisibleChatGptMessages(turnContainer, {
+          linkedActivityElements
+        }).length > 0
+      : hasHydratedRoleContent(turnContainer);
+  const waitForTurnHydration = usesDefaultDomWait
+    ? createTurnContainerHydrationWait(
+        options.container,
+        options.turnTrackingState,
+        DEFAULT_DOM_QUIET_MS,
+        DEFAULT_DOM_HYDRATION_MAX_MS,
+        isTurnExtractable
+      )
+    : undefined;
   const mutationTracker = createTurnMutationTracker(options.container, options.turnTrackingState);
   const attemptsByLogicalKey = new Map<string, number>();
   const initialExpectedTurnCount = options.turnTrackingState.expectedTurnContainerIds.length;
@@ -651,8 +666,9 @@ async function collectStableTurnContainerConversation(
 
         // Extract an already hydrated wrapper in place. This keeps the common
         // path O(number of turns) without repainting the whole conversation.
-        if (hasHydratedRoleContent(turnContainer) && hasStableRoleMessageIdentity(turnContainer)) {
+        if (isTurnExtractable(turnContainer) && hasStableRoleMessageIdentity(turnContainer)) {
           mutationTracker.dirtyLogicalKeys.delete(logicalKey);
+          let extractedMessageCount = 0;
           duplicateCount += collectStepMessages(
             turnContainer,
             options.extractMessages,
@@ -660,10 +676,16 @@ async function collectStableTurnContainerConversation(
             dedupeState,
             options.turnTrackingState,
             linkedActivityElements,
-            logicalKey
+            logicalKey,
+            (count) => {
+              extractedMessageCount = count;
+            }
           );
 
-          if (options.turnTrackingState.extractedTurnContainerIds.has(logicalKey)) {
+          if (
+            extractedMessageCount > 0 &&
+            options.turnTrackingState.extractedTurnContainerIds.has(logicalKey)
+          ) {
             budget.recordProgress();
             continue;
           }
@@ -688,7 +710,7 @@ async function collectStableTurnContainerConversation(
           options.container
         );
 
-        if (turnContainer === undefined || !hasHydratedRoleContent(turnContainer)) {
+        if (turnContainer === undefined || !isTurnExtractable(turnContainer)) {
           if (scrollSteps % 8 === 0) {
             await yieldToEventLoop(budget.signal);
           }
@@ -696,6 +718,7 @@ async function collectStableTurnContainerConversation(
         }
 
         mutationTracker.dirtyLogicalKeys.delete(logicalKey);
+        let extractedMessageCount = 0;
         duplicateCount += collectStepMessages(
           turnContainer,
           options.extractMessages,
@@ -703,10 +726,16 @@ async function collectStableTurnContainerConversation(
           dedupeState,
           options.turnTrackingState,
           linkedActivityElements,
-          logicalKey
+          logicalKey,
+          (count) => {
+            extractedMessageCount = count;
+          }
         );
 
-        if (options.turnTrackingState.extractedTurnContainerIds.has(logicalKey)) {
+        if (
+          extractedMessageCount > 0 &&
+          options.turnTrackingState.extractedTurnContainerIds.has(logicalKey)
+        ) {
           budget.recordProgress();
         }
 
@@ -860,7 +889,8 @@ function collectStepMessages(
   dedupeState: DedupeState,
   turnTrackingState?: TurnTrackingState,
   linkedActivityElements?: Iterable<Element>,
-  targetLogicalKey?: string
+  targetLogicalKey?: string,
+  onExtractedMessageCount?: (count: number) => void
 ): number {
   if (turnTrackingState !== undefined) {
     refreshTurnTrackingState(root, turnTrackingState);
@@ -880,6 +910,7 @@ function collectStepMessages(
       },
       linkedActivityElements
     });
+  onExtractedMessageCount?.(visibleMessages.length);
   let duplicateCount = prefilteredDuplicateCount;
 
   for (const [messageOrdinal, message] of visibleMessages.entries()) {
@@ -1902,7 +1933,8 @@ function createTurnContainerHydrationWait(
   container: Element,
   turnTrackingState: TurnTrackingState,
   quietMs = DEFAULT_DOM_QUIET_MS,
-  maximumMs = DEFAULT_DOM_HYDRATION_MAX_MS
+  maximumMs = DEFAULT_DOM_HYDRATION_MAX_MS,
+  isReady: (turnContainer: Element) => boolean = hasHydratedRoleContent
 ): (logicalKey: string, signal?: AbortSignal) => Promise<void> {
   const ownerWindow = container.ownerDocument?.defaultView;
   const Observer =
@@ -1952,7 +1984,7 @@ function createTurnContainerHydrationWait(
         if (
           turnContainer !== undefined &&
           container.contains(turnContainer) &&
-          hasHydratedRoleContent(turnContainer) &&
+          isReady(turnContainer) &&
           Date.now() - lastChangeAt >= quietMs
         ) {
           finish();
@@ -2190,8 +2222,9 @@ function hasHydratedRoleContent(turn: Element): boolean {
 
   return roleElements.some(
     (roleElement) =>
-      (roleElement.textContent ?? "").trim().length > 0 ||
-      roleElement.querySelector("img, pre, table, [role='group']") !== null
+      isVisibleChatGptMessageElement(roleElement) &&
+      ((roleElement.textContent ?? "").trim().length > 0 ||
+        roleElement.querySelector("img, pre, table, [role='group']") !== null)
   );
 }
 
