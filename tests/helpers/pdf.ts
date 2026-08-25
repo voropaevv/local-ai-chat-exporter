@@ -26,19 +26,44 @@ export function extractPdfText(bytes: string | Uint8Array): string {
     ["F3", fontMaps.get("NotoSansMono-Regular")]
   ]);
 
-  return [...body.matchAll(/BT[^\r\n]*\/(F[123])\s+[\d.]+\s+Tf[^\r\n]*<([\da-f]+)>\s+Tj\s+ET/giu)]
-    .map((match) => {
-      const glyphMap = resourceMaps.get(match[1]);
+  const positionedRuns = [
+    ...body.matchAll(
+      /BT[^\r\n]*\/(F[123])\s+[\d.]+\s+Tf\s+([-\d.]+)\s+([-\d.]+)\s+Td\s+<([\da-f]+)>\s+Tj\s+ET/giu
+    )
+  ].map((match) => {
+    const glyphMap = resourceMaps.get(match[1]);
 
-      return (
-        glyphMap === undefined
-          ? []
-          : (match[2].match(/[\da-f]{4}/giu) ?? []).map(
-              (glyphId) => glyphMap.get(glyphId.toLowerCase()) ?? "�"
-            )
-      ).join("");
-    })
-    .join("\n");
+    return {
+      text: (glyphMap === undefined
+        ? []
+        : (match[4].match(/[\da-f]{4}/giu) ?? []).map(
+            (glyphId) => glyphMap.get(glyphId.toLowerCase()) ?? "�"
+          )
+      ).join(""),
+      x: Number.parseFloat(match[2]),
+      y: Number.parseFloat(match[3])
+    };
+  });
+  const lines: { text: string; x: number; y: number }[] = [];
+
+  for (const run of positionedRuns) {
+    const previous = lines.at(-1);
+    if (previous !== undefined && Math.abs(previous.y - run.y) < 0.01 && run.x >= previous.x) {
+      const separator =
+        previous.text.length > 0 &&
+        run.text.length > 0 &&
+        !/\s$/u.test(previous.text) &&
+        !/^\s/u.test(run.text)
+          ? " "
+          : "";
+      previous.text += `${separator}${run.text}`;
+      previous.x = run.x;
+    } else {
+      lines.push({ ...run });
+    }
+  }
+
+  return lines.map((line) => line.text).join("\n");
 }
 
 function decodeUtf16Hex(value: string): string {

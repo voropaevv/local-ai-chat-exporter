@@ -21,7 +21,7 @@ import {
   type ScanCacheSummaryResult,
   type ScanSummary
 } from "../../src/core/messages";
-import type { ConversationExport } from "../../src/core/schema";
+import type { ConversationCaptureProgress, ConversationExport } from "../../src/core/schema";
 import type { RenderedBytes, RenderedFile } from "../../src/renderers";
 import type { DownloadResult } from "../../src/utils/download";
 
@@ -56,8 +56,10 @@ export interface ContentRequestHandlerDependencies {
     options?: Partial<ExportOptions>
   ) => readonly RenderedFile<RenderedBytes>[];
   readonly scanCurrentConversationExport: (options?: {
+    readonly onProgress?: (progress: ConversationCaptureProgress) => void;
     readonly signal?: AbortSignal;
   }) => Promise<ConversationExport>;
+  readonly reportScanProgress?: (progress: ConversationCaptureProgress) => void;
 }
 
 export function createContentRequestHandler(
@@ -99,6 +101,7 @@ export function createContentRequestHandler(
 
     try {
       const conversation = await dependencies.scanCurrentConversationExport({
+        onProgress: dependencies.reportScanProgress,
         signal: activeScanController.signal
       });
       const scanId = createScanId(scanSequence);

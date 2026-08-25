@@ -1,8 +1,10 @@
 import type {
   ExportedCanvasRef,
+  ExportedReasoningSummary,
   ExportedSourceKind,
   ExportedSourceRef,
-  ExportedThinkingBlock
+  ExportedThinkingBlock,
+  ExportedToolInvocation
 } from "../../core/schema";
 import { cleanText } from "../../utils/text";
 import { isSafeHref, normalizeInlineText } from "./extract-links";
@@ -29,6 +31,16 @@ export const CHATGPT_ACTIVITY_SELECTORS = [
   "[data-jelluvi-advanced-kind='activity']",
   "[data-testid*='activity' i]",
   "[aria-label*='activity' i]"
+].join(",");
+
+export const CHATGPT_TOOL_SELECTORS = [
+  "[data-jelluvi-tool]",
+  "[data-jelluvi-plugin]",
+  "[data-testid*='tool-call' i]",
+  "[data-testid*='tool-invocation' i]",
+  "[data-testid*='connector-call' i]",
+  "[data-testid*='app-call' i]",
+  "[aria-label^='Used ' i][role='group']"
 ].join(",");
 
 const ADVANCED_REASONING_SELECTORS = `${THINKING_SELECTORS},${CHATGPT_ACTIVITY_SELECTORS}`;
@@ -66,20 +78,27 @@ export interface ChatGptAdvancedContent {
   readonly displayTimestamp?: string;
   readonly model?: string;
   readonly participant?: string;
+  readonly reasoningSummary?: ExportedReasoningSummary;
+  readonly sourceCaptureWarning?: string;
   readonly sources: readonly ExportedSourceRef[];
   readonly thinkingBlocks: readonly ExportedThinkingBlock[];
+  readonly toolInvocations: readonly ExportedToolInvocation[];
 }
 
 export function extractChatGptAdvancedContent(messageElement: Element): ChatGptAdvancedContent {
   const turn = messageElement.closest(chatGptSelectors.conversationTurn);
   const contentKind = detectContentKind(messageElement, turn);
+  const sourceCapture = extractSources(messageElement, turn, contentKind);
 
   return {
-    canvas: extractCanvasRefs(messageElement),
+    canvas: extractCanvasRefs(turn ?? messageElement),
     ...(contentKind !== undefined ? { contentKind } : {}),
     ...extractMessageMetadata(messageElement, turn),
-    sources: extractSources(messageElement, contentKind),
-    thinkingBlocks: extractThinkingBlocks(messageElement, turn)
+    ...extractReasoningSummary(messageElement, turn),
+    ...(sourceCapture.warning !== undefined ? { sourceCaptureWarning: sourceCapture.warning } : {}),
+    sources: sourceCapture.sources,
+    thinkingBlocks: extractThinkingBlocks(messageElement, turn),
+    toolInvocations: extractToolInvocations(messageElement, turn)
   };
 }
 
@@ -99,10 +118,19 @@ function extractMessageMetadata(
     firstNonEmptyAttribute(turn, ["data-display-timestamp"]) ??
     firstNonEmptyAttribute(separator, ["aria-label"]) ??
     firstTimeText(separator);
-  const model =
+  const explicitModel =
     firstNonEmptyAttribute(messageElement, ["data-model", "data-message-model"]) ??
-    firstNonEmptyAttribute(turn, ["data-model", "data-message-model"]) ??
-    firstSelectorText(messageElement, ["[data-testid*='model' i]", "[aria-label*='model' i]"]);
+    firstNonEmptyAttribute(turn, ["data-model", "data-message-model"]);
+  const model =
+    normalizeExplicitModelLabel(explicitModel) ??
+    normalizeVisibleModelLabel(
+      firstSelectorText(turn ?? messageElement, [
+        "[data-jelluvi-model]",
+        "[data-testid='model-label']",
+        "[data-testid='message-model']",
+        "[aria-label='Model']"
+      ])
+    );
   const participant =
     firstNonEmptyAttribute(messageElement, ["data-participant-name", "data-author-name"]) ??
     firstNonEmptyAttribute(turn, ["data-participant-name", "data-author-name"]) ??
@@ -147,11 +175,16 @@ function detectContentKind(
 
 function extractSources(
   messageElement: Element,
+  turn: Element | null,
   contentKind: "deep_research" | undefined
-): readonly ExportedSourceRef[] {
+): { readonly sources: readonly ExportedSourceRef[]; readonly warning?: string } {
   const sourcesByKey = new Map<string, ExportedSourceRef>();
+  const scopes = collectLinkedSourceScopes(messageElement, turn);
+  let expectedSourceCount = 0;
 
-  for (const anchor of Array.from(messageElement.querySelectorAll(SOURCE_ANCHOR_SELECTORS))) {
+  for (const anchor of scopes.flatMap((scope) =>
+    Array.from(scope.querySelectorAll(SOURCE_ANCHOR_SELECTORS))
+  )) {
     const href = anchor.getAttribute("href")?.trim();
 
     if (href === undefined || !isSafeHref(href)) {
@@ -163,9 +196,45 @@ function extractSources(
     const previous = sourcesByKey.get(key);
 
     sourcesByKey.set(key, previous === undefined ? source : mergeSourceRefs(previous, source));
+    expectedSourceCount = Math.max(expectedSourceCount, getSourceCountHint(anchor));
   }
 
-  return [...sourcesByKey.values()];
+  const sources = [...sourcesByKey.values()];
+  const warning =
+    expectedSourceCount > sources.length
+      ? `ChatGPT indicated ${expectedSourceCount} sources, but only ${sources.length} source URL${
+          sources.length === 1 ? " was" : "s were"
+        } available in the loaded DOM.`
+      : undefined;
+
+  return {
+    sources,
+    ...(warning !== undefined ? { warning } : {})
+  };
+}
+
+function collectLinkedSourceScopes(
+  messageElement: Element,
+  turn: Element | null
+): readonly Element[] {
+  const localScope = turn ?? messageElement;
+  const scopes = new Set<Element>([localScope]);
+  const controlledPanelIds = collectControlledPanelIds(localScope);
+  const linkageTokens = collectTurnLinkageTokens(messageElement, turn);
+
+  for (const panel of Array.from(
+    messageElement.ownerDocument.querySelectorAll(SOURCE_TRAY_SELECTORS)
+  )) {
+    if (
+      localScope.contains(panel) ||
+      (panel.id.length > 0 && controlledPanelIds.has(panel.id)) ||
+      isElementLinkedToTurn(panel, linkageTokens)
+    ) {
+      scopes.add(panel);
+    }
+  }
+
+  return [...scopes];
 }
 
 function buildSourceRef(
@@ -174,11 +243,12 @@ function buildSourceRef(
   contentKind: "deep_research" | undefined
 ): ExportedSourceRef {
   const kind = detectSourceKind(anchor, contentKind);
-  const title =
+  const title = stripSourceCountSuffix(
     firstNonEmptyAttribute(anchor, ["data-title", "title"]) ||
-    normalizeInlineText(anchor.getAttribute("aria-label") ?? "") ||
-    normalizeInlineText(anchor.textContent ?? "") ||
-    sourceHostname(href);
+      normalizeInlineText(anchor.getAttribute("aria-label") ?? "") ||
+      normalizeInlineText(anchor.textContent ?? "") ||
+      sourceHostname(href)
+  );
   const snippet = extractSourceSnippet(anchor);
   const id = firstNonEmptyAttribute(anchor, ["data-source-id", "data-citation-id"]);
   const url = canonicalizeSourceUrl(href);
@@ -251,7 +321,6 @@ function extractThinkingBlocks(
       (element) =>
         !candidates.some((candidate) => candidate !== element && candidate.contains(element))
     )
-    .filter(isVisibleElement)
     .map((element) => {
       const title =
         firstSelectorText(element, ["summary", "h1", "h2", "h3"]) ??
@@ -293,13 +362,7 @@ function collectLinkedReasoningElements(
     )
   );
   const controlledPanelIds = collectControlledPanelIds(localScope);
-  const linkageTokens = [
-    messageElement.getAttribute("data-message-id"),
-    messageElement.getAttribute("data-message-id-testid"),
-    messageElement.id,
-    turn?.getAttribute("data-testid"),
-    turn?.id
-  ].filter((token): token is string => token !== null && token !== undefined && token.length > 0);
+  const linkageTokens = collectTurnLinkageTokens(messageElement, turn);
 
   if (linkageTokens.length === 0) {
     return [...elements];
@@ -319,6 +382,141 @@ function collectLinkedReasoningElements(
   }
 
   return [...elements];
+}
+
+function extractReasoningSummary(
+  messageElement: Element,
+  turn: Element | null
+): Pick<ChatGptAdvancedContent, "reasoningSummary"> {
+  const localScope = turn ?? messageElement;
+  const candidates = [
+    ...Array.from(localScope.querySelectorAll("button, summary, [role='button']")),
+    ...(localScope.hasAttribute("aria-label") ? [localScope] : [])
+  ];
+
+  for (const candidate of candidates) {
+    const label = normalizeInlineText(
+      candidate.getAttribute("aria-label") ?? candidate.textContent ?? ""
+    );
+    const durationSeconds = parseReasoningDuration(label);
+
+    if (durationSeconds !== undefined) {
+      return { reasoningSummary: { label: stripDisclosureChevron(label), durationSeconds } };
+    }
+  }
+
+  return {};
+}
+
+function parseReasoningDuration(label: string): number | undefined {
+  if (!/\b(?:thought|worked)\s+for\b/iu.test(label)) {
+    return undefined;
+  }
+
+  const hours = Number.parseInt(/(\d+)\s*h(?:ours?)?/iu.exec(label)?.[1] ?? "0", 10);
+  const minutes = Number.parseInt(/(\d+)\s*m(?:in(?:utes?)?)?/iu.exec(label)?.[1] ?? "0", 10);
+  const seconds = Number.parseInt(/(\d+)\s*s(?:ec(?:onds?)?)?/iu.exec(label)?.[1] ?? "0", 10);
+  const total = hours * 3600 + minutes * 60 + seconds;
+  return total > 0 ? total : undefined;
+}
+
+function stripDisclosureChevron(label: string): string {
+  return label.replace(/\s*[›>⌄⌃]\s*$/u, "").trim();
+}
+
+function extractToolInvocations(
+  messageElement: Element,
+  turn: Element | null
+): readonly ExportedToolInvocation[] {
+  const localScope = turn ?? messageElement;
+  const candidates = Array.from(localScope.querySelectorAll(CHATGPT_TOOL_SELECTORS)).filter(
+    (element) =>
+      !element.closest(`${SOURCE_TRAY_SELECTORS},${ADVANCED_REASONING_SELECTORS}`) &&
+      !Array.from(localScope.querySelectorAll(CHATGPT_TOOL_SELECTORS)).some(
+        (other) => other !== element && other.contains(element)
+      )
+  );
+  const seen = new Set<string>();
+
+  return candidates.flatMap((element) => {
+    const name =
+      firstNonEmptyAttribute(element, ["data-tool-name", "data-plugin-name", "data-app-name"]) ??
+      firstSelectorText(element, ["[data-jelluvi-tool-name]", "h1", "h2", "h3", "strong"]) ??
+      normalizeInlineText(element.getAttribute("aria-label") ?? "").replace(/^Used\s+/iu, "") ??
+      "Tool";
+    const status = firstNonEmptyAttribute(element, ["data-status", "aria-busy"]);
+    const inputSummary = firstSelectorText(element, [
+      "[data-jelluvi-tool-input]",
+      "[data-testid*='tool-input' i]"
+    ]);
+    const outputSummary = firstSelectorText(element, [
+      "[data-jelluvi-tool-output]",
+      "[data-testid*='tool-output' i]"
+    ]);
+    const invocation = {
+      name: name.trim() || "Tool",
+      ...(status !== undefined ? { status } : {}),
+      ...(inputSummary !== undefined ? { inputSummary } : {}),
+      ...(outputSummary !== undefined ? { outputSummary } : {})
+    };
+    const key = JSON.stringify(invocation);
+
+    if (seen.has(key)) {
+      return [];
+    }
+    seen.add(key);
+    return [invocation];
+  });
+}
+
+function collectTurnLinkageTokens(
+  messageElement: Element,
+  turn: Element | null
+): readonly string[] {
+  return [
+    messageElement.getAttribute("data-message-id"),
+    messageElement.getAttribute("data-message-id-testid"),
+    messageElement.id,
+    turn?.getAttribute("data-testid"),
+    turn?.getAttribute("data-turn-id-container"),
+    turn?.id
+  ].filter((token): token is string => token !== null && token !== undefined && token.length > 0);
+}
+
+function getSourceCountHint(anchor: Element): number {
+  const label = [
+    anchor.getAttribute("aria-label"),
+    anchor.getAttribute("title"),
+    anchor.textContent
+  ]
+    .filter((value): value is string => value !== null)
+    .join(" ");
+  const additional = Number.parseInt(/\+(\d+)\b/u.exec(label)?.[1] ?? "0", 10);
+  return additional > 0 ? additional + 1 : 0;
+}
+
+function stripSourceCountSuffix(value: string): string {
+  return value.replace(/\s*\+\d+\s*$/u, "").trim();
+}
+
+function normalizeExplicitModelLabel(value: string | undefined): string | undefined {
+  const normalized = normalizeInlineText(value ?? "");
+  return normalized.length > 0 && normalized.length <= 100 ? normalized : undefined;
+}
+
+function normalizeVisibleModelLabel(value: string | undefined): string | undefined {
+  const normalized = normalizeInlineText(value ?? "").replace(/^Model:\s*/iu, "");
+
+  if (
+    normalized.length === 0 ||
+    normalized.length > 64 ||
+    /[=(){}[\]]/u.test(normalized) ||
+    !/^(?:ChatGPT|GPT|OpenAI|o\d|Codex|Deep Research)/iu.test(normalized)
+  ) {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 function isReasoningContentElement(element: Element): boolean {

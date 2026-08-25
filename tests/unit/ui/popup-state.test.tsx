@@ -37,7 +37,35 @@ describe("popup state", () => {
     expect(scanning.progressLabel).toBe("Preparing full conversation...");
     expect(scanning.canCancelScan).toBe(true);
 
-    const scanned = popupReducer(scanning, {
+    const capturing = popupReducer(scanning, {
+      progress: {
+        capturedTurnCount: 42,
+        knownTurnCount: 70,
+        messageCount: 81,
+        missingTurnCount: 28,
+        phase: "capture",
+        scrollSteps: 42
+      },
+      sourceUrl: "https://chatgpt.com/c/example",
+      type: "scan_progress"
+    });
+    expect(capturing.progressLabel).toBe("Capturing 42/70 turns · 81 messages");
+
+    const rechecking = popupReducer(capturing, {
+      progress: {
+        capturedTurnCount: 68,
+        knownTurnCount: 70,
+        messageCount: 133,
+        missingTurnCount: 2,
+        phase: "recheck",
+        scrollSteps: 72
+      },
+      sourceUrl: "https://chatgpt.com/c/example",
+      type: "scan_progress"
+    });
+    expect(rechecking.progressLabel).toBe("Rechecking 2 missing turns");
+
+    const scanned = popupReducer(rechecking, {
       scan: {
         completeness,
         messageCount: 3,

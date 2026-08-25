@@ -5,8 +5,10 @@ import type {
   ExportedCodeBlock,
   ExportedImageRef,
   ExportedMessage,
+  ExportedReasoningSummary,
   ExportedSourceRef,
-  ExportedThinkingBlock
+  ExportedThinkingBlock,
+  ExportedToolInvocation
 } from "./schema";
 import { cleanText } from "../utils/text";
 import { stableHash } from "../utils/hash";
@@ -25,6 +27,8 @@ export interface NormalizableMessage {
   readonly attachments?: readonly ExportedAttachmentRef[];
   readonly sources?: readonly ExportedSourceRef[];
   readonly thinkingBlocks?: readonly ExportedThinkingBlock[];
+  readonly reasoningSummary?: ExportedReasoningSummary;
+  readonly toolInvocations?: readonly ExportedToolInvocation[];
   readonly canvas?: readonly ExportedCanvasRef[];
   readonly createdAt?: string;
   readonly model?: string;
@@ -86,6 +90,8 @@ export function normalizeMessagesWithStats(
     const attachments = normalizeAttachmentRefs(message.attachments);
     const sources = normalizeSourceRefs(message.sources);
     const thinkingBlocks = normalizeThinkingBlocks(message.thinkingBlocks);
+    const reasoningSummary = normalizeReasoningSummary(message.reasoningSummary);
+    const toolInvocations = normalizeToolInvocations(message.toolInvocations);
     const canvas = normalizeCanvasRefs(message.canvas);
 
     if (
@@ -95,6 +101,7 @@ export function normalizeMessagesWithStats(
       images.length === 0 &&
       sources.length === 0 &&
       thinkingBlocks.length === 0 &&
+      toolInvocations.length === 0 &&
       canvas.length === 0
     ) {
       continue;
@@ -109,9 +116,11 @@ export function normalizeMessagesWithStats(
         html,
         images,
         markdown,
+        reasoningSummary,
         sources,
         text,
-        thinkingBlocks
+        thinkingBlocks,
+        toolInvocations
       })
     )}`;
     const id = explicitId ?? `msg-${stableHash(`${fingerprint}:${normalizedMessages.length}`)}`;
@@ -144,6 +153,8 @@ export function normalizeMessagesWithStats(
       ...(attachments.length > 0 ? { attachments } : {}),
       ...(message.sources !== undefined ? { sources } : {}),
       ...(message.thinkingBlocks !== undefined ? { thinkingBlocks } : {}),
+      ...(reasoningSummary !== undefined ? { reasoningSummary } : {}),
+      ...(message.toolInvocations !== undefined ? { toolInvocations } : {}),
       ...(message.canvas !== undefined ? { canvas } : {}),
       ...(message.createdAt !== undefined ? { createdAt: message.createdAt } : {}),
       ...(message.model !== undefined ? { model: message.model } : {}),
@@ -155,6 +166,40 @@ export function normalizeMessagesWithStats(
     duplicateCount,
     messages: normalizedMessages
   };
+}
+
+function normalizeReasoningSummary(
+  summary: ExportedReasoningSummary | undefined
+): ExportedReasoningSummary | undefined {
+  const label = normalizeOptionalString(summary?.label);
+
+  if (label === undefined) {
+    return undefined;
+  }
+
+  return {
+    label,
+    ...(summary?.durationSeconds !== undefined && summary.durationSeconds >= 0
+      ? { durationSeconds: summary.durationSeconds }
+      : {})
+  };
+}
+
+function normalizeToolInvocations(
+  invocations: readonly ExportedToolInvocation[] | undefined
+): readonly ExportedToolInvocation[] {
+  return (invocations ?? [])
+    .map((invocation) => ({
+      name: cleanText(invocation.name),
+      ...(invocation.status !== undefined ? { status: cleanText(invocation.status) } : {}),
+      ...(invocation.inputSummary !== undefined
+        ? { inputSummary: cleanText(invocation.inputSummary) }
+        : {}),
+      ...(invocation.outputSummary !== undefined
+        ? { outputSummary: cleanText(invocation.outputSummary) }
+        : {})
+    }))
+    .filter((invocation) => invocation.name.length > 0);
 }
 
 function normalizeAttachmentRefs(

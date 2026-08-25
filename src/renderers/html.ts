@@ -9,7 +9,7 @@ import type {
 import {
   isSafeExternalImageUrl,
   renderImageReferenceText,
-  sanitizeConversationImagesForOutput
+  sanitizeConversationImagesForVisualOutput
 } from "../core/image-safety";
 import { formatSourceKindLabel } from "./advanced-content";
 import {
@@ -31,6 +31,7 @@ import {
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
 
 export interface HtmlRendererOptions extends RendererOptions {
+  readonly interactive?: boolean;
   readonly theme?: HtmlTheme;
 }
 
@@ -95,6 +96,7 @@ const HTML_CSS = `:root {
   }
 }
 * { box-sizing: border-box; }
+html, body { max-width: 100%; overflow-x: hidden; }
 body { margin: 0; color: var(--text); background: var(--page); line-height: 1.62; }
 main { max-width: 960px; margin: 0 auto; padding: 36px 24px 56px; }
 .conversation-header {
@@ -206,16 +208,46 @@ pre {
   background: var(--code);
 }
 code {
+  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--text));
   border-radius: 5px;
   padding: 0.12em 0.32em;
   background: var(--code);
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
   font-size: 0.9em;
 }
-pre code { border-radius: 0; padding: 0; background: transparent; font-size: 0.88rem; }
-table { display: block; width: 100%; margin: 1em 0; overflow-x: auto; border-collapse: collapse; }
+pre code { border: 0; border-radius: 0; padding: 0; background: transparent; font-size: 0.88rem; }
+.copy-surface { position: relative; max-width: 100%; margin: 1em 0; }
+.copy-surface pre { margin: 0; }
+.copy-button {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  opacity: 0;
+  background: var(--surface-raised);
+  color: var(--muted);
+  box-shadow: 0 5px 14px var(--shadow);
+  cursor: pointer;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+:root[data-interactive="true"] .copy-button { display: inline-flex; }
+.copy-button svg { width: 16px; height: 16px; }
+.copy-surface:hover .copy-button, .copy-button:focus-visible { opacity: 1; }
+.copy-button:hover { color: var(--text); }
+.table-shell { max-width: 100%; overflow-x: auto; padding-top: 0; }
+.table-shell .copy-button { position: sticky; float: right; margin: 8px 8px -40px 0; }
+table { width: max-content; min-width: 100%; margin: 0; border-collapse: collapse; table-layout: auto; }
 th, td { border: 1px solid var(--border); padding: 8px 11px; text-align: left; vertical-align: top; }
 th { background: var(--surface-muted); font-weight: 740; }
+.numeric-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+math { font-family: "STIX Two Math", "Times New Roman", serif; font-size: 1.08em; }
+.display-math { max-width: 100%; margin: 1.15em auto; overflow-x: auto; text-align: center; }
 .attachment-grid, .media-grid, .source-grid { display: grid; gap: 10px; margin: 0 0 16px; }
 .attachment-grid { width: min(100%, 600px); grid-template-columns: minmax(0, 1fr); }
 .attachment-card, .media-card, .source-card {
@@ -288,6 +320,9 @@ th { background: var(--surface-muted); font-weight: 740; }
 }
 .media-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
 .media-card { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; align-items: center; padding: 11px 12px; }
+.media-card--embedded { grid-template-columns: 1fr; }
+.embedded-image { display: block; width: 100%; max-height: 620px; border-radius: 10px; object-fit: contain; }
+.media-card--embedded .media-icon { display: none; }
 .media-icon { display: inline-grid; width: 38px; height: 38px; place-items: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .source-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); margin-top: 18px; }
 .source-card { gap: 9px; padding: 13px 14px; }
@@ -329,20 +364,59 @@ footer { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 16p
   .message, pre, table, .attachment-card, .media-card, .source-card { break-inside: avoid; }
   a { color: #000000; text-decoration: underline; }
   .website-preview { display: none; }
+  .copy-button { display: none; }
 }`;
+
+const HTML_COPY_SCRIPT = `<script>
+(() => {
+  const copyText = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {}
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  };
+  document.addEventListener("click", async (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-copy-target]") : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    const surface = button.closest(".copy-surface");
+    if (!surface) return;
+    const target = button.dataset.copyTarget;
+    const text = target === "table"
+      ? [...surface.querySelectorAll("tr")].map((row) => [...row.querySelectorAll("th,td")].map((cell) => cell.innerText.trim()).join("\\t")).join("\\n")
+      : (surface.querySelector("code")?.textContent ?? "");
+    await copyText(text);
+    const label = button.querySelector("span");
+    if (label) {
+      const previous = label.textContent;
+      label.textContent = "Copied";
+      setTimeout(() => { label.textContent = previous; }, 1200);
+    }
+  });
+})();
+</script>`;
 
 export function renderHtml(
   conversation: ConversationExport,
   options: HtmlRendererOptions = {}
 ): RenderedFile {
-  const safeConversation = sanitizeConversationImagesForOutput(conversation);
+  const safeConversation = sanitizeConversationImagesForVisualOutput(conversation);
   const title = normalizeSingleLine(safeConversation.title ?? "Untitled conversation");
   const themeAttribute =
     options.theme === "dark" || options.theme === "light" ? ` data-theme="${options.theme}"` : "";
+  const interactiveAttribute = options.interactive === true ? ' data-interactive="true"' : "";
   const messages = safeConversation.messages.map(renderMessage).join("\n");
 
   const html = `<!doctype html>
-<html lang="en"${themeAttribute}>
+<html lang="en"${themeAttribute}${interactiveAttribute}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -359,6 +433,7 @@ ${messages}
     </section>
     <footer>Generated locally by Jelluvi from content visible in this conversation.</footer>
   </main>
+  ${options.interactive === true ? HTML_COPY_SCRIPT : ""}
 </body>
 </html>
 `;
@@ -460,6 +535,10 @@ function renderMessageMeta(message: ExportedMessage): string {
     parts.push(`<span>Model: ${escapeHtml(message.model)}</span>`);
   }
 
+  if (message.reasoningSummary !== undefined) {
+    parts.push(`<span>${escapeHtml(message.reasoningSummary.label)}</span>`);
+  }
+
   return parts.length === 0 ? "" : `<div class="message-meta">${parts.join("")}</div>`;
 }
 
@@ -476,9 +555,12 @@ function renderMessageBody(message: ExportedMessage): string {
     body += message.codeBlocks.map(renderExportedCodeBlock).join("");
   }
 
-  return `${body}${renderImages(message.images)}${renderSources(message.sources ?? [])}${renderCanvas(
+  return `${body}${renderImages(message.images)}${renderSources(
+    message.sources ?? [],
+    message.markdown
+  )}${renderSourceWarning(message)}${renderTools(message)}${renderCanvas(message)}${renderThinking(
     message
-  )}${renderThinking(message)}`;
+  )}`;
 }
 
 function renderAttachments(attachments: readonly ExportedAttachmentRef[]): string {
@@ -561,17 +643,26 @@ function renderImageCard(image: ExportedImageRef): string {
     image.omittedReason === "embedded_image_omitted"
       ? "Embedded image omitted from the standalone file"
       : dimensions || renderImageReferenceText(image);
+  const embeddedImage =
+    image.dataUri === undefined
+      ? ""
+      : `<img class="embedded-image" alt="${escapeAttribute(label)}" loading="lazy" src="${escapeAttribute(
+          image.dataUri
+        )}">`;
   const tag = href === undefined ? "div" : "a";
   const attributes =
     href === undefined ? "" : ` href="${href}" rel="noopener noreferrer" target="_blank"`;
 
-  return `<${tag} class="media-card"${attributes}><span aria-hidden="true" class="media-icon">IMG</span><span class="media-copy"><strong>${escapeHtml(
+  return `<${tag} class="media-card${embeddedImage.length > 0 ? " media-card--embedded" : ""}"${attributes}>${embeddedImage}<span aria-hidden="true" class="media-icon">IMG</span><span class="media-copy"><strong>${escapeHtml(
     label
   )}</strong><span>${escapeHtml(detail)}</span></span></${tag}>`;
 }
 
-function renderSources(sources: readonly ExportedSourceRef[]): string {
-  const uniqueSources = deduplicateSources(sources);
+function renderSources(sources: readonly ExportedSourceRef[], inlineMarkdown?: string): string {
+  const inlineUrls = new Set(extractMarkdownUrls(inlineMarkdown ?? "").map(canonicalUrl));
+  const uniqueSources = deduplicateSources(sources).filter(
+    (source) => !inlineUrls.has(canonicalUrl(source.url))
+  );
 
   if (uniqueSources.length === 0) {
     return "";
@@ -597,6 +688,44 @@ function renderSources(sources: readonly ExportedSourceRef[]): string {
       )}</span></span>${snippet === undefined ? "" : `<span class="source-snippet">${escapeHtml(snippet)}</span>`}</${tag}>`;
     })
     .join("")}</section>`;
+}
+
+function renderSourceWarning(message: ExportedMessage): string {
+  const warning = message.metadata.sourceCaptureWarning;
+  return typeof warning === "string" && warning.trim().length > 0
+    ? `<section class="advanced-section capture-status" aria-label="Source capture warning">${escapeHtml(
+        warning
+      )}</section>`
+    : "";
+}
+
+function renderTools(message: ExportedMessage): string {
+  const tools = message.toolInvocations ?? [];
+  if (tools.length === 0) {
+    return "";
+  }
+
+  return `<section class="advanced-section" aria-label="Invoked apps and tools"><h3>Invoked apps and tools</h3><ul>${tools
+    .map((tool) => {
+      const details = [tool.status, tool.inputSummary, tool.outputSummary]
+        .filter((value): value is string => value !== undefined && value.trim().length > 0)
+        .join(" — ");
+      return `<li><strong>${escapeHtml(tool.name)}</strong>${
+        details.length > 0 ? ` — ${escapeHtml(details)}` : ""
+      }</li>`;
+    })
+    .join("")}</ul></section>`;
+}
+
+function extractMarkdownUrls(markdown: string): readonly string[] {
+  const markdownLinks = [...markdown.matchAll(/\]\((https?:\/\/[^)\s]+)\)/gu)].map(
+    (match) => match[1]
+  );
+  const plainLinks = [...markdown.matchAll(/(?:^|[\s<])(https?:\/\/[^\s<>)]+)/gu)].map((match) =>
+    match[1].replace(/[.,;:!?]+$/u, "")
+  );
+
+  return [...new Set([...markdownLinks, ...plainLinks])];
 }
 
 function renderCanvas(message: ExportedMessage): string {
@@ -659,9 +788,9 @@ function renderExportedCodeBlock(codeBlock: ExportedCodeBlock): string {
     codeBlock.language === undefined
       ? ""
       : ` class="language-${escapeAttribute(codeBlock.language.replace(/[^A-Za-z0-9_-]/gu, ""))}"`;
-  return `<pre><code${language}>${escapeHtml(
+  return `<div class="copy-surface code-shell"><button aria-label="Copy code" class="copy-button" data-copy-target="code" type="button"><span>Copy</span></button><pre><code${language}>${escapeHtml(
     codeBlock.code.replace(/\r\n?/gu, "\n").replace(/\n*$/gu, "")
-  )}</code></pre>`;
+  )}</code></pre></div>`;
 }
 
 function containsFence(markdown: string): boolean {
@@ -736,6 +865,24 @@ function canonicalUrl(value: string): string {
   try {
     const parsed = new URL(value);
     parsed.hash = "";
+    parsed.hostname = parsed.hostname.toLowerCase();
+
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (
+        key.toLowerCase().startsWith("utm_") ||
+        ["fbclid", "gclid", "mc_cid", "mc_eid", "ref_src"].includes(key.toLowerCase()) ||
+        (["ref", "source"].includes(key.toLowerCase()) &&
+          /^(?:chatgpt(?:\.com)?|openai)$/iu.test(parsed.searchParams.get(key) ?? ""))
+      ) {
+        parsed.searchParams.delete(key);
+      }
+    }
+
+    parsed.searchParams.sort();
+    if (parsed.pathname.length > 1) {
+      parsed.pathname = parsed.pathname.replace(/\/+$/u, "");
+    }
+
     return parsed.toString();
   } catch {
     return value;

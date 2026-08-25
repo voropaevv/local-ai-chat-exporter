@@ -170,13 +170,45 @@ function extractAttachmentDescription(element: Element, name: string): string | 
       "[data-jelluvi-attachment-description]"
     ]);
 
-  if (explicit !== undefined && explicit !== name) {
-    return explicit;
+  const normalizedExplicit = normalizeAttachmentDescription(explicit, name);
+  if (normalizedExplicit !== undefined) {
+    return normalizedExplicit;
   }
 
-  return getDistinctTextLines(element).find(
-    (line) => line !== name && !looksLikeHumanFileSize(line) && line.length <= 160
-  );
+  return getDistinctTextLines(element)
+    .map((line) => normalizeAttachmentDescription(line, name))
+    .find(
+      (line): line is string =>
+        line !== undefined && !looksLikeHumanFileSize(line) && line.length <= 160
+    );
+}
+
+function normalizeAttachmentDescription(
+  value: string | undefined,
+  name: string
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const normalizedName = cleanText(name);
+  const normalized = cleanText(value)
+    .replace(new RegExp(`^${escapeRegExp(normalizedName)}\\s*`, "iu"), "")
+    .trim();
+
+  if (
+    normalized.length === 0 ||
+    normalized === normalizedName ||
+    /^(?:attachment|file|image|document)$/iu.test(normalized)
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function detectAttachmentKind(

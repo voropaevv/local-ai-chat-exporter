@@ -10,8 +10,6 @@ import {
 import { DEFAULT_REDACTION_SETTINGS, type RedactionSettings } from "../core/redaction";
 import type { ConversationExport, ExportFormat } from "../core/schema";
 import { createLocalLibraryRecord, saveLocalLibraryRecord } from "../library/local-library";
-import type { RenderedFile } from "../renderers";
-import { createFileBlob } from "../utils/blob";
 import { copyRenderedFileToClipboard } from "../utils/clipboard";
 import { downloadRenderedFiles } from "../utils/download";
 import { BrandIcon } from "./components/BrandIcon";
@@ -202,8 +200,8 @@ export function PreviewApp() {
         throw new Error("PDF unavailable.");
       }
 
-      openRenderedFile(pdf);
-      return "Opened PDF.";
+      await downloadRenderedFiles([pdf]);
+      return `Downloaded ${pdf.filename}.`;
     });
   }
 
@@ -297,7 +295,7 @@ export function PreviewApp() {
             onClick={handleOpenPdf}
             type="button"
           >
-            PDF
+            Download PDF
           </button>
           <button
             aria-expanded={savePanelOpen}
@@ -419,7 +417,7 @@ export function PreviewApp() {
       ) : renderState.status === "ready" ? (
         <iframe
           className="preview-frame"
-          sandbox="allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts"
           srcDoc={renderState.html.bytes}
           title="Conversation preview"
         />
@@ -541,12 +539,6 @@ async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<
       ok: false
     };
   }
-}
-
-function openRenderedFile(file: RenderedFile<string | Uint8Array>): void {
-  const url = URL.createObjectURL(createFileBlob(file));
-  window.open(url, "_blank", "noopener,noreferrer");
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function parseFormats(value: string | null, allowZip: boolean): readonly ExportFormat[] {

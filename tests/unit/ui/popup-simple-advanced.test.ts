@@ -52,7 +52,10 @@ describe("popup and settings UX source", () => {
     expect(previewSource).toContain("MessageSelector");
     expect(previewSource).toContain("Include visible reasoning");
     expect(previewSource).toContain("includeReasoning: event.currentTarget.checked");
-    expect(previewSource).toContain('sandbox="allow-popups allow-popups-to-escape-sandbox"');
+    expect(previewSource).toContain(
+      'sandbox="allow-popups allow-popups-to-escape-sandbox allow-scripts"'
+    );
+    expect(previewSource).toContain("Download PDF");
     expect(previewSource).toContain("saveLocalLibraryRecord");
   });
 

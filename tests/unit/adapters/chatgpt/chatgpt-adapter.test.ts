@@ -234,7 +234,6 @@ describe("extractVisibleChatGptMessages", () => {
     expect(messages[0]).toMatchObject({
       attachments: [
         {
-          description: "File",
           kind: "file",
           name: "Pasted markdown(16).md"
         },
@@ -414,7 +413,7 @@ describe("extractVisibleChatGptMessages", () => {
     );
   });
 
-  test("preserves rich Markdown and captures only visible turn-linked activity", () => {
+  test("preserves rich Markdown and captures all turn-linked activity for optional export", () => {
     const [message] = extractVisibleChatGptMessages(
       loadFixture("current-rich-sources-activity.html")
     );
@@ -426,7 +425,7 @@ describe("extractVisibleChatGptMessages", () => {
     expect(message.markdown).toContain("  1. Nested one");
     expect(message.markdown).toContain("> Keep this visible quote.");
     expect(message.markdown).toContain(
-      "[jobs.ashbyhq.com +1](https://jobs.ashbyhq.com/example/role?utm_source=chatgpt.com#details)"
+      "[jobs.ashbyhq.com](https://jobs.ashbyhq.com/example/role?utm_source=chatgpt.com#details)"
     );
     expect(message.markdown).not.toContain("Image: [Image]");
     expect(message.images).toEqual([]);
@@ -438,16 +437,93 @@ describe("extractVisibleChatGptMessages", () => {
       url: "https://jobs.ashbyhq.com/example/role"
     });
     expect(message.sources?.[0]?.snippet?.length).toBeLessThanOrEqual(280);
+    expect(message.reasoningSummary).toEqual({
+      durationSeconds: 3240,
+      label: "Worked for 54m"
+    });
+    expect(message.metadata.sourceCaptureWarning).toBe(
+      "ChatGPT indicated 2 sources, but only 1 source URL was available in the loaded DOM."
+    );
     expect(message.thinkingBlocks).toEqual([
       {
         text: "Inspected project files and compared source quality.",
         title: "Activity"
+      },
+      {
+        text: "This hidden reasoning must not be exported.",
+        title: "Activity"
       }
     ]);
-    expect(message.thinkingBlocks?.[0]?.text).not.toContain("hidden reasoning");
+    expect(message.text).not.toContain("hidden reasoning");
     expect(message.text).not.toContain("A concise source card");
     expect(message.text).not.toContain("Worked for 54m");
     expect(message.markdown).not.toContain("Worked for 54m");
+  });
+
+  test("resolves every linked source URL instead of exporting a misleading +N badge", () => {
+    const document = new JSDOM(
+      `<article data-testid="conversation-turn-sources">
+        <div data-message-author-role="assistant" data-message-id="answer-sources">
+          <div class="markdown">
+            <p>Compare <sup><a aria-controls="source-panel" aria-label="Example +1" href="https://one.example/report?utm_source=chatgpt.com">Example +1</a></sup>.</p>
+          </div>
+        </div>
+      </article>
+      <aside data-jelluvi-source-list id="source-panel">
+        <a data-source-id="one" href="https://one.example/report">First report</a>
+        <a data-source-id="two" href="https://two.example/study">Second study</a>
+      </aside>`,
+      { url: "https://chatgpt.com/c/sources" }
+    ).window.document;
+    const [message] = extractVisibleChatGptMessages(document);
+
+    expect(message.markdown).toContain(
+      "[Example](https://one.example/report?utm_source=chatgpt.com)"
+    );
+    expect(message.markdown).not.toContain("+1");
+    expect(message.sources?.map((source) => source.url)).toEqual([
+      "https://one.example/report",
+      "https://two.example/study"
+    ]);
+    expect(message.metadata.sourceCaptureWarning).toBeUndefined();
+  });
+
+  test("serializes rendered math, keeps reasoning duration, and extracts invoked apps structurally", () => {
+    const document = new JSDOM(
+      `<article data-testid="conversation-turn-math-tools">
+        <div data-message-author-role="assistant" data-message-id="answer-math-tools">
+          <button aria-expanded="true">Thought for 2m 46s</button>
+          <div class="markdown">
+            <p>Inline <span class="katex"><math><semantics><annotation encoding="application/x-tex">x_1 + y^2</annotation></semantics></math></span>.</p>
+            <div class="katex-display"><span class="katex"><math><semantics><annotation encoding="application/x-tex">320 \\times 24 \\times 0.01 = 76.8</annotation></semantics></math></span></div>
+            <p data-testid="model-label">Model: streams per GPU=f(resolution,fps,model)</p>
+          </div>
+          <section data-jelluvi-tool data-tool-name="Python" data-status="complete">
+            <span data-jelluvi-tool-input>Calculate capacity</span>
+            <span data-jelluvi-tool-output>76.8 streams</span>
+          </section>
+        </div>
+      </article>`,
+      { url: "https://chatgpt.com/c/math-tools" }
+    ).window.document;
+    const [message] = extractVisibleChatGptMessages(document);
+
+    expect(message.markdown).toContain("\\(x_1 + y^2\\)");
+    expect(message.markdown).toContain("$$320 \\times 24 \\times 0.01 = 76.8$$");
+    expect(message.reasoningSummary).toEqual({
+      durationSeconds: 166,
+      label: "Thought for 2m 46s"
+    });
+    expect(message.model).toBeUndefined();
+    expect(message.toolInvocations).toEqual([
+      {
+        inputSummary: "Calculate capacity",
+        name: "Python",
+        outputSummary: "76.8 streams",
+        status: "complete"
+      }
+    ]);
+    expect(message.text).not.toContain("Calculate capacity");
   });
 
   test("does not turn a regular answer list item into a source snippet", () => {

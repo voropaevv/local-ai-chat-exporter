@@ -74,13 +74,12 @@ function makeConversation(): ConversationExport {
 }
 
 describe("image output safety", () => {
-  test("default text exports never emit raw data:image payloads", () => {
+  test("text and document exports never emit raw data:image payloads", () => {
     const conversation = makeConversation();
     const rendered = [
       renderMarkdown(conversation).bytes,
       renderTxt(conversation).bytes,
       renderCsv(conversation).bytes,
-      renderHtml(conversation).bytes,
       renderPdf(conversation).bytes,
       strFromU8(unzipSync(renderDocx(conversation).bytes)["word/document.xml"])
     ];
@@ -88,6 +87,8 @@ describe("image output safety", () => {
     for (const output of rendered) {
       expect(output).not.toContain("data:image");
     }
+
+    expect(renderHtml(conversation).bytes).toContain('src="data:image/png;base64,');
   });
 
   test("markdown replaces embedded image payloads with compact metadata placeholders", () => {
@@ -116,13 +117,15 @@ describe("image output safety", () => {
     expect(embeddedImage.hash).toMatch(/^h[0-9a-z]{7}$/);
   });
 
-  test("zip bundle default files do not contain raw data URI payloads", () => {
+  test("zip bundle keeps portable images in HTML and hashed asset files only", () => {
     const entries = unzipSync(renderZip(makeConversation()).bytes);
 
-    for (const [name, bytes] of Object.entries(entries)) {
-      const text = strFromU8(bytes);
-
-      expect(`${name}\n${text}`).not.toContain("data:image");
-    }
+    expect(strFromU8(entries["conversation.md"])).not.toContain("data:image");
+    expect(strFromU8(entries["conversation.json"])).not.toContain("data:image");
+    expect(strFromU8(entries["manifest.json"])).not.toContain("data:image");
+    expect(strFromU8(entries["conversation.html"])).toContain('src="data:image/png;base64,');
+    expect(Object.keys(entries).some((name) => /^assets\/h[0-9a-z]{7}\.png$/u.test(name))).toBe(
+      true
+    );
   });
 });

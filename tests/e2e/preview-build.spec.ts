@@ -23,6 +23,7 @@ test("preview page is built and no UI points at nested popup preview path", asyn
   );
 
   expect(`${distPopup}\n${distPreview}`).not.toContain("popup/popup/index.html");
+  expect(`${distPopup}\n${distPreview}`).not.toContain('rel="modulepreload"');
   expect(sourceCss).toContain(".app-shell--preview");
   expect(sourceCss).toContain(".app-shell--popup");
   expect(sourceCss).toContain("overflow: auto");

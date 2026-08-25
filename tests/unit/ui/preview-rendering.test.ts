@@ -94,7 +94,11 @@ describe("preview rendering", () => {
       throw new Error("expected ready preview state");
     }
 
-    expect(rendered.html.bytes).toContain('<html lang="en" data-theme="dark">');
+    expect(rendered.html.bytes).toContain(
+      '<html lang="en" data-theme="dark" data-interactive="true">'
+    );
     expect(rendered.html.bytes).toContain(':root[data-theme="dark"]');
+    expect(rendered.html.bytes).toContain('data-copy-target="code"');
+    expect(rendered.html.bytes).toContain("<script>");
   });
 });

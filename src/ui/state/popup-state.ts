@@ -20,6 +20,7 @@ import {
   type ScanSummary
 } from "../../core/messages";
 import type { CompletenessReport, ExportFormat } from "../../core/schema";
+import type { ConversationCaptureProgress } from "../../core/schema";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettingsInput } from "../../renderers";
 import type { MarkdownProfile } from "../../renderers";
 import { DEFAULT_FILENAME_TEMPLATE } from "../filename-template";
@@ -73,6 +74,11 @@ export type PopupAction =
   | { readonly type: "active_tab_info_started" }
   | { readonly message: string; readonly type: "active_tab_info_failed" }
   | { readonly type: "scan_started" }
+  | {
+      readonly progress: ConversationCaptureProgress;
+      readonly sourceUrl: string;
+      readonly type: "scan_progress";
+    }
   | { readonly type: "scan_succeeded"; readonly scan: ScanSummary }
   | { readonly type: "scan_failed"; readonly message: string }
   | { readonly type: "scan_cancelled" }
@@ -173,6 +179,18 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         errorMessage: undefined,
         progressLabel: "Preparing full conversation...",
         scanStatus: "scanning"
+      };
+    case "scan_progress":
+      if (
+        state.scanStatus !== "scanning" ||
+        (state.sourceUrl !== undefined && state.sourceUrl !== action.sourceUrl)
+      ) {
+        return state;
+      }
+
+      return {
+        ...state,
+        progressLabel: formatCaptureProgress(action.progress)
       };
     case "scan_succeeded":
       return {
@@ -316,6 +334,26 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
           redactionPreset: action.redactionPreset
         }
       };
+  }
+}
+
+export function formatCaptureProgress(progress: ConversationCaptureProgress): string {
+  switch (progress.phase) {
+    case "inventory":
+      return progress.knownTurnCount > 0
+        ? `Inventory: ${formatCount(progress.knownTurnCount, "turn")}`
+        : "Inventory: finding conversation turns…";
+    case "capture":
+      return progress.knownTurnCount > 0
+        ? `Capturing ${progress.capturedTurnCount}/${progress.knownTurnCount} turns · ${formatCount(
+            progress.messageCount,
+            "message"
+          )}`
+        : `Capturing · ${formatCount(progress.messageCount, "message")}`;
+    case "recheck":
+      return `Rechecking ${formatCount(progress.missingTurnCount, "missing turn")}`;
+    case "verify":
+      return `Verifying ${formatCount(progress.messageCount, "message")}`;
   }
 }
 

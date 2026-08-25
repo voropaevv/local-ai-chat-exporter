@@ -10,8 +10,13 @@ import type { PlatformAdapter } from "../types";
 import { createVisibleAdapterContract } from "../shared/contract";
 import { cleanChatGptNode, type CleanedChatGptNode } from "./clean-chatgpt-node";
 import { detectChatGpt } from "./detect";
-import { CHATGPT_ACTIVITY_SELECTORS, extractChatGptAdvancedContent } from "./extract-advanced";
+import {
+  CHATGPT_ACTIVITY_SELECTORS,
+  CHATGPT_TOOL_SELECTORS,
+  extractChatGptAdvancedContent
+} from "./extract-advanced";
 import { CHATGPT_ATTACHMENT_SELECTORS, extractChatGptAttachments } from "./extract-attachments";
+import { extractImageRefs } from "./extract-images";
 import { CHATGPT_FINAL_ANSWER_SELECTORS, chatGptSelectors } from "./selectors";
 
 const CHATGPT_PROVIDER = getProviderDefinition("chatgpt");
@@ -68,12 +73,18 @@ export function extractVisibleChatGptMessages(
     const advancedContent = extractChatGptAdvancedContent(messageElement);
     const attachments = extractChatGptAttachments(messageElement, turn);
     const cleanedNode = cleanMessageContent(messageElement, turn, role);
+    const attachmentImages = extractImageRefs(turn ?? messageElement, {
+      chatGptSpecificFiltering: true,
+      includeAttachmentImages: true
+    }).filter((image) => image.dataUri !== undefined || image.src !== undefined);
+    const images = uniqueStructuredValues([...cleanedNode.images, ...attachmentImages]);
 
     if (
       cleanedNode.text.length === 0 &&
       cleanedNode.codeBlocks.length === 0 &&
-      cleanedNode.images.length === 0 &&
-      attachments.length === 0
+      images.length === 0 &&
+      attachments.length === 0 &&
+      advancedContent.toolInvocations.length === 0
     ) {
       continue;
     }
@@ -103,11 +114,17 @@ export function extractVisibleChatGptMessages(
       markdown: cleanedNode.markdown,
       html: cleanedNode.html,
       codeBlocks: cleanedNode.codeBlocks,
-      images: cleanedNode.images,
+      images,
       ...(attachments.length > 0 ? { attachments } : {}),
       ...(advancedContent.sources.length > 0 ? { sources: advancedContent.sources } : {}),
       ...(advancedContent.thinkingBlocks.length > 0
         ? { thinkingBlocks: advancedContent.thinkingBlocks }
+        : {}),
+      ...(advancedContent.reasoningSummary !== undefined
+        ? { reasoningSummary: advancedContent.reasoningSummary }
+        : {}),
+      ...(advancedContent.toolInvocations.length > 0
+        ? { toolInvocations: advancedContent.toolInvocations }
         : {}),
       ...(advancedContent.canvas.length > 0 ? { canvas: advancedContent.canvas } : {}),
       ...(advancedContent.createdAt !== undefined ? { createdAt: advancedContent.createdAt } : {}),
@@ -118,6 +135,9 @@ export function extractVisibleChatGptMessages(
           : {}),
         ...(advancedContent.displayTimestamp !== undefined
           ? { displayTimestamp: advancedContent.displayTimestamp }
+          : {}),
+        ...(advancedContent.sourceCaptureWarning !== undefined
+          ? { sourceCaptureWarning: advancedContent.sourceCaptureWarning }
           : {})
       }
     });
@@ -278,6 +298,7 @@ function getCheapStableMessageRevision(messageElement: Element, turn: Element | 
       [
         CHATGPT_ATTACHMENT_SELECTORS,
         CHATGPT_ACTIVITY_SELECTORS,
+        CHATGPT_TOOL_SELECTORS,
         "[data-jelluvi-advanced-kind='thinking']",
         "[data-jelluvi-advanced-kind='reasoning']",
         "[data-testid*='thinking' i]",

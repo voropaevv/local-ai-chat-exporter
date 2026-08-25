@@ -59,7 +59,7 @@ function getStatusLabel(
   partial: boolean
 ): string {
   if (scanStatus === "scanning") {
-    return "Preparing…";
+    return progressLabel;
   }
 
   if (scanStatus === "exporting") {

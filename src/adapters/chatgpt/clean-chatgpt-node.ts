@@ -2,7 +2,7 @@ import type { ExportedCodeBlock, ExportedImageRef } from "../../core/schema";
 import { isSafeExternalImageUrl, renderImageReferenceText } from "../../core/image-safety";
 import { cleanText } from "../../utils/text";
 import { CHATGPT_ATTACHMENT_SELECTORS } from "./extract-attachments";
-import { CHATGPT_ACTIVITY_SELECTORS } from "./extract-advanced";
+import { CHATGPT_ACTIVITY_SELECTORS, CHATGPT_TOOL_SELECTORS } from "./extract-advanced";
 import { extractCodeBlocks } from "./extract-code";
 import { extractImageRefs, removeNonContentImageElements } from "./extract-images";
 import { isSafeHref, normalizeInlineText, renderMarkdownLink } from "./extract-links";
@@ -75,6 +75,7 @@ const GENERIC_REMOVABLE_SELECTORS = [
 const CHATGPT_REMOVABLE_SELECTORS = [
   "iframe",
   CHATGPT_ACTIVITY_SELECTORS,
+  CHATGPT_TOOL_SELECTORS,
   CHATGPT_ATTACHMENT_SELECTORS,
   CHATGPT_IDENTITY_SELECTORS,
   CHATGPT_SOURCE_DECORATION_IMAGE_SELECTORS,
@@ -168,18 +169,29 @@ function copyResolvedImageMetadata(sourceRoot: Element, clonedRoot: Element): vo
 }
 
 function normalizeMathMl(root: Element): void {
-  root.querySelectorAll("math").forEach((mathElement) => {
+  const selector = ".katex, mjx-container, math, [data-latex], [data-tex]";
+  const candidates = Array.from(root.querySelectorAll(selector)).filter(
+    (element) => (element.parentElement?.closest(selector) ?? null) === null
+  );
+
+  candidates.forEach((mathElement) => {
     const texAnnotation = Array.from(mathElement.querySelectorAll("annotation[encoding]")).find(
       (annotation) =>
         annotation.getAttribute("encoding")?.toLocaleLowerCase() === "application/x-tex"
     );
     const replacementText =
+      mathElement.getAttribute("data-latex")?.trim() ||
+      mathElement.getAttribute("data-tex")?.trim() ||
       texAnnotation?.textContent?.trim() ||
       mathElement.getAttribute("aria-label")?.trim() ||
       mathElement.textContent?.trim() ||
       "";
+    const display =
+      mathElement.matches("mjx-container[display='true'], .katex-display") ||
+      mathElement.closest(".katex-display") !== null;
+    const serialized = display ? `\n$$${replacementText}$$\n` : `\\(${replacementText}\\)`;
 
-    mathElement.replaceWith(mathElement.ownerDocument.createTextNode(replacementText));
+    mathElement.replaceWith(mathElement.ownerDocument.createTextNode(serialized));
   });
 }
 
@@ -571,13 +583,15 @@ function renderMarkdownListItemContent(
 }
 
 function renderAnchorLabel(element: Element): string {
-  const text = normalizeInlineText(element.textContent ?? "");
+  const text = stripSourceCountSuffix(normalizeInlineText(element.textContent ?? ""));
 
   if (text.length > 0) {
     return text;
   }
 
-  const ariaLabel = normalizeInlineText(element.getAttribute("aria-label") ?? "");
+  const ariaLabel = stripSourceCountSuffix(
+    normalizeInlineText(element.getAttribute("aria-label") ?? "")
+  );
   if (ariaLabel.length > 0) {
     return ariaLabel;
   }
@@ -589,6 +603,10 @@ function renderAnchorLabel(element: Element): string {
   } catch {
     return "";
   }
+}
+
+function stripSourceCountSuffix(value: string): string {
+  return value.replace(/\s*\+\d+\s*$/u, "").trim();
 }
 
 function renderMarkdownCodeBlock(codeBlock: ExportedCodeBlock): string {

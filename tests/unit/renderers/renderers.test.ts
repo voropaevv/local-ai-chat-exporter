@@ -507,6 +507,35 @@ describe("renderHtml", () => {
     expect(document.querySelector("[aria-label='Capture status']")).toBeNull();
   });
 
+  test("keeps rich blocks bounded and enables copy controls only in interactive Preview", () => {
+    const conversation = makeConversation();
+    const richConversation: ConversationExport = {
+      ...conversation,
+      messageCount: 1,
+      messages: [
+        makeMessage({
+          codeBlocks: [],
+          markdown:
+            "First line\nSecond line with `child_safety_physical_aggression_alert`.\n\n$$320 \\times 24 \\times 0.01 = 76.8$$\n\n| Stage | Price |\n| --- | --- |\n| Pilot | $45 000–50 000 |\n\n```ts\nconst safe = true;\n```"
+        })
+      ]
+    };
+    const standalone = renderHtml(richConversation).bytes;
+    const interactive = renderHtml(richConversation, { interactive: true }).bytes;
+    const document = new JSDOM(interactive).window.document;
+
+    expect(standalone).not.toContain("<script>");
+    expect(interactive).toContain("<script>");
+    expect(document.querySelectorAll("[data-copy-target='table']")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-copy-target='code']")).toHaveLength(1);
+    expect(document.querySelector(".message-body br")).not.toBeNull();
+    expect(document.querySelector("math[display='block']")?.textContent).toContain("320");
+    expect(document.querySelector("td.numeric-cell")?.textContent).toBe("$45 000–50 000");
+    expect(interactive).toContain(".table-shell { max-width: 100%; overflow-x: auto;");
+    expect(interactive).toContain(".numeric-cell { white-space: nowrap;");
+    expect(interactive).toContain("overflow-x: hidden;");
+  });
+
   test("opens every user-facing external Preview link in an isolated new tab", () => {
     const conversation = makeConversation();
     const rendered = renderHtml({
@@ -660,6 +689,29 @@ describe("renderHtml", () => {
     expect(document.querySelectorAll(".media-card")).toHaveLength(1);
     expect(document.body.textContent).toContain("Result chart");
     expect(rendered).not.toContain("google.com/s2/favicons");
+  });
+
+  test("does not repeat a citation card when the same tracked URL is already inline", () => {
+    const rendered = renderHtml({
+      ...makeConversation(),
+      messageCount: 1,
+      messages: [
+        makeMessage({
+          markdown: "[Primary source](https://example.com/report/?utm_source=chatgpt.com#evidence)",
+          sources: [
+            {
+              kind: "citation",
+              title: "Primary source",
+              url: "https://example.com/report"
+            }
+          ]
+        })
+      ]
+    }).bytes;
+    const document = new JSDOM(rendered).window.document;
+
+    expect(document.querySelectorAll(".source-card")).toHaveLength(0);
+    expect(document.querySelectorAll(".message-body a")).toHaveLength(1);
   });
 });
 

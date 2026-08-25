@@ -198,6 +198,16 @@ export function renderInlineMarkdown(input: string): string {
   while (cursor < input.length) {
     const character = input[cursor];
 
+    if (input.startsWith("\\(", cursor)) {
+      const closingIndex = input.indexOf("\\)", cursor + 2);
+
+      if (closingIndex !== -1) {
+        output += renderMathMarkup(input.slice(cursor + 2, closingIndex), false);
+        cursor = closingIndex + 2;
+        continue;
+      }
+    }
+
     if (character === "\\" && cursor + 1 < input.length) {
       output += escapeHtml(input[cursor + 1]);
       cursor += 2;
@@ -326,6 +336,13 @@ function renderMarkdownBlocks(lines: readonly string[]): string {
       continue;
     }
 
+    if (line.trim().startsWith("$$")) {
+      const parsed = parseDisplayMath(lines, index);
+      blocks.push(renderMathMarkup(parsed.tex, true));
+      index = parsed.nextIndex;
+      continue;
+    }
+
     const fence = /^(\s*)(`{3,}|~{3,})([^`]*)$/u.exec(line);
 
     if (fence !== null) {
@@ -390,7 +407,7 @@ function renderMarkdownBlocks(lines: readonly string[]): string {
       index += 1;
     }
 
-    blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    blocks.push(`<p>${renderInlineMarkdown(paragraph.join("\n"))}</p>`);
   }
 
   return blocks.join("");
@@ -460,7 +477,7 @@ function parseList(
 
 function flushListItemParagraph(parts: string[], lines: readonly string[]): void {
   if (lines.length > 0) {
-    parts.push(renderInlineMarkdown(lines.join(" ")));
+    parts.push(renderInlineMarkdown(lines.join("\n")));
   }
 }
 
@@ -535,7 +552,12 @@ function renderCodeBlock(language: string | undefined, code: string): string {
   const languageClass =
     language === undefined ? "" : ` class="language-${escapeAttribute(language)}"`;
 
-  return `<pre><code${languageClass}>${escapeHtml(code.replace(/\n*$/gu, ""))}</code></pre>`;
+  const label = language === undefined ? "code" : language;
+  return `<div class="copy-surface code-shell"><button aria-label="Copy ${escapeAttribute(
+    label
+  )}" class="copy-button" data-copy-target="code" type="button">${renderCopyIcon()}<span>Copy</span></button><pre><code${languageClass}>${escapeHtml(
+    code.replace(/\n*$/gu, "")
+  )}</code></pre></div>`;
 }
 
 function isTableStart(lines: readonly string[], index: number): boolean {
@@ -564,13 +586,21 @@ function parseTable(
   }
 
   return {
-    html: `<table><thead><tr>${header
+    html: `<div class="copy-surface table-shell"><button aria-label="Copy table" class="copy-button" data-copy-target="table" type="button">${renderCopyIcon()}<span>Copy</span></button><table><thead><tr>${header
       .map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`)
       .join("")}</tr></thead><tbody>${bodyRows
       .map(
-        (row) => `<tr>${row.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join("")}</tr>`
+        (row) =>
+          `<tr>${row
+            .map(
+              (cell) =>
+                `<td${isNumericTableCell(cell) ? ' class="numeric-cell"' : ""}>${renderInlineMarkdown(
+                  cell
+                )}</td>`
+            )
+            .join("")}</tr>`
       )
-      .join("")}</tbody></table>`,
+      .join("")}</tbody></table></div>`,
     nextIndex: index
   };
 }
@@ -590,11 +620,88 @@ function isBlockStart(lines: readonly string[], index: number): boolean {
   return (
     /^(\s*)(`{3,}|~{3,})/u.test(line) ||
     /^(#{1,6})\s+/u.test(line.trim()) ||
+    line.trim().startsWith("$$") ||
     /^\s*>\s?/u.test(line) ||
     isThematicBreak(line) ||
     parseListMarker(line) !== undefined ||
     isTableStart(lines, index)
   );
+}
+
+function parseDisplayMath(
+  lines: readonly string[],
+  startIndex: number
+): { readonly nextIndex: number; readonly tex: string } {
+  const first = lines[startIndex].trim();
+  const oneLine = /^\$\$(.*)\$\$$/u.exec(first);
+
+  if (oneLine !== null) {
+    return { nextIndex: startIndex + 1, tex: oneLine[1].trim() };
+  }
+
+  const content = [first.replace(/^\$\$/u, "")];
+  let index = startIndex + 1;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (line.trim().endsWith("$$")) {
+      content.push(line.replace(/\$\$\s*$/u, ""));
+      index += 1;
+      break;
+    }
+    content.push(line);
+    index += 1;
+  }
+
+  return { nextIndex: index, tex: content.join(" ").trim() };
+}
+
+function renderMathMarkup(tex: string, display: boolean): string {
+  const normalized = tex
+    .replace(/\\times\b/gu, "×")
+    .replace(/\\cdot\b/gu, "·")
+    .replace(/\\leq?\b/gu, "≤")
+    .replace(/\\geq?\b/gu, "≥")
+    .replace(/\\neq\b/gu, "≠")
+    .replace(/\\pm\b/gu, "±")
+    .replace(/\\%/gu, "%")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const tokens = normalized.split(/(\s+|[=+×·÷≤≥≠±<>])/u).filter(Boolean);
+  const body = tokens
+    .map((token) => {
+      if (/^\s+$/u.test(token)) {
+        return '<mspace width="0.3em"></mspace>';
+      }
+      if (/^[=+×·÷≤≥≠±<>]$/u.test(token)) {
+        return `<mo>${escapeHtml(token)}</mo>`;
+      }
+      const superscript = /^(.+?)\^\{?([^{}]+)\}?$/u.exec(token);
+      if (superscript !== null) {
+        return `<msup><mi>${escapeHtml(superscript[1])}</mi><mn>${escapeHtml(
+          superscript[2]
+        )}</mn></msup>`;
+      }
+      if (/^[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)$/u.test(token)) {
+        return `<mn>${escapeHtml(token)}</mn>`;
+      }
+      return `<mi>${escapeHtml(token)}</mi>`;
+    })
+    .join("");
+
+  return `<math${display ? ' class="display-math" display="block"' : ""} aria-label="${escapeAttribute(
+    normalized
+  )}"><mrow>${body}</mrow></math>`;
+}
+
+function isNumericTableCell(value: string): boolean {
+  return /^\s*(?:[$€£₽₸]\s*)?[+-]?[\d\s.,]+(?:\s*[-–—]\s*(?:[$€£₽₸]\s*)?[\d\s.,]+)?(?:\s*[%$€£₽₸])?\s*$/u.test(
+    value
+  );
+}
+
+function renderCopyIcon(): string {
+  return '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect height="13" rx="2" width="13" x="8" y="8"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"></path></svg>';
 }
 
 function isThematicBreak(line: string): boolean {

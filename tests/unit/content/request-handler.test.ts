@@ -91,7 +91,8 @@ function createHandler(overrides: Partial<Parameters<typeof createContentRequest
 
 describe("content request handler scan cache", () => {
   test("scan request calls the scanner once and caches the full conversation", async () => {
-    const { handler, scanCurrentConversationExport } = createHandler();
+    const reportScanProgress = vi.fn();
+    const { handler, scanCurrentConversationExport } = createHandler({ reportScanProgress });
 
     const summary = await handler({ type: CONTENT_SCAN_MESSAGE });
 
@@ -101,6 +102,12 @@ describe("content request handler scan cache", () => {
       sourceUrl: "https://chatgpt.com/c/cached"
     });
     expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
+    expect(scanCurrentConversationExport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onProgress: reportScanProgress,
+        signal: expect.any(AbortSignal)
+      })
+    );
   });
 
   test("cache summary request rehydrates popup state without rescanning", async () => {

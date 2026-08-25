@@ -15,6 +15,8 @@ export type ChatPlatform = ProviderId | "unknown";
 
 export type ChatRole = (typeof CHAT_ROLES)[number];
 
+export type CapturePhase = "inventory" | "capture" | "recheck" | "verify";
+
 export type CompletenessStatus = (typeof COMPLETENESS_STATUSES)[number];
 
 export type ExportFormat = "md" | "txt" | "json" | "csv" | "html" | "pdf" | "docx" | "zip" | "png";
@@ -60,6 +62,18 @@ export interface ExportedSourceRef {
   readonly snippet?: string;
 }
 
+export interface ExportedReasoningSummary {
+  readonly label: string;
+  readonly durationSeconds?: number;
+}
+
+export interface ExportedToolInvocation {
+  readonly name: string;
+  readonly status?: string;
+  readonly inputSummary?: string;
+  readonly outputSummary?: string;
+}
+
 export interface ExportedThinkingBlock {
   readonly title?: string;
   readonly text: string;
@@ -86,6 +100,8 @@ export interface ExportedMessage {
   readonly attachments?: readonly ExportedAttachmentRef[];
   readonly sources?: readonly ExportedSourceRef[];
   readonly thinkingBlocks?: readonly ExportedThinkingBlock[];
+  readonly reasoningSummary?: ExportedReasoningSummary;
+  readonly toolInvocations?: readonly ExportedToolInvocation[];
   readonly canvas?: readonly ExportedCanvasRef[];
   readonly createdAt?: string;
   readonly model?: string;
@@ -103,6 +119,20 @@ export interface CompletenessReport {
   readonly scrollSteps: number;
   readonly duplicateCount: number;
   readonly platformWarnings: readonly string[];
+  readonly knownTurnCount?: number;
+  readonly missingTurnIds?: readonly string[];
+  readonly recheckedTurnCount?: number;
+  readonly messageContentHashes?: readonly string[];
+  readonly capturePhases?: readonly CapturePhase[];
+}
+
+export interface ConversationCaptureProgress {
+  readonly capturedTurnCount: number;
+  readonly knownTurnCount: number;
+  readonly messageCount: number;
+  readonly missingTurnCount: number;
+  readonly phase: CapturePhase;
+  readonly scrollSteps: number;
 }
 
 export interface ConversationExport {

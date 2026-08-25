@@ -38,9 +38,9 @@ export default defineConfig({
   plugins: [preact(), copyExtensionStaticFiles()],
   build: {
     emptyOutDir: true,
-    modulePreload: {
-      polyfill: false
-    },
+    // Chromium extension pages report Vite's cross-chunk preload hints as
+    // cross-world resource mismatches. Native ESM loading is sufficient here.
+    modulePreload: false,
     outDir: distDir,
     sourcemap: false,
     rollupOptions: {

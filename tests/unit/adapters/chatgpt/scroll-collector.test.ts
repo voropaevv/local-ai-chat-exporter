@@ -88,6 +88,183 @@ describe("findChatGptScrollContainer", () => {
 });
 
 describe("collectChatGptConversation", () => {
+  test("produces identical ordered ids and content hashes across three repeated scans", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 120px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>First prompt</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 120px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">
+              <div class="markdown"><p>Stable answer</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 200, scrollHeight: 200, scrollTop: 0 });
+    const runs = [];
+    for (let index = 0; index < 3; index += 1) {
+      runs.push(
+        await collectChatGptConversation({
+          document,
+          scrollContainer: container,
+          waitForDomSettle: () => Promise.resolve()
+        })
+      );
+    }
+
+    const snapshots = runs.map((run) => ({
+      hashes: run.completeness.messageContentHashes,
+      ids: run.messages.map((message) => message.id)
+    }));
+    expect(snapshots[0]).toEqual({
+      hashes: expect.arrayContaining([
+        expect.stringMatching(/^user:h/u),
+        expect.stringMatching(/^assistant:h/u)
+      ]),
+      ids: ["m1", "m2"]
+    });
+    expect(snapshots[1]).toEqual(snapshots[0]);
+    expect(snapshots[2]).toEqual(snapshots[0]);
+    expect(runs.every((run) => run.completeness.status === "complete")).toBe(true);
+    expect(
+      runs.every((run) => run.completeness.capturePhases?.join(",") === "inventory,capture,verify")
+    ).toBe(true);
+  });
+
+  test("runs a monotonic verification sweep when only sparse turn windows are mounted", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    const renderWindow = (turnNumbers: readonly number[]) => {
+      container.innerHTML = turnNumbers
+        .map(
+          (turnNumber) => `
+            <div data-turn-id-container="logical-turn-${turnNumber}" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-${turnNumber}">
+                <div data-message-author-role="${turnNumber % 2 === 0 ? "assistant" : "user"}" data-message-id="m${turnNumber}">
+                  <div class="markdown"><p>Message ${turnNumber}</p></div>
+                </div>
+              </article>
+            </div>
+          `
+        )
+        .join("");
+    };
+    const updateMountedWindow = (scrollTop: number) => {
+      if (scrollTop < 75) {
+        renderWindow([1, 2]);
+      } else if (scrollTop < 175) {
+        renderWindow([3, 4]);
+      } else {
+        renderWindow([5, 6]);
+      }
+    };
+
+    renderWindow([1, 2]);
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: updateMountedWindow,
+      scrollHeight: 300,
+      scrollTop: 0
+    });
+
+    const phases: string[] = [];
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 30,
+      onProgress: (progress) => phases.push(progress.phase),
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual([
+      "m1",
+      "m2",
+      "m3",
+      "m4",
+      "m5",
+      "m6"
+    ]);
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 6,
+      missingTurnIds: [],
+      status: "complete"
+    });
+    expect(result.completeness.capturePhases).toEqual([
+      "inventory",
+      "capture",
+      "recheck",
+      "verify"
+    ]);
+    expect(phases).toContain("recheck");
+  });
+
+  test("opens collapsed reasoning disclosures sequentially before extraction", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 120px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="assistant" data-message-id="m1">
+              <button aria-controls="activity-panel" aria-expanded="false">Thought for 2m 46s</button>
+              <div class="markdown"><p>Final answer</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+    const control = document.querySelector<HTMLButtonElement>("button[aria-controls]");
+
+    if (!container || !control) {
+      throw new Error("fixture missing reasoning disclosure");
+    }
+
+    let clickCount = 0;
+    control.addEventListener("click", () => {
+      clickCount += 1;
+      const expanded = control.getAttribute("aria-expanded") !== "true";
+      control.setAttribute("aria-expanded", String(expanded));
+      if (expanded && document.getElementById("activity-panel") === null) {
+        const panel = document.createElement("section");
+        panel.id = "activity-panel";
+        panel.setAttribute("data-jelluvi-advanced-kind", "activity");
+        panel.innerHTML = "<h3>Activity</h3><p>Loaded linked reasoning details.</p>";
+        control.closest("article")?.append(panel);
+      }
+    });
+    setScrollMetrics(container, { clientHeight: 120, scrollHeight: 120, scrollTop: 0 });
+
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages[0]).toMatchObject({
+      reasoningSummary: { durationSeconds: 166, label: "Thought for 2m 46s" },
+      thinkingBlocks: [{ text: "Loaded linked reasoning details.", title: "Activity" }]
+    });
+    expect(clickCount).toBe(2);
+    expect(control.getAttribute("aria-expanded")).toBe("false");
+  });
+
   test("scrolls from top to bottom, dedupes messages, and reports completeness", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");
@@ -470,7 +647,9 @@ describe("collectChatGptConversation", () => {
     });
 
     expect(result.messages.map((message) => message.id)).toEqual(["m1"]);
-    expect(result.completeness.status).toBe("probably_complete");
+    expect(result.completeness.status).toBe("partial");
+    expect(result.completeness.knownTurnCount).toBe(2);
+    expect(result.completeness.missingTurnIds).toEqual(["logical-turn-2"]);
     expect(result.completeness.warnings).toContain(
       "ChatGPT did not hydrate 1 conversation turn before the scan timeout."
     );

@@ -40,6 +40,38 @@ export function sanitizeConversationImagesForOutput(
   };
 }
 
+export function sanitizeConversationImagesForVisualOutput(
+  conversation: ConversationExport
+): ConversationExport {
+  const sanitized = sanitizeConversationImagesForOutput(conversation);
+
+  return {
+    ...sanitized,
+    messages: sanitized.messages.map((message, index) => ({
+      ...message,
+      images: conversation.messages[index]?.images.map(sanitizeImageRefForVisualOutput) ?? []
+    }))
+  };
+}
+
+export function sanitizeImageRefForVisualOutput(image: ExportedImageRef): ExportedImageRef {
+  if (image.dataUri === undefined) {
+    return { ...image };
+  }
+
+  if (
+    !/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/iu.test(image.dataUri) ||
+    image.dataUri.length > 12_000_000
+  ) {
+    return sanitizeImageRefForOutput(image);
+  }
+
+  return {
+    ...image,
+    dataUri: image.dataUri.replace(/\s+/gu, "")
+  };
+}
+
 export function sanitizeMessageImagesForOutput(message: ExportedMessage): ExportedMessage {
   return {
     ...message,

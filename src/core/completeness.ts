@@ -1,4 +1,9 @@
-import type { CompletenessReport, CompletenessStatus, ExportedMessage } from "./schema";
+import type {
+  CapturePhase,
+  CompletenessReport,
+  CompletenessStatus,
+  ExportedMessage
+} from "./schema";
 import { createTextPreview } from "../utils/text";
 
 export interface BuildCompletenessReportInput {
@@ -10,6 +15,11 @@ export interface BuildCompletenessReportInput {
   readonly scanWarnings?: readonly string[];
   readonly scrollSteps: number;
   readonly virtualized?: boolean;
+  readonly knownTurnCount?: number;
+  readonly missingTurnIds?: readonly string[];
+  readonly recheckedTurnCount?: number;
+  readonly messageContentHashes?: readonly string[];
+  readonly capturePhases?: readonly CapturePhase[];
 }
 
 export function buildCompletenessReport(input: BuildCompletenessReportInput): CompletenessReport {
@@ -29,7 +39,16 @@ export function buildCompletenessReport(input: BuildCompletenessReportInput): Co
     reachedBottom: input.reachedBottom,
     scrollSteps: input.scrollSteps,
     duplicateCount: input.duplicateCount,
-    platformWarnings: [...input.platformWarnings]
+    platformWarnings: [...input.platformWarnings],
+    ...(input.knownTurnCount !== undefined ? { knownTurnCount: input.knownTurnCount } : {}),
+    ...(input.missingTurnIds !== undefined ? { missingTurnIds: [...input.missingTurnIds] } : {}),
+    ...(input.recheckedTurnCount !== undefined
+      ? { recheckedTurnCount: input.recheckedTurnCount }
+      : {}),
+    ...(input.messageContentHashes !== undefined
+      ? { messageContentHashes: [...input.messageContentHashes] }
+      : {}),
+    ...(input.capturePhases !== undefined ? { capturePhases: [...input.capturePhases] } : {})
   };
 }
 
@@ -42,6 +61,10 @@ function determineStatus(
   }
 
   if (!input.reachedTop || !input.reachedBottom) {
+    return "partial";
+  }
+
+  if ((input.missingTurnIds?.length ?? 0) > 0) {
     return "partial";
   }
 

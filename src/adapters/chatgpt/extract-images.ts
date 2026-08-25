@@ -2,6 +2,7 @@ import type { ExportedImageRef } from "../../core/schema";
 import { CHATGPT_ATTACHMENT_SELECTORS } from "./extract-attachments";
 
 export interface ExtractImageRefsOptions {
+  readonly includeAttachmentImages?: boolean;
   readonly chatGptSpecificFiltering?: boolean;
 }
 
@@ -34,11 +35,12 @@ function collectCandidateImageRefs(root: Element): readonly CandidateImageRef[] 
     const height =
       parsePositiveInteger(image.getAttribute("height")) ?? parseDimension(image.height);
     const alt = image.getAttribute("alt")?.trim() || undefined;
+    const capturedDataUri = src?.startsWith("data:") ? src : captureLoadedImageDataUri(image);
 
     return {
       element: image,
       ...(alt ? { alt } : {}),
-      ...(src?.startsWith("data:") ? { dataUri: src } : {}),
+      ...(capturedDataUri !== undefined ? { dataUri: capturedDataUri } : {}),
       ...(src && !src.startsWith("data:") ? { src } : {}),
       ...(width ? { width } : {}),
       ...(height ? { height } : {})
@@ -94,14 +96,16 @@ function isContentImage(image: CandidateImageRef, options: ExtractImageRefsOptio
     return false;
   }
 
-  if (isInsideUiControl(image.element)) {
+  const insideAttachment = image.element.closest(CHATGPT_ATTACHMENT_SELECTORS) !== null;
+
+  if (isInsideUiControl(image.element) && !(insideAttachment && options.includeAttachmentImages)) {
     return false;
   }
 
   if (options.chatGptSpecificFiltering === true) {
     if (
       isCitationDecoration(image.element) ||
-      image.element.closest(CHATGPT_ATTACHMENT_SELECTORS)
+      (insideAttachment && options.includeAttachmentImages !== true)
     ) {
       return false;
     }
@@ -135,6 +139,31 @@ function isContentImage(image: CandidateImageRef, options: ExtractImageRefsOptio
   }
 
   return Boolean(image.src ?? image.dataUri);
+}
+
+function captureLoadedImageDataUri(image: HTMLImageElement): string | undefined {
+  if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+    return undefined;
+  }
+
+  const document = image.ownerDocument;
+  const canvas = document.createElement("canvas");
+  const maximumDimension = 2048;
+  const scale = Math.min(1, maximumDimension / Math.max(image.naturalWidth, image.naturalHeight));
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  try {
+    const context = canvas.getContext("2d");
+    if (context === null) {
+      return undefined;
+    }
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const dataUri = canvas.toDataURL("image/jpeg", 0.9);
+    return dataUri.length <= 12_000_000 ? dataUri : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isCitationDecoration(element: Element): boolean {

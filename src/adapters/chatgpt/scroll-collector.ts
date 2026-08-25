@@ -1,5 +1,10 @@
 import { buildCompletenessReport } from "../../core/completeness";
-import type { CompletenessReport, ExportedMessage } from "../../core/schema";
+import type {
+  CapturePhase,
+  CompletenessReport,
+  ConversationCaptureProgress,
+  ExportedMessage
+} from "../../core/schema";
 import { stableHash } from "../../utils/hash";
 import { extractVisibleChatGptMessages } from "./extract-visible";
 import {
@@ -27,12 +32,15 @@ const EXPECTED_BOTTOM_TURN_WINDOW = 4;
 const MAX_BOTTOM_HYDRATION_PASSES = 2;
 const MAX_MISSING_TURN_ATTEMPTS = 2;
 const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]";
+const REASONING_DISCLOSURE_SELECTOR = "button, summary, [role='button']";
 
 export interface ChatGptScrollCollectorOptions {
   readonly document?: Document;
+  readonly expandReasoningPanels?: boolean;
   readonly extractMessages?: (root: ParentNode) => readonly ExportedMessage[] | undefined;
   readonly maxStalls?: number;
   readonly maxSteps?: number;
+  readonly onProgress?: (progress: ConversationCaptureProgress) => void;
   readonly scrollBy?: (container: Element, pixels: number) => void;
   readonly scrollContainer?: Element;
   readonly scrollStepRatio?: number;
@@ -80,11 +88,18 @@ export async function collectChatGptConversation(
   let unresolvedTopHydration = false;
   let unresolvedBottomHydration = false;
   let bottomHydrationPasses = 0;
+  const capturePhases: CapturePhase[] = ["inventory", "capture"];
+  const recheckedTurnIds = new Set<string>();
+  const processedReasoningControls = new WeakSet<Element>();
+  const expandedReasoningControls: ReasoningDisclosureRecord[] = [];
+  const expandReasoningPanels = options.expandReasoningPanels !== false;
   const usesDefaultDomWait =
     options.waitForDomSettle === undefined && options.settleDelayMs === undefined;
   const waitForBottomHydration = usesDefaultDomWait
     ? createBottomHydrationWait(container)
     : undefined;
+
+  reportCaptureProgress(options.onProgress, "inventory", messages, turnTrackingState, scrollSteps);
 
   try {
     scrollToTop(container);
@@ -97,6 +112,15 @@ export async function collectChatGptConversation(
       warnings.push("ChatGPT's early turn window did not finish loading before the scan timeout.");
     }
 
+    if (expandReasoningPanels) {
+      await hydrateReasoningDisclosures(
+        container,
+        processedReasoningControls,
+        expandedReasoningControls,
+        waitForDomSettle,
+        options.signal
+      );
+    }
     duplicateCount += collectStepMessages(
       container,
       options.extractMessages,
@@ -104,13 +128,51 @@ export async function collectChatGptConversation(
       dedupeState,
       turnTrackingState
     );
+    reportCaptureProgress(options.onProgress, "capture", messages, turnTrackingState, scrollSteps);
 
     if (options.signal?.aborted) {
       aborted = true;
       warnings.push("Scan was cancelled.");
     }
 
-    while (!aborted && scrollSteps < maxSteps && consecutiveStalls < maxStalls) {
+    const inventoryDrivenCapture = turnTrackingState.expectedTurnContainerIds.length > 0;
+
+    if (!aborted && inventoryDrivenCapture) {
+      const primaryCapture = await captureKnownTurnContainers({
+        container,
+        dedupeState,
+        expandedReasoningControls,
+        expandReasoningPanels,
+        extractMessages: options.extractMessages,
+        maxSteps: maxSteps - scrollSteps,
+        messages,
+        onProgress: options.onProgress,
+        processedReasoningControls,
+        scrollBy,
+        signal: options.signal,
+        startingScrollSteps: scrollSteps,
+        turnTrackingState,
+        waitForDomSettle,
+        waitForTurnHydration: usesDefaultDomWait
+          ? createTurnContainerHydrationWait(container)
+          : undefined
+      });
+
+      duplicateCount += primaryCapture.duplicateCount;
+      scrollSteps += primaryCapture.scrollSteps;
+
+      if (options.signal?.aborted) {
+        aborted = true;
+        warnings.push("Scan was cancelled.");
+      }
+    }
+
+    while (
+      !inventoryDrivenCapture &&
+      !aborted &&
+      scrollSteps < maxSteps &&
+      consecutiveStalls < maxStalls
+    ) {
       if (isAtBottom(container)) {
         const shouldHydrateBottom =
           waitForBottomHydration !== undefined &&
@@ -131,6 +193,15 @@ export async function collectChatGptConversation(
         bottomHydrationPasses += 1;
         const bottomHydration = await waitForBottomHydration(options.signal);
         unresolvedBottomHydration = bottomHydration.unresolved;
+        if (expandReasoningPanels) {
+          await hydrateReasoningDisclosures(
+            container,
+            processedReasoningControls,
+            expandedReasoningControls,
+            waitForDomSettle,
+            options.signal
+          );
+        }
         duplicateCount += collectStepMessages(
           container,
           options.extractMessages,
@@ -158,12 +229,28 @@ export async function collectChatGptConversation(
       scrollBy(container, scrollPixels);
       scrollSteps += 1;
       await waitForDomSettle(options.signal);
+      if (expandReasoningPanels) {
+        await hydrateReasoningDisclosures(
+          container,
+          processedReasoningControls,
+          expandedReasoningControls,
+          waitForDomSettle,
+          options.signal
+        );
+      }
       duplicateCount += collectStepMessages(
         container,
         options.extractMessages,
         messages,
         dedupeState,
         turnTrackingState
+      );
+      reportCaptureProgress(
+        options.onProgress,
+        "capture",
+        messages,
+        turnTrackingState,
+        scrollSteps
       );
 
       if (options.signal?.aborted) {
@@ -180,11 +267,166 @@ export async function collectChatGptConversation(
       }
     }
 
+    if (!aborted && inventoryDrivenCapture && scrollSteps < maxSteps) {
+      setScrollTop(container, getScrollHeight(container));
+      scrollSteps += 1;
+      await waitForDomSettle(options.signal);
+      if (expandReasoningPanels) {
+        await hydrateReasoningDisclosures(
+          container,
+          processedReasoningControls,
+          expandedReasoningControls,
+          waitForDomSettle,
+          options.signal
+        );
+      }
+      duplicateCount += collectStepMessages(
+        container,
+        options.extractMessages,
+        messages,
+        dedupeState,
+        turnTrackingState
+      );
+      reportCaptureProgress(
+        options.onProgress,
+        "capture",
+        messages,
+        turnTrackingState,
+        scrollSteps
+      );
+
+      if (waitForBottomHydration !== undefined && !isAtTop(container)) {
+        const bottomHydration = await waitForBottomHydration(options.signal);
+        unresolvedBottomHydration = bottomHydration.unresolved;
+        duplicateCount += collectStepMessages(
+          container,
+          options.extractMessages,
+          messages,
+          dedupeState,
+          turnTrackingState
+        );
+      }
+    }
+
+    refreshTurnTrackingState(container, turnTrackingState);
+    if (
+      !aborted &&
+      inventoryDrivenCapture &&
+      getUntrackedTurnOrdinalIds(turnTrackingState).length > 0 &&
+      scrollSteps < maxSteps
+    ) {
+      if (!capturePhases.includes("recheck")) {
+        capturePhases.push("recheck");
+      }
+      reportCaptureProgress(
+        options.onProgress,
+        "recheck",
+        messages,
+        turnTrackingState,
+        scrollSteps
+      );
+
+      scrollToTop(container);
+      scrollSteps += 1;
+      await waitForDomSettle(options.signal);
+      if (expandReasoningPanels) {
+        await hydrateReasoningDisclosures(
+          container,
+          processedReasoningControls,
+          expandedReasoningControls,
+          waitForDomSettle,
+          options.signal
+        );
+      }
+      duplicateCount += collectStepMessages(
+        container,
+        options.extractMessages,
+        messages,
+        dedupeState,
+        turnTrackingState
+      );
+
+      let sweepStalls = 0;
+      while (
+        !options.signal?.aborted &&
+        !isAtBottom(container) &&
+        scrollSteps < maxSteps &&
+        sweepStalls < maxStalls
+      ) {
+        const previousScrollTop = getScrollTop(container);
+        const scrollPixels = Math.max(1, Math.floor(getClientHeight(container) * scrollStepRatio));
+
+        scrollBy(container, scrollPixels);
+        scrollSteps += 1;
+        await waitForDomSettle(options.signal);
+        if (expandReasoningPanels) {
+          await hydrateReasoningDisclosures(
+            container,
+            processedReasoningControls,
+            expandedReasoningControls,
+            waitForDomSettle,
+            options.signal
+          );
+        }
+        duplicateCount += collectStepMessages(
+          container,
+          options.extractMessages,
+          messages,
+          dedupeState,
+          turnTrackingState
+        );
+        reportCaptureProgress(
+          options.onProgress,
+          "recheck",
+          messages,
+          turnTrackingState,
+          scrollSteps
+        );
+
+        if (getScrollTop(container) <= previousScrollTop) {
+          sweepStalls += 1;
+          stalls += 1;
+        } else {
+          sweepStalls = 0;
+        }
+      }
+
+      consecutiveStalls = Math.max(consecutiveStalls, sweepStalls);
+      if (options.signal?.aborted) {
+        aborted = true;
+        warnings.push("Scan was cancelled.");
+      } else if (waitForBottomHydration !== undefined && isAtBottom(container) && !isAtTop(container)) {
+        const bottomHydration = await waitForBottomHydration(options.signal);
+        unresolvedBottomHydration = bottomHydration.unresolved;
+        duplicateCount += collectStepMessages(
+          container,
+          options.extractMessages,
+          messages,
+          dedupeState,
+          turnTrackingState
+        );
+      }
+    }
+
     for (
       let completionPass = 0;
       !aborted && completionPass < MAX_BOTTOM_HYDRATION_PASSES && scrollSteps < maxSteps;
       completionPass += 1
     ) {
+      refreshTurnTrackingState(container, turnTrackingState);
+      if (getMissingTurnContainerIds(turnTrackingState).length > 0) {
+        if (!capturePhases.includes("recheck")) {
+          capturePhases.push("recheck");
+        }
+        reportCaptureProgress(
+          options.onProgress,
+          "recheck",
+          messages,
+          turnTrackingState,
+          scrollSteps
+        );
+      }
+
       const recovery = await recoverMissingTurnContainers({
         container,
         dedupeState,
@@ -192,6 +434,9 @@ export async function collectChatGptConversation(
         maxSteps: maxSteps - scrollSteps,
         messages,
         signal: options.signal,
+        expandedReasoningControls,
+        expandReasoningPanels,
+        processedReasoningControls,
         turnTrackingState,
         waitForDomSettle,
         waitForTurnHydration: usesDefaultDomWait
@@ -201,6 +446,20 @@ export async function collectChatGptConversation(
 
       duplicateCount += recovery.duplicateCount;
       scrollSteps += recovery.scrollSteps;
+      recovery.recheckedTurnIds.forEach((turnId) => recheckedTurnIds.add(turnId));
+
+      if (recovery.recheckedTurnIds.length > 0 && !capturePhases.includes("recheck")) {
+        capturePhases.push("recheck");
+      }
+      if (recovery.recheckedTurnIds.length > 0) {
+        reportCaptureProgress(
+          options.onProgress,
+          "recheck",
+          messages,
+          turnTrackingState,
+          scrollSteps
+        );
+      }
 
       if (recovery.scrollSteps === 0 || options.signal?.aborted || scrollSteps >= maxSteps) {
         break;
@@ -210,6 +469,15 @@ export async function collectChatGptConversation(
         setScrollTop(container, getScrollHeight(container));
         scrollSteps += 1;
         await waitForDomSettle(options.signal);
+        if (expandReasoningPanels) {
+          await hydrateReasoningDisclosures(
+            container,
+            processedReasoningControls,
+            expandedReasoningControls,
+            waitForDomSettle,
+            options.signal
+          );
+        }
         duplicateCount += collectStepMessages(
           container,
           options.extractMessages,
@@ -221,6 +489,15 @@ export async function collectChatGptConversation(
         if (waitForBottomHydration !== undefined && !isAtTop(container)) {
           const bottomHydration = await waitForBottomHydration(options.signal);
           unresolvedBottomHydration = bottomHydration.unresolved;
+          if (expandReasoningPanels) {
+            await hydrateReasoningDisclosures(
+              container,
+              processedReasoningControls,
+              expandedReasoningControls,
+              waitForDomSettle,
+              options.signal
+            );
+          }
           duplicateCount += collectStepMessages(
             container,
             options.extractMessages,
@@ -244,12 +521,10 @@ export async function collectChatGptConversation(
 
     refreshTurnTrackingState(container, turnTrackingState);
     const missingTurnContainerIds = getMissingTurnContainerIds(turnTrackingState);
-    const orderedMessages = orderMessagesByTurnContainer(
-      messages,
-      dedupeState,
-      turnTrackingState
-    );
+    const orderedMessages = orderMessagesByTurnContainer(messages, dedupeState, turnTrackingState);
     const reachedBottom = isAtBottom(container);
+    capturePhases.push("verify");
+    reportCaptureProgress(options.onProgress, "verify", messages, turnTrackingState, scrollSteps);
 
     if (missingTurnContainerIds.length > 0) {
       warnings.push(
@@ -272,17 +547,20 @@ export async function collectChatGptConversation(
     }
 
     const completeness = buildCompletenessReport({
+      capturePhases,
       duplicateCount,
+      knownTurnCount: getKnownTurnCount(turnTrackingState),
       messages: orderedMessages,
+      messageContentHashes: orderedMessages.map(getMessageFingerprint),
+      missingTurnIds: missingTurnContainerIds,
       platformWarnings: [],
       reachedBottom,
       reachedTop,
+      recheckedTurnCount: recheckedTurnIds.size,
       scanWarnings: warnings,
       scrollSteps,
       virtualized:
-        unresolvedTopHydration ||
-        unresolvedBottomHydration ||
-        missingTurnContainerIds.length > 0
+        unresolvedTopHydration || unresolvedBottomHydration || missingTurnContainerIds.length > 0
     });
 
     return {
@@ -297,6 +575,7 @@ export async function collectChatGptConversation(
       warnings
     };
   } finally {
+    restoreReasoningDisclosures(expandedReasoningControls);
     setScrollTop(container, originalScrollTop);
   }
 }
@@ -403,6 +682,7 @@ interface TurnTrackingState {
   readonly expectedTurnContainerIds: string[];
   readonly extractedTurnContainerIds: Set<string>;
   readonly logicalKeyByMessageId: Map<string, string>;
+  readonly turnNumberByLogicalKey: Map<string, number>;
 }
 
 function createTurnTrackingState(root: ParentNode): TurnTrackingState {
@@ -410,7 +690,8 @@ function createTurnTrackingState(root: ParentNode): TurnTrackingState {
     expectedTurnContainerIdSet: new Set<string>(),
     expectedTurnContainerIds: [],
     extractedTurnContainerIds: new Set<string>(),
-    logicalKeyByMessageId: new Map<string, string>()
+    logicalKeyByMessageId: new Map<string, string>(),
+    turnNumberByLogicalKey: new Map<string, number>()
   };
 
   refreshTurnTrackingState(root, state);
@@ -418,6 +699,10 @@ function createTurnTrackingState(root: ParentNode): TurnTrackingState {
 }
 
 function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): void {
+  const discoveryOrder = new Map(
+    state.expectedTurnContainerIds.map((logicalKey, index) => [logicalKey, index])
+  );
+
   for (const turnContainer of getTrackableTurnContainers(root)) {
     const logicalKey = getTurnContainerLogicalKey(turnContainer);
 
@@ -427,7 +712,17 @@ function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): v
 
     if (!state.expectedTurnContainerIdSet.has(logicalKey)) {
       state.expectedTurnContainerIdSet.add(logicalKey);
+      discoveryOrder.set(logicalKey, discoveryOrder.size);
       state.expectedTurnContainerIds.push(logicalKey);
+    }
+
+    const turnNumbers = Array.from(
+      turnContainer.querySelectorAll(chatGptSelectors.conversationTurn)
+    )
+      .map((turn) => parseTurnNumber(turn.getAttribute("data-testid")))
+      .filter((turnNumber): turnNumber is number => turnNumber !== undefined);
+    if (turnNumbers.length > 0) {
+      state.turnNumberByLogicalKey.set(logicalKey, Math.min(...turnNumbers));
     }
 
     for (const messageElement of Array.from(
@@ -448,6 +743,17 @@ function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): v
       }
     }
   }
+
+  state.expectedTurnContainerIds.sort((left, right) => {
+    const leftTurnNumber = state.turnNumberByLogicalKey.get(left);
+    const rightTurnNumber = state.turnNumberByLogicalKey.get(right);
+
+    if (leftTurnNumber !== undefined && rightTurnNumber !== undefined) {
+      return leftTurnNumber - rightTurnNumber;
+    }
+
+    return (discoveryOrder.get(left) ?? 0) - (discoveryOrder.get(right) ?? 0);
+  });
 }
 
 function getTrackableTurnContainers(root: ParentNode): readonly Element[] {
@@ -501,28 +807,136 @@ function getMessageElementStableId(messageElement: Element): string | undefined 
 }
 
 function getMissingTurnContainerIds(state: TurnTrackingState): readonly string[] {
+  const missingKnownContainers = state.expectedTurnContainerIds.filter(
+    (logicalKey) => !state.extractedTurnContainerIds.has(logicalKey)
+  );
+  return [...missingKnownContainers, ...getUntrackedTurnOrdinalIds(state)];
+}
+
+function getMissingKnownTurnContainerIds(state: TurnTrackingState): readonly string[] {
   return state.expectedTurnContainerIds.filter(
     (logicalKey) => !state.extractedTurnContainerIds.has(logicalKey)
   );
 }
 
-interface MissingTurnRecoveryOptions {
+function getUntrackedTurnOrdinalIds(state: TurnTrackingState): readonly string[] {
+  const trackedNumbers = new Set(state.turnNumberByLogicalKey.values());
+  const highestTurnNumber = Math.max(0, ...trackedNumbers);
+
+  if (highestTurnNumber <= state.expectedTurnContainerIds.length) {
+    return [];
+  }
+
+  const missing: string[] = [];
+  for (let turnNumber = 1; turnNumber <= highestTurnNumber; turnNumber += 1) {
+    if (!trackedNumbers.has(turnNumber)) {
+      missing.push(`conversation-turn-${turnNumber}`);
+    }
+  }
+  return missing;
+}
+
+function getKnownTurnCount(state: TurnTrackingState): number {
+  return Math.max(
+    state.expectedTurnContainerIds.length,
+    Math.max(0, ...state.turnNumberByLogicalKey.values())
+  );
+}
+
+interface KnownTurnCaptureOptions {
   readonly container: Element;
   readonly dedupeState: DedupeState;
+  readonly expandedReasoningControls: ReasoningDisclosureRecord[];
+  readonly expandReasoningPanels: boolean;
   readonly extractMessages: ChatGptScrollCollectorOptions["extractMessages"];
   readonly maxSteps: number;
   readonly messages: ExportedMessage[];
+  readonly onProgress?: (progress: ConversationCaptureProgress) => void;
+  readonly processedReasoningControls: WeakSet<Element>;
+  readonly scrollBy: (container: Element, pixels: number) => void;
+  readonly signal?: AbortSignal;
+  readonly startingScrollSteps: number;
+  readonly turnTrackingState: TurnTrackingState;
+  readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
+  readonly waitForTurnHydration?: (logicalKey: string, signal?: AbortSignal) => Promise<void>;
+}
+
+interface KnownTurnCaptureResult {
+  readonly duplicateCount: number;
+  readonly scrollSteps: number;
+}
+
+async function captureKnownTurnContainers(
+  options: KnownTurnCaptureOptions
+): Promise<KnownTurnCaptureResult> {
+  let cursor = 0;
+  let duplicateCount = 0;
+  let scrollSteps = 0;
+
+  while (!options.signal?.aborted && scrollSteps < options.maxSteps) {
+    refreshTurnTrackingState(options.container, options.turnTrackingState);
+    const logicalKey = options.turnTrackingState.expectedTurnContainerIds[cursor];
+
+    if (logicalKey === undefined) {
+      break;
+    }
+    cursor += 1;
+
+    const turnContainer = findTrackableTurnContainer(options.container, logicalKey);
+    if (turnContainer === undefined) {
+      continue;
+    }
+
+    scrollTurnContainerIntoView(options.container, turnContainer, true, options.scrollBy);
+    scrollSteps += 1;
+    await options.waitForDomSettle(options.signal);
+    await options.waitForTurnHydration?.(logicalKey, options.signal);
+    if (options.expandReasoningPanels) {
+      await hydrateReasoningDisclosures(
+        turnContainer,
+        options.processedReasoningControls,
+        options.expandedReasoningControls,
+        options.waitForDomSettle,
+        options.signal
+      );
+    }
+    duplicateCount += collectStepMessages(
+      options.container,
+      options.extractMessages,
+      options.messages,
+      options.dedupeState,
+      options.turnTrackingState
+    );
+    reportCaptureProgress(
+      options.onProgress,
+      "capture",
+      options.messages,
+      options.turnTrackingState,
+      options.startingScrollSteps + scrollSteps
+    );
+  }
+
+  return { duplicateCount, scrollSteps };
+}
+
+interface MissingTurnRecoveryOptions {
+  readonly container: Element;
+  readonly dedupeState: DedupeState;
+  readonly expandedReasoningControls: ReasoningDisclosureRecord[];
+  readonly expandReasoningPanels: boolean;
+  readonly extractMessages: ChatGptScrollCollectorOptions["extractMessages"];
+  readonly maxSteps: number;
+  readonly messages: ExportedMessage[];
+  readonly processedReasoningControls: WeakSet<Element>;
   readonly signal?: AbortSignal;
   readonly turnTrackingState: TurnTrackingState;
   readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
-  readonly waitForTurnHydration?: (
-    logicalKey: string,
-    signal?: AbortSignal
-  ) => Promise<void>;
+  readonly waitForTurnHydration?: (logicalKey: string, signal?: AbortSignal) => Promise<void>;
 }
 
 interface MissingTurnRecoveryResult {
   readonly duplicateCount: number;
+  readonly recheckedTurnIds: readonly string[];
   readonly scrollSteps: number;
 }
 
@@ -530,14 +944,14 @@ async function recoverMissingTurnContainers(
   options: MissingTurnRecoveryOptions
 ): Promise<MissingTurnRecoveryResult> {
   const attemptsByLogicalKey = new Map<string, number>();
+  const recheckedTurnIds = new Set<string>();
   let duplicateCount = 0;
   let scrollSteps = 0;
 
   while (!options.signal?.aborted && scrollSteps < options.maxSteps) {
     refreshTurnTrackingState(options.container, options.turnTrackingState);
-    const logicalKey = getMissingTurnContainerIds(options.turnTrackingState).find(
-      (candidate) =>
-        (attemptsByLogicalKey.get(candidate) ?? 0) < MAX_MISSING_TURN_ATTEMPTS
+    const logicalKey = getMissingKnownTurnContainerIds(options.turnTrackingState).find(
+      (candidate) => (attemptsByLogicalKey.get(candidate) ?? 0) < MAX_MISSING_TURN_ATTEMPTS
     );
 
     if (logicalKey === undefined) {
@@ -545,6 +959,7 @@ async function recoverMissingTurnContainers(
     }
 
     attemptsByLogicalKey.set(logicalKey, (attemptsByLogicalKey.get(logicalKey) ?? 0) + 1);
+    recheckedTurnIds.add(logicalKey);
     const turnContainer = findTrackableTurnContainer(options.container, logicalKey);
 
     if (turnContainer === undefined) {
@@ -555,6 +970,15 @@ async function recoverMissingTurnContainers(
     scrollSteps += 1;
     await options.waitForDomSettle(options.signal);
     await options.waitForTurnHydration?.(logicalKey, options.signal);
+    if (options.expandReasoningPanels) {
+      await hydrateReasoningDisclosures(
+        turnContainer,
+        options.processedReasoningControls,
+        options.expandedReasoningControls,
+        options.waitForDomSettle,
+        options.signal
+      );
+    }
     duplicateCount += collectStepMessages(
       options.container,
       options.extractMessages,
@@ -564,25 +988,115 @@ async function recoverMissingTurnContainers(
     );
   }
 
-  return { duplicateCount, scrollSteps };
+  return { duplicateCount, recheckedTurnIds: [...recheckedTurnIds], scrollSteps };
 }
 
-function findTrackableTurnContainer(
+interface ReasoningDisclosureRecord {
+  readonly control: Element;
+  readonly details?: HTMLDetailsElement;
+}
+
+async function hydrateReasoningDisclosures(
   root: ParentNode,
-  logicalKey: string
-): Element | undefined {
+  processedControls: WeakSet<Element>,
+  expandedControls: ReasoningDisclosureRecord[],
+  waitForDomSettle: (signal?: AbortSignal) => Promise<void>,
+  signal?: AbortSignal
+): Promise<void> {
+  const controls = Array.from(root.querySelectorAll(REASONING_DISCLOSURE_SELECTOR)).filter(
+    (control) => !processedControls.has(control) && isCollapsedReasoningDisclosure(control)
+  );
+
+  for (const control of controls) {
+    if (signal?.aborted) {
+      return;
+    }
+
+    processedControls.add(control);
+    const details = control.matches("summary")
+      ? (control.closest("details") as HTMLDetailsElement | null)
+      : null;
+    const clickable = control as HTMLElement;
+
+    if (typeof clickable.click !== "function") {
+      continue;
+    }
+
+    clickable.click();
+    expandedControls.push({ control, ...(details !== null ? { details } : {}) });
+    await waitForDomSettle(signal);
+  }
+}
+
+function isCollapsedReasoningDisclosure(control: Element): boolean {
+  if (control.getAttribute("aria-disabled") === "true" || control.hasAttribute("disabled")) {
+    return false;
+  }
+
+  const label = cleanDisclosureLabel(
+    control.getAttribute("aria-label") ?? control.textContent ?? ""
+  );
+  if (!/^(?:(?:thought|worked)\s+for\b|activity\b|thinking\b|reasoning\b)/iu.test(label)) {
+    return false;
+  }
+
+  const details = control.matches("summary")
+    ? (control.closest("details") as HTMLDetailsElement | null)
+    : null;
+  if (details !== null) {
+    return !details.open;
+  }
+
+  const expanded = control.getAttribute("aria-expanded");
+  return expanded === "false" || (expanded === null && control.hasAttribute("aria-controls"));
+}
+
+function cleanDisclosureLabel(value: string): string {
+  return value.replace(/\s+/gu, " ").trim();
+}
+
+function restoreReasoningDisclosures(records: readonly ReasoningDisclosureRecord[]): void {
+  [...records].reverse().forEach(({ control, details }) => {
+    if (!control.isConnected) {
+      return;
+    }
+
+    const shouldClose = details?.open === true || control.getAttribute("aria-expanded") === "true";
+    const clickable = control as HTMLElement;
+    if (shouldClose && typeof clickable.click === "function") {
+      clickable.click();
+    }
+  });
+}
+
+function findTrackableTurnContainer(root: ParentNode, logicalKey: string): Element | undefined {
   return getTrackableTurnContainers(root).find(
     (turnContainer) => getTurnContainerLogicalKey(turnContainer) === logicalKey
   );
 }
 
-function scrollTurnContainerIntoView(container: Element, turnContainer: Element): void {
+function scrollTurnContainerIntoView(
+  container: Element,
+  turnContainer: Element,
+  forwardOnly = false,
+  scrollBy?: (container: Element, pixels: number) => void
+): void {
   const containerTop = container.getBoundingClientRect().top;
   const turnTop = turnContainer.getBoundingClientRect().top;
   const topPadding = Math.min(64, Math.max(0, getClientHeight(container) * 0.1));
   const targetScrollTop = getScrollTop(container) + turnTop - containerTop - topPadding;
 
-  setScrollTop(container, Math.max(0, targetScrollTop));
+  const currentScrollTop = getScrollTop(container);
+  const nextScrollTop = Math.max(
+    0,
+    forwardOnly ? Math.max(currentScrollTop, targetScrollTop) : targetScrollTop
+  );
+
+  if (scrollBy !== undefined) {
+    scrollBy(container, nextScrollTop - currentScrollTop);
+  } else {
+    setScrollTop(container, nextScrollTop);
+  }
 }
 
 function orderMessagesByTurnContainer(
@@ -625,6 +1139,30 @@ function orderMessagesByTurnContainer(
     .map(({ message }) => message);
 }
 
+function reportCaptureProgress(
+  onProgress: ChatGptScrollCollectorOptions["onProgress"],
+  phase: CapturePhase,
+  messages: readonly ExportedMessage[],
+  turnTrackingState: TurnTrackingState,
+  scrollSteps: number
+): void {
+  if (onProgress === undefined) {
+    return;
+  }
+
+  const knownTurnCount = getKnownTurnCount(turnTrackingState);
+  const capturedTurnCount = turnTrackingState.extractedTurnContainerIds.size;
+
+  onProgress({
+    capturedTurnCount,
+    knownTurnCount,
+    messageCount: messages.length,
+    missingTurnCount: getMissingTurnContainerIds(turnTrackingState).length,
+    phase,
+    scrollSteps
+  });
+}
+
 function getMessageFingerprint(message: ExportedMessage): string {
   return `${message.role}:${stableHash(
     JSON.stringify({
@@ -637,9 +1175,11 @@ function getMessageFingerprint(message: ExportedMessage): string {
       displayTimestamp: message.metadata.displayTimestamp,
       model: message.model,
       participant: message.participant,
+      reasoningSummary: message.reasoningSummary,
       sources: message.sources ?? [],
       text: message.text,
-      thinkingBlocks: message.thinkingBlocks ?? []
+      thinkingBlocks: message.thinkingBlocks ?? [],
+      toolInvocations: message.toolInvocations ?? []
     })
   )}`;
 }
@@ -972,9 +1512,7 @@ function getTurnContainerHydrationSignature(container: Element, logicalKey: stri
     return "missing";
   }
 
-  const roleElements = Array.from(
-    turnContainer.querySelectorAll(chatGptSelectors.messageByRole)
-  );
+  const roleElements = Array.from(turnContainer.querySelectorAll(chatGptSelectors.messageByRole));
   const text = turnContainer.textContent ?? "";
 
   return [

@@ -103,9 +103,39 @@ function validateMessage(input: unknown, path: string, errors: string[]): void {
     validateArray(input.canvas, `${path}.canvas`, validateCanvasRef, errors);
   }
 
+  if (input.reasoningSummary !== undefined) {
+    validateReasoningSummary(input.reasoningSummary, `${path}.reasoningSummary`, errors);
+  }
+
+  if (input.toolInvocations !== undefined) {
+    validateArray(input.toolInvocations, `${path}.toolInvocations`, validateToolInvocation, errors);
+  }
+
   if (!isRecord(input.metadata)) {
     errors.push(`${path}.metadata must be a record`);
   }
+}
+
+function validateReasoningSummary(input: unknown, path: string, errors: string[]): void {
+  if (!isRecord(input)) {
+    errors.push(`${path} must be a record`);
+    return;
+  }
+
+  requireString(input, "label", errors, path);
+  requireOptionalNumber(input, "durationSeconds", errors, path);
+}
+
+function validateToolInvocation(input: unknown, path: string, errors: string[]): void {
+  if (!isRecord(input)) {
+    errors.push(`${path} must be a record`);
+    return;
+  }
+
+  requireString(input, "name", errors, path);
+  requireOptionalString(input, "status", errors, path);
+  requireOptionalString(input, "inputSummary", errors, path);
+  requireOptionalString(input, "outputSummary", errors, path);
 }
 
 function validateAttachmentRef(input: unknown, path: string, errors: string[]): void {
@@ -213,6 +243,17 @@ function validateCompleteness(input: unknown, path: string, errors: string[]): v
   requireNonNegativeInteger(input, "scrollSteps", errors, path);
   requireNonNegativeInteger(input, "duplicateCount", errors, path);
   requireStringArray(input.platformWarnings, `${path}.platformWarnings`, errors);
+  requireOptionalNonNegativeInteger(input, "knownTurnCount", errors, path);
+  requireOptionalNonNegativeInteger(input, "recheckedTurnCount", errors, path);
+  if (input.missingTurnIds !== undefined) {
+    requireStringArray(input.missingTurnIds, `${path}.missingTurnIds`, errors);
+  }
+  if (input.messageContentHashes !== undefined) {
+    requireStringArray(input.messageContentHashes, `${path}.messageContentHashes`, errors);
+  }
+  if (input.capturePhases !== undefined) {
+    requireStringArray(input.capturePhases, `${path}.capturePhases`, errors);
+  }
 }
 
 function validateArray<T>(
@@ -270,6 +311,17 @@ function requireNonNegativeInteger(
 ): void {
   if (!Number.isInteger(input[key]) || Number(input[key]) < 0) {
     errors.push(`${prefix(path)}${key} must be a non-negative integer`);
+  }
+}
+
+function requireOptionalNonNegativeInteger(
+  input: Record<string, unknown>,
+  key: string,
+  errors: string[],
+  path?: string
+): void {
+  if (input[key] !== undefined && (!Number.isInteger(input[key]) || Number(input[key]) < 0)) {
+    errors.push(`${prefix(path)}${key} must be a non-negative integer when present`);
   }
 }
 

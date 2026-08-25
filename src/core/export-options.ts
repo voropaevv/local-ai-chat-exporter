@@ -13,7 +13,7 @@ import type {
   ExportedImageRef,
   ExportedMessage
 } from "./schema";
-import { omitDataImagePayloads, sanitizeImageRefForOutput } from "./image-safety";
+import { omitDataImagePayloads } from "./image-safety";
 import {
   renderers,
   type LocalRendererFormat,
@@ -273,6 +273,32 @@ function prepareMessage(
           )
         }
       : {}),
+    ...(message.reasoningSummary !== undefined
+      ? {
+          reasoningSummary: {
+            label: redactIfNeeded(message.reasoningSummary.label, options.redaction),
+            ...(message.reasoningSummary.durationSeconds !== undefined
+              ? { durationSeconds: message.reasoningSummary.durationSeconds }
+              : {})
+          }
+        }
+      : {}),
+    ...(options.includeAdvancedContent && message.toolInvocations !== undefined
+      ? {
+          toolInvocations: message.toolInvocations.map((invocation) => ({
+            name: redactIfNeeded(invocation.name, options.redaction),
+            ...(invocation.status !== undefined
+              ? { status: redactIfNeeded(invocation.status, options.redaction) }
+              : {}),
+            ...(invocation.inputSummary !== undefined
+              ? { inputSummary: redactIfNeeded(invocation.inputSummary, options.redaction) }
+              : {}),
+            ...(invocation.outputSummary !== undefined
+              ? { outputSummary: redactIfNeeded(invocation.outputSummary, options.redaction) }
+              : {})
+          }))
+        }
+      : {}),
     ...(options.includeMetadata && message.createdAt !== undefined
       ? { createdAt: redactIfNeeded(message.createdAt, options.redaction) }
       : {}),
@@ -333,7 +359,7 @@ function prepareCodeBlock(
 }
 
 function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings): ExportedImageRef {
-  return sanitizeImageRefForOutput({
+  return {
     ...(image.alt !== undefined ? { alt: redactIfNeeded(image.alt, redaction) } : {}),
     ...(image.src !== undefined ? { src: redactIfNeeded(image.src, redaction) } : {}),
     ...(image.dataUri !== undefined ? { dataUri: image.dataUri } : {}),
@@ -342,7 +368,7 @@ function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings):
       : {}),
     ...(image.width !== undefined ? { width: image.width } : {}),
     ...(image.height !== undefined ? { height: image.height } : {})
-  });
+  };
 }
 
 function prepareCompleteness(

@@ -7,6 +7,7 @@ import type {
   ScanCacheSummaryResult,
   ScanSummary
 } from "../core/messages";
+import { isContentScanProgressEvent } from "../core/messages";
 import {
   ACTIVE_TAB_INFO_ERROR_MESSAGE,
   normalizeActiveTabInfo,
@@ -75,6 +76,23 @@ export function PopupApp() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const listener = (message: unknown) => {
+      if (isContentScanProgressEvent(message)) {
+        dispatch({
+          progress: message.progress,
+          sourceUrl: message.sourceUrl,
+          type: "scan_progress"
+        });
+      }
+
+      return false;
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
 
   useEffect(() => {

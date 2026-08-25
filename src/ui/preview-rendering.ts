@@ -57,6 +57,7 @@ export function createPreviewRenderState(
     conversation: preparedConversation,
     html: renderHtml(preparedConversation, {
       ...rendererOptions,
+      interactive: true,
       theme: previewOptions.theme ?? "system"
     }),
     markdown: renderMarkdown(preparedConversation, rendererOptions),

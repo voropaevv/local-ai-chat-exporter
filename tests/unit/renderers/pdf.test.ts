@@ -5,6 +5,9 @@ import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../../../src/rendere
 import { renderPdf, renderPdfFromNormalizedConversation } from "../../../src/renderers/pdf";
 import { extractPdfText, pdfBodyFromBytes } from "../../helpers/pdf";
 
+const onePixelJpeg =
+  "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAEf/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABAf/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=";
+
 function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage {
   return {
     id: "msg-1",
@@ -61,6 +64,34 @@ describe("renderPdf", () => {
     expect(body).not.toContain("user-message-bubble-color");
   });
 
+  test("embeds JPEG images, clickable links, document metadata, and a tagged structure tree", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        title: "Доступный архив",
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            images: [{ alt: "Диаграмма", dataUri: onePixelJpeg, height: 1, width: 1 }],
+            markdown: "Откройте [источник](https://example.com/research?q=pdf).",
+            text: "Откройте источник."
+          })
+        ]
+      })
+    );
+    const body = textFromBytes(rendered.bytes);
+
+    expect(body).toContain("/Subtype /Image");
+    expect(body).toContain("/Filter /DCTDecode");
+    expect(body).toContain("/XObject << /Im1");
+    expect(body).toContain("/Subtype /Link");
+    expect(body).toContain("/URI (https://example.com/research?q=pdf)");
+    expect(body).toContain("/StructTreeRoot");
+    expect(body).toContain("/MarkInfo << /Marked true >>");
+    expect(body).toContain("/StructParents 0");
+    expect(body).toContain("/Lang (ru)");
+    expect(body).toContain("/Title (");
+  });
+
   test("applies normalized PDF settings including page size, orientation, template, and TOC", () => {
     const rendered = renderPdf(makeConversation(), {
       pdfSettings: {
@@ -93,6 +124,73 @@ describe("renderPdf", () => {
     const pageCount = textFromBytes(rendered.bytes).match(/\/Type \/Page\b/gu)?.length ?? 0;
 
     expect(pageCount).toBeGreaterThan(1);
+  });
+
+  test("does not create a trailing blank page when final spacing reaches the margin", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            attachments: [
+              {
+                description: "Markdown document",
+                kind: "file",
+                name: "launch-brief.md",
+                sizeBytes: 18_420
+              },
+              {
+                description: "ZIP archive",
+                kind: "file",
+                name: "reference-assets.zip",
+                sizeBytes: 3_480_000
+              }
+            ],
+            codeBlocks: [],
+            id: "msg-1",
+            index: 0,
+            markdown: undefined,
+            role: "user",
+            authorLabel: "User",
+            text: "Create a concise launch checklist using the attached brief and reference assets."
+          }),
+          makeMessage({
+            codeBlocks: [],
+            id: "msg-2",
+            index: 1,
+            markdown:
+              "## Launch priorities\n\nStart with **reliability** and preserve the conversation structure:\n\n- Verify capture completeness without duplicate scans.\n- Keep attached files visually distinct from the message body.\n- Render source links clearly.\n\n> The export remains local and self-contained.",
+            text: "Launch priorities. Start with reliability and preserve the conversation structure."
+          }),
+          makeMessage({
+            attachments: [
+              {
+                description: "Interactive HTML report",
+                kind: "website",
+                name: "release-dashboard.html",
+                url: "https://example.com/jelluvi/release-dashboard"
+              }
+            ],
+            codeBlocks: [],
+            id: "msg-3",
+            index: 2,
+            markdown: undefined,
+            role: "user",
+            authorLabel: "User",
+            text: "Include the final visual and privacy checks in Preview."
+          }),
+          makeMessage({
+            id: "msg-4",
+            index: 3,
+            markdown:
+              "## Final checks\n\n1. Compare dark and light Preview states.\n2. Confirm files, sources, and code remain readable.\n3. Run the release checks:\n\n```sh\npnpm check\n```\n\nNo transcript upload is required.",
+            text: "Final checks. Compare Preview states and run the release checks."
+          })
+        ]
+      })
+    );
+    const pageCount = textFromBytes(rendered.bytes).match(/\/Type \/Page\b/gu)?.length ?? 0;
+
+    expect(pageCount).toBe(1);
   });
 
   test("can omit source metadata when metadata is disabled", () => {
@@ -139,6 +237,29 @@ describe("renderPdf", () => {
     expect(text).toContain("Canvas content was detected");
     expect(text).toContain("Visible thinking / reasoning");
     expect(text).toContain("Visible reasoning text.");
+  });
+
+  test("does not append a duplicate source when its tracked URL is already inline", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            markdown: "[Primary source](https://example.org/report/?utm_source=chatgpt.com#result)",
+            sources: [
+              {
+                kind: "citation",
+                title: "Duplicate citation card",
+                url: "https://example.org/report"
+              }
+            ]
+          })
+        ]
+      })
+    );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).not.toContain("Duplicate citation card");
+    expect(text).not.toContain("Sources");
   });
 
   test("preserves Cyrillic in embedded PDF text", () => {
@@ -240,7 +361,28 @@ describe("renderPdf", () => {
 
     expect(text).toContain("3. Third step");
     expect(text).toContain("4. Fourth step");
-    expect(text).toContain("- Separate bullet");
+    expect(text).toContain("• Separate bullet");
+  });
+
+  test("cleans emphasis markers, omits code-language labels, and keeps currency ranges intact", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            markdown:
+              "*Курсив без маркеров* и `child_safety_physical_aggression_alert`.\n\n| Этап | Срок | Цена |\n| --- | --- | --- |\n| Масштабирование | 2–3 месяца | $12 000–17 000 |\n\n```ts\nconst alert_name = true;\n```",
+            text: "Курсив без маркеров. Масштабирование."
+          })
+        ]
+      })
+    );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain("Курсив без маркеров");
+    expect(text).not.toContain("*Курсив без маркеров*");
+    expect(text).toContain("$12 000–17 000");
+    expect(text).not.toMatch(/(?:^|\n)ts(?:\n|$)/u);
+    expect(text).toContain("const alert_name = true;");
   });
 
   test("keeps thematic separators on the current page and reserves page breaks for an explicit command", () => {
@@ -289,11 +431,11 @@ describe("renderPdf", () => {
     const body = textFromBytes(rendered.bytes);
     const text = extractPdfText(rendered.bytes);
 
-    expect(text).toContain("- Parent introduction continued parent detail");
-    expect(text).toContain("3. Nested third continued nested detail");
+    expect(text).toContain("• Parent introduction\ncontinued parent detail");
+    expect(text).toContain("3. Nested third\ncontinued nested detail");
     expect(text).toContain("4. Nested fourth");
     expect(text).toContain("trailing parent detail");
-    expect(text).toContain("- Second parent");
+    expect(text).toContain("• Second parent");
     expect(body).toMatch(/\b66 [\d.]+ Td\b/u);
     expect(body).toMatch(/\b82 [\d.]+ Td\b/u);
   });

@@ -1,6 +1,10 @@
 import { render } from "preact";
 
 import type { ConversationExport } from "../src/core/schema";
+import {
+  createLocalLibraryRecord,
+  saveLocalLibraryRecord
+} from "../src/library/local-library";
 import { OptionsApp } from "../src/ui/OptionsApp";
 import { PopupApp } from "../src/ui/PopupApp";
 import { PreviewApp } from "../src/ui/PreviewApp";
@@ -127,6 +131,10 @@ const qaStatus = visualParams.get("status") ?? "ready";
 Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
   runtime: {
     getURL: (path: string) => (path === "brand/jelluvi.png" ? "/icons/icon-128.png" : `/${path}`),
+    onMessage: {
+      addListener: () => undefined,
+      removeListener: () => undefined
+    },
     sendMessage: async (message: { readonly type?: string }) => {
       if (message.type === "jelluvi/get-active-tab-info") {
         if (qaStatus === "failed") {
@@ -165,8 +173,45 @@ Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
         };
       }
 
+      if (message.type === "jelluvi/list-open-chat-tabs") {
+        return {
+          ok: true,
+          value: {
+            tabs: [
+              {
+                id: 101,
+                platform: "chatgpt",
+                platformLabel: "ChatGPT",
+                title: "Jelluvi launch checklist",
+                url: conversation.sourceUrl
+              },
+              {
+                id: 102,
+                platform: "claude",
+                platformLabel: "Claude",
+                title: "Release copy review",
+                url: "https://claude.ai/chat/jelluvi-visual-qa"
+              },
+              {
+                id: 103,
+                platform: "gemini",
+                platformLabel: "Gemini",
+                title: "Export QA notes",
+                url: "https://gemini.google.com/app/jelluvi-visual-qa"
+              }
+            ]
+          }
+        };
+      }
+
       return { ok: true, value: {} };
     }
+  },
+  permissions: {
+    request: (
+      _permissions: chrome.permissions.Permissions,
+      callback: (granted: boolean) => void
+    ) => callback(true)
   },
   storage: {
     local: {
@@ -179,9 +224,27 @@ Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
 const root = document.getElementById("app");
 const surface = visualParams.get("surface") ?? "popup";
 
-if (root !== null) {
-  render(
-    surface === "settings" ? <OptionsApp /> : surface === "preview" ? <PreviewApp /> : <PopupApp />,
-    root
-  );
+async function bootstrapVisualQa() {
+  if (visualParams.get("view") === "library") {
+    await saveLocalLibraryRecord(
+      createLocalLibraryRecord(conversation, {
+        projectLabel: "Release QA",
+        savedAt: "2026-07-16T14:35:00.000Z",
+        tags: ["local", "qa"]
+      })
+    );
+  }
+
+  if (root !== null) {
+    render(
+      surface === "settings"
+        ? <OptionsApp />
+        : surface === "preview"
+          ? <PreviewApp />
+          : <PopupApp />,
+      root
+    );
+  }
 }
+
+void bootstrapVisualQa();

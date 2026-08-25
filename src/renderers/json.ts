@@ -38,6 +38,10 @@ function omitMessageRawHtml(message: ExportedMessage): ExportedMessage {
     ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
     ...(message.sources !== undefined ? { sources: message.sources } : {}),
     ...(message.thinkingBlocks !== undefined ? { thinkingBlocks: message.thinkingBlocks } : {}),
+    ...(message.reasoningSummary !== undefined
+      ? { reasoningSummary: message.reasoningSummary }
+      : {}),
+    ...(message.toolInvocations !== undefined ? { toolInvocations: message.toolInvocations } : {}),
     ...(message.canvas !== undefined ? { canvas: message.canvas } : {}),
     ...(message.createdAt !== undefined ? { createdAt: message.createdAt } : {}),
     ...(message.model !== undefined ? { model: message.model } : {}),

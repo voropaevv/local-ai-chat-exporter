@@ -1,6 +1,11 @@
 import type { ExportOptions, SerializedExportError } from "./export-options";
 import type { BatchCandidateTab, BatchManifestResult } from "./batch";
-import type { CompletenessReport, ConversationExport, ExportFormat } from "./schema";
+import type {
+  CompletenessReport,
+  ConversationCaptureProgress,
+  ConversationExport,
+  ExportFormat
+} from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
 export const POPUP_SCAN_MESSAGE = "jelluvi/scan-current-tab";
@@ -18,6 +23,7 @@ export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/content-cancel-scan";
 export const CONTENT_EXPORT_MESSAGE = "jelluvi/content-export";
 export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/content-get-scan-cache-summary";
 export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/content-get-cached-conversation";
+export const CONTENT_SCAN_PROGRESS_MESSAGE = "jelluvi/content-scan-progress";
 
 export interface ScanSummary {
   readonly completeness: CompletenessReport;
@@ -84,6 +90,12 @@ export interface ContentScanRequest {
 
 export interface ContentCancelScanRequest {
   readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE;
+}
+
+export interface ContentScanProgressEvent {
+  readonly progress: ConversationCaptureProgress;
+  readonly sourceUrl: string;
+  readonly type: typeof CONTENT_SCAN_PROGRESS_MESSAGE;
 }
 
 export interface ContentExportRequest {
@@ -177,3 +189,26 @@ export type RuntimeResponse<T> =
       readonly ok: false;
       readonly error: SerializedExportError;
     };
+
+export function isContentScanProgressEvent(value: unknown): value is ContentScanProgressEvent {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const event = value as Partial<ContentScanProgressEvent>;
+  const progress = event.progress as Partial<ConversationCaptureProgress> | undefined;
+
+  return (
+    event.type === CONTENT_SCAN_PROGRESS_MESSAGE &&
+    typeof event.sourceUrl === "string" &&
+    progress !== undefined &&
+    ["inventory", "capture", "recheck", "verify"].includes(progress.phase ?? "") &&
+    [
+      progress.capturedTurnCount,
+      progress.knownTurnCount,
+      progress.messageCount,
+      progress.missingTurnCount,
+      progress.scrollSteps
+    ].every((candidate) => Number.isInteger(candidate) && Number(candidate) >= 0)
+  );
+}
