@@ -148,6 +148,48 @@ describe("renderPdf", () => {
     expect(extractPdfText(rendered.bytes)).toContain("After quote.");
   });
 
+  test("matches a blockquote border to the quoted text ink with equal vertical padding", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: "> Quoted first line.\n> Quoted second line.\n\nAfter quote.",
+            text: "Quoted first line. Quoted second line. After quote."
+          })
+        ]
+      })
+    );
+    const body = pdfBodyFromBytes(rendered.bytes);
+    const runs = extractPdfPositionedTextRuns(rendered.bytes);
+    const quoteRuns = runs.filter((run) => run.font === "F1" && run.text.startsWith("Quoted "));
+    const followingParagraph = runs.find((run) => run.font === "F1" && run.text === "After quote.");
+    const border = /0\.8 w 58 ([-\d.]+) m 58 ([-\d.]+) l S/gu.exec(body);
+    const metrics = new PdfFontRegistry().metrics("regular");
+
+    expect(border).not.toBeNull();
+    expect(quoteRuns).toHaveLength(2);
+    expect(followingParagraph).toBeDefined();
+
+    const borderBottom = Number.parseFloat(border?.[1] ?? "nan");
+    const borderTop = Number.parseFloat(border?.[2] ?? "nan");
+    const topInk = Math.max(
+      ...quoteRuns.map((run) => run.y + (metrics.capHeight * run.size) / 1000)
+    );
+    const bottomInk = Math.min(
+      ...quoteRuns.map((run) => run.y + (metrics.descent * run.size) / 1000)
+    );
+    const followingTopInk =
+      (followingParagraph?.y ?? Number.POSITIVE_INFINITY) +
+      (metrics.capHeight * (followingParagraph?.size ?? 0)) / 1000;
+    const topPadding = borderTop - topInk;
+    const bottomPadding = bottomInk - borderBottom;
+
+    expect(topPadding).toBeGreaterThanOrEqual(3.9);
+    expect(Math.abs(topPadding - bottomPadding)).toBeLessThan(0.02);
+    expect(borderBottom - followingTopInk).toBeGreaterThanOrEqual(4);
+  });
+
   test("segments a multi-page code background across every occupied page", () => {
     const code = Array.from(
       { length: 180 },
@@ -447,6 +489,68 @@ describe("renderPdf", () => {
     );
   });
 
+  test("keeps a table header with its first body row", () => {
+    for (let lineCount = 38; lineCount <= 48; lineCount += 1) {
+      const filler = Array.from(
+        { length: lineCount },
+        (_, index) => `Filler line ${index + 1}`
+      ).join("\n");
+      const rendered = renderPdf(
+        makeConversation({
+          messages: [
+            makeMessage({
+              codeBlocks: [],
+              markdown: `${filler}\n\n| Orphan header | Value |\n| --- | --- |\n| First body row | Present |`,
+              text: "Filler. First body row."
+            })
+          ]
+        })
+      );
+      const text = extractPdfText(rendered.bytes);
+
+      expect(text.match(/Orphan header/gu), `filler line count ${lineCount}`).toHaveLength(1);
+      expect(text).toContain("First body row");
+    }
+  });
+
+  test("wraps an oversized table word before it crosses into the next cell", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown:
+              "| Этап | Результат | Срок | Цена |\n| --- | --- | --- | --- |\n| Итого до подтверждённого пилота |  | 5–7 месяцев календарно | $33 000 |\n| 5. Масштабирование | Автоматизированное развёртывание, мониторинг, конфигурация 160 объектов | 2–3 месяца | $12 000–17 000 |",
+            text: "5. Масштабирование. Автоматизированное развёртывание."
+          })
+        ]
+      })
+    );
+    const runs = extractPdfPositionedTextRuns(rendered.bytes);
+    const resultCell = runs.find(
+      (run) => run.font === "F1" && run.text.startsWith("Автоматизированное")
+    );
+    const scalingRun = runs.find(
+      (run) => run.font === "F1" && run.text.includes("Масштабирование")
+    );
+    const firstCellRuns = runs.filter(
+      (run) => run.font === "F1" && (run.text === "5." || run.text.includes("Масштабирование"))
+    );
+    const registry = new PdfFontRegistry();
+    const rightContentEdge = (resultCell?.x ?? Number.NEGATIVE_INFINITY) - 8;
+
+    expect(resultCell).toBeDefined();
+    expect(scalingRun).toBeDefined();
+    expect(firstCellRuns.length).toBeGreaterThan(0);
+    firstCellRuns.forEach((run) => {
+      const width = registry
+        .encodeTextRuns("regular", run.text)
+        .reduce((total, encoded) => total + (encoded.width * run.size) / 1000, 0);
+
+      expect(run.x + width).toBeLessThanOrEqual(rightContentEdge + 0.01);
+    });
+  });
+
   test("preserves mathematical relations in headings, paragraphs, and table cells", () => {
     const rendered = renderPdf(
       makeConversation({
@@ -556,8 +660,7 @@ describe("renderPdf", () => {
         messages: [
           makeMessage({
             codeBlocks: [],
-            markdown:
-              "**9 → 10 → 11.**\n\n> **что снимать → как это выглядит → сколько раз.**",
+            markdown: "**9 → 10 → 11.**\n\n> **что снимать → как это выглядит → сколько раз.**",
             text: "9 to 11. Что снимать."
           })
         ]
@@ -622,6 +725,35 @@ describe("renderPdf", () => {
     expect(extractPdfText(thematic.bytes)).toContain("Before separator.");
     expect(extractPdfText(thematic.bytes)).toContain("After separator.");
     expect(textFromBytes(explicitBreak.bytes).match(/\/Type \/Page\b/gu)).toHaveLength(2);
+  });
+
+  test("keeps visible clearance between a thematic separator and the following heading", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: "Before separator.\n\n---\n\n## After separator",
+            text: "Before separator. After separator."
+          })
+        ]
+      })
+    );
+    const body = pdfBodyFromBytes(rendered.bytes);
+    const heading = extractPdfPositionedTextRuns(rendered.bytes).find(
+      (run) => run.font === "F2" && run.text === "After separator"
+    );
+    const separator = /0\.8 w 54 ([-\d.]+) m 541\.28 ([-\d.]+) l S/gu.exec(body);
+    const metrics = new PdfFontRegistry().metrics("bold");
+
+    expect(separator).not.toBeNull();
+    expect(heading).toBeDefined();
+
+    const separatorY = Number.parseFloat(separator?.[1] ?? "nan");
+    const headingTopInk =
+      (heading?.y ?? Number.POSITIVE_INFINITY) + (metrics.capHeight * (heading?.size ?? 0)) / 1000;
+
+    expect(separatorY - headingTopInk).toBeGreaterThanOrEqual(7);
   });
 
   test("preserves nested list hierarchy and continuation lines", () => {
@@ -744,9 +876,7 @@ function extractLightCodeBackgrounds(body: string): readonly {
   readonly y: number;
 }[] {
   return [
-    ...body.matchAll(
-      /q 0\.949 0\.965 0\.969 rg ([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) re f Q/gu
-    )
+    ...body.matchAll(/q 0\.949 0\.965 0\.969 rg ([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) re f Q/gu)
   ].map((match) => ({
     height: Number.parseFloat(match[4]),
     width: Number.parseFloat(match[3]),

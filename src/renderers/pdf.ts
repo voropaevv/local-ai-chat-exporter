@@ -110,6 +110,12 @@ interface PdfInlineRun {
   readonly url?: string;
 }
 
+interface PdfRenderedLineInk {
+  readonly bottom: number;
+  readonly pageIndex: number;
+  readonly top: number;
+}
+
 type PdfListItemPart =
   | {
       readonly kind: "text";
@@ -699,36 +705,32 @@ class PdfLayout {
   blockquote(markdown: string): void {
     const size = this.settings.fontSizePt;
     this.ensureSpace(size * 1.35);
-    const startPageIndex = this.pages.length - 1;
-    const startY = this.y;
-    this.drawRichWrappedText(markdown, {
+    const renderedLines = this.drawRichWrappedText(markdown, {
       color: this.theme.muted,
       indent: 16,
       size
     });
-    const endPageIndex = this.pages.length - 1;
-    const bottomY = this.y + size * 0.35;
-    const topY = startY + size * 0.8;
     const lineX = this.margin + 4;
+    const verticalPadding = 4;
+    const pageInk = new Map<number, { bottom: number; top: number }>();
 
-    if (startPageIndex === endPageIndex) {
-      this.strokeLineOnPage(startPageIndex, lineX, bottomY, lineX, topY, this.theme.heading);
-    } else {
-      const pageTopY = this.size.height - this.margin + size * 0.8;
-
-      for (let pageIndex = startPageIndex; pageIndex <= endPageIndex; pageIndex += 1) {
-        const segmentBottomY = pageIndex === endPageIndex ? bottomY : this.margin;
-        const segmentTopY = pageIndex === startPageIndex ? topY : pageTopY;
-        this.strokeLineOnPage(
-          pageIndex,
-          lineX,
-          segmentBottomY,
-          lineX,
-          segmentTopY,
-          this.theme.heading
-        );
-      }
-    }
+    renderedLines.forEach((line) => {
+      const ink = pageInk.get(line.pageIndex);
+      pageInk.set(line.pageIndex, {
+        bottom: Math.min(ink?.bottom ?? Number.POSITIVE_INFINITY, line.bottom),
+        top: Math.max(ink?.top ?? Number.NEGATIVE_INFINITY, line.top)
+      });
+    });
+    pageInk.forEach((ink, pageIndex) => {
+      this.strokeLineOnPage(
+        pageIndex,
+        lineX,
+        ink.bottom - verticalPadding,
+        lineX,
+        ink.top + verticalPadding,
+        this.theme.heading
+      );
+    });
     this.space(5);
   }
 
@@ -900,8 +902,10 @@ class PdfLayout {
   }
 
   thematicBreak(): void {
-    this.ensureSpace(16);
-    this.y -= 8;
+    const gapBeforeLine = 8;
+    const gapAfterLine = 15;
+    this.ensureSpace(gapBeforeLine + gapAfterLine);
+    this.y -= gapBeforeLine;
     this.strokeLine(
       this.margin,
       this.y,
@@ -909,7 +913,7 @@ class PdfLayout {
       this.y,
       this.theme.border
     );
-    this.y -= 8;
+    this.y -= gapAfterLine;
   }
 
   code(code: string, language: string | undefined): void {
@@ -994,8 +998,7 @@ class PdfLayout {
     const columnWidths = allocateTableColumnWidths(rows, this.contentWidth, size, (value) =>
       this.measureText(value, "regular", size)
     );
-
-    const renderRow = (row: readonly string[], header: boolean): void => {
+    const layoutRow = (row: readonly string[], header: boolean) => {
       const cellLines = Array.from({ length: columnCount }, (_value, columnIndex) =>
         this.wrapExact(
           stripInlineMarkdown(row[columnIndex] ?? ""),
@@ -1005,6 +1008,18 @@ class PdfLayout {
         )
       );
       const rowHeight = Math.max(...cellLines.map((lines) => lines.length), 1) * lineHeight + 8;
+
+      return { cellLines, rowHeight };
+    };
+
+    if (rows.length > 1) {
+      const headerHeight = layoutRow(rows[0], true).rowHeight;
+      const firstBodyHeight = layoutRow(rows[1], false).rowHeight;
+      this.ensureSpace(headerHeight + firstBodyHeight);
+    }
+
+    const renderRow = (row: readonly string[], header: boolean): void => {
+      const { cellLines, rowHeight } = layoutRow(row, header);
 
       if (this.y - rowHeight < this.margin) {
         this.addPage();
@@ -1117,15 +1132,25 @@ class PdfLayout {
       readonly indent?: number;
       readonly size: number;
     }
-  ): void {
+  ): readonly PdfRenderedLineInk[] {
     const indent = options.indent ?? 0;
     const runs = parsePdfInlineRuns(markdown);
     const lines = wrapPdfInlineRuns(runs, this.contentWidth - indent, (run) =>
       this.measureText(run.text, run.font, options.size)
     );
+    const renderedLines: PdfRenderedLineInk[] = [];
 
     lines.forEach((lineRuns) => {
       this.ensureSpace(options.size * 1.35);
+      const lineFonts =
+        lineRuns.length > 0 ? lineRuns.map((run) => run.font) : ["regular" as const];
+      const metrics = lineFonts.map((font) => this.fonts.metrics(font));
+      renderedLines.push({
+        bottom:
+          this.y + (Math.min(...metrics.map((metric) => metric.descent)) * options.size) / 1000,
+        pageIndex: this.pages.length - 1,
+        top: this.y + (Math.max(...metrics.map((metric) => metric.capHeight)) * options.size) / 1000
+      });
       let currentX = this.margin + indent;
 
       lineRuns.forEach((run) => {
@@ -1150,6 +1175,8 @@ class PdfLayout {
       });
       this.y -= options.size * 1.35;
     });
+
+    return renderedLines;
   }
 
   private drawListItem(
@@ -2056,20 +2083,25 @@ function wrapExactText(
   const lines: string[] = [];
   for (const sourceLine of normalizePdfText(input).split("\n")) {
     let current = "";
+    const appendCharacters = (value: string) => {
+      for (const character of value) {
+        if (current.length > 0 && measure(current + character) > maxWidth) {
+          lines.push(current);
+          current = character;
+        } else {
+          current += character;
+        }
+      }
+    };
+
     for (const token of sourceLine.split(/(\s+)/u).filter(Boolean)) {
       const next = current + token;
       if (current.trim().length > 0 && measure(next) > maxWidth && token.trim().length > 0) {
         lines.push(current.trimEnd());
-        current = token.trimStart();
+        current = "";
+        appendCharacters(token.trimStart());
       } else if (measure(token) > maxWidth && token.trim().length > 0) {
-        for (const character of token) {
-          if (current.length > 0 && measure(current + character) > maxWidth) {
-            lines.push(current);
-            current = character;
-          } else {
-            current += character;
-          }
-        }
+        appendCharacters(token);
       } else {
         current = next;
       }
@@ -2106,10 +2138,21 @@ function allocateTableColumnWidths(
     const numeric = values.slice(1).every((value) => value.length === 0 || isNumericPdfCell(value));
     const longest = Math.max(...values.map((value) => Math.min(48, [...value].length)), 4);
     const naturalWidth = Math.max(...values.map((value) => measureText(value)), 0) + 10;
+    const longestTokenWidth =
+      Math.max(
+        ...values.flatMap((value) =>
+          value
+            .split(/\s+/u)
+            .filter((token) => token.length > 0)
+            .map((token) => measureText(token))
+        ),
+        0
+      ) + 10;
     const compact = numeric || longest <= 24;
+    const readableMinimum = Math.min(Math.max(baseMinimum, longestTokenWidth), contentWidth * 0.32);
     const requiredWidth = compact
-      ? Math.min(Math.max(baseMinimum, naturalWidth), contentWidth * 0.32)
-      : baseMinimum;
+      ? Math.min(Math.max(readableMinimum, naturalWidth), contentWidth * 0.32)
+      : readableMinimum;
 
     return {
       requiredWidth,

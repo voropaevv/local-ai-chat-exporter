@@ -2,7 +2,7 @@
 
 Date: 2026-08-26
 
-Last verified locally: 2026-08-26 20:50 +04
+Last verified locally: 2026-08-26 23:47 +04
 
 ## Release status
 
@@ -58,6 +58,12 @@ Last verified locally: 2026-08-26 20:50 +04
   use a bundled monochrome vector fallback without runtime font requests.
 - Text following a table reserves a full line-height below the final border, preventing bold
   paragraphs from overlapping the final row.
+- Table columns reserve readable width for their longest token when space is available; the exact
+  wrapper still splits an oversized token character-by-character before it can cross a cell edge.
+- A table header is kept with its first body row instead of being left alone at a page bottom.
+- Thematic separators retain at least 7 pt of visible clearance before the following heading.
+- Blockquote borders follow the actual per-page text ink bounds with equal 4 pt top and bottom
+  padding instead of extending toward the following paragraph.
 - Immediate continuation lines in top-level Markdown lists stay aligned with the item text instead
   of returning to the page margin.
 - Common prose arrows use an aligned proportional symbols font rather than the low-baseline
@@ -68,30 +74,30 @@ Last verified locally: 2026-08-26 20:50 +04
 
 ## Verified checks
 
-| Check                                                                | Result                                                                                                                                                                           |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test`                                                          | Pass — 66 test files / 349 tests.                                                                                                                                                |
-| `pnpm lint`                                                          | Pass.                                                                                                                                                                            |
-| `pnpm typecheck`                                                     | Pass.                                                                                                                                                                            |
-| `pnpm build`                                                         | Pass; popup, options, Preview, service worker and classic content script rebuilt.                                                                                                |
-| `pnpm test:e2e`                                                      | Six passed; one headed extension-popup case skipped.                                                                                                                             |
-| `pnpm store-assets:build`                                            | Pass — five 1280×800 current UI screenshots plus current 440×280 promo.                                                                                                          |
-| Icon and brand guards                                                | Pass, including rebuilt `dist/`.                                                                                                                                                 |
-| Classic content-script and Preview guards                            | Pass.                                                                                                                                                                            |
-| No-remote-code guard                                                 | Pass.                                                                                                                                                                            |
-| Manifest permission guard                                            | Pass — no broad mandatory browsing permission.                                                                                                                                   |
-| `node scripts/check-export-output-hygiene.mjs tests/fixtures/golden` | Pass.                                                                                                                                                                            |
-| `pnpm audit --prod`                                                  | Pass — no known vulnerabilities.                                                                                                                                                 |
-| Direct PDF download through Preview                                  | Pass; browser download failure was `null`.                                                                                                                                       |
-| Regenerated long-chat PDF inspection                                 | Pass — 288 tagged A4 pages, no JavaScript, 84 links, five embedded images, searchable text, zero replacement glyphs, zero blank pages and zero overlapping text-line candidates. |
-| Installed Brave extension readback                                   | Pass — active unpacked `0.1.0` reloaded with the `Reloaded` receipt, stayed enabled without an Errors control, and opened its popup on the supported long ChatGPT conversation.  |
-| `pnpm package` twice                                                 | Pass; identical SHA256 `6d49b55571781dd4e2523853466908f2f74a8d038ed14c85077d0e1901bde0e7`.                                                                                       |
+| Check                                                                | Result                                                                                                                                                                                         |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm test`                                                          | Pass — 66 test files / 353 tests.                                                                                                                                                              |
+| `pnpm lint`                                                          | Pass.                                                                                                                                                                                          |
+| `pnpm typecheck`                                                     | Pass.                                                                                                                                                                                          |
+| `pnpm build`                                                         | Pass; popup, options, Preview, service worker and classic content script rebuilt.                                                                                                              |
+| `pnpm test:e2e`                                                      | Six passed; one headed extension-popup case skipped.                                                                                                                                           |
+| `pnpm store-assets:build`                                            | Pass — five 1280×800 current UI screenshots plus current 440×280 promo.                                                                                                                        |
+| Icon and brand guards                                                | Pass, including rebuilt `dist/`.                                                                                                                                                               |
+| Classic content-script and Preview guards                            | Pass.                                                                                                                                                                                          |
+| No-remote-code guard                                                 | Pass.                                                                                                                                                                                          |
+| Manifest permission guard                                            | Pass — no broad mandatory browsing permission.                                                                                                                                                 |
+| `node scripts/check-export-output-hygiene.mjs tests/fixtures/golden` | Pass.                                                                                                                                                                                          |
+| `pnpm audit --prod`                                                  | Pass — no known vulnerabilities.                                                                                                                                                               |
+| Direct PDF download through Preview                                  | Pass; browser download failure was `null`.                                                                                                                                                     |
+| Regenerated long-chat PDF inspection                                 | Pass — 290 tagged A4 pages, no JavaScript, 84 links, five embedded images, searchable text, zero replacement glyphs, zero blank pages and zero same-baseline overlapping text-line candidates. |
+| Installed Brave extension readback                                   | Pass — active unpacked `0.1.0` reloaded with the `Reloaded` receipt, stayed enabled without an Errors control, and opened its popup on the supported long ChatGPT conversation.                |
+| `pnpm package` twice                                                 | Pass; identical SHA256 `ed6cc50f80f8a4327f195d8cb3ce289885db5b1d97302937c12df02a796b4920`.                                                                                                     |
 
 ## Release package
 
 - Path: `release/jelluvi-v0.1.0.zip`
-- Size: 2,224,777 bytes
-- SHA256: `6d49b55571781dd4e2523853466908f2f74a8d038ed14c85077d0e1901bde0e7`
+- Size: 2,225,149 bytes
+- SHA256: `ed6cc50f80f8a4327f195d8cb3ce289885db5b1d97302937c12df02a796b4920`
 - Production files: 24
 - Includes `LICENSE.txt`, `NOTO_FONT_LICENSE.txt` and `THIRD_PARTY_NOTICES.txt`.
 - Excludes source, tests, docs, Store screenshots, QA output, local archives and task files.
@@ -135,9 +141,10 @@ included in `dist/` or the Store ZIP.
 - Source-tab pinning was verified by changing the active Brave tab during capture; Preview still
   opened the original ChatGPT result.
 - The final PDF has SHA256
-  `e570ccd8b26ca92836edb835bd5a37ad007b8ee30ffed980514afaac834a3a79`. All 288 pages were
+  `a9cc962f48df4d07687d6f789a480ffff4041713a80774a170b870f89fcfe43a`. All 290 pages were
   rendered and visually reviewed. Multi-page blockquote borders, multi-page code backgrounds,
-  code padding, list continuations, prose arrows, Unicode code-tree glyphs, table flow and the
+  blockquote ink alignment, code padding, list continuations, prose arrows, Unicode code-tree
+  glyphs, table cell containment, table header flow, thematic-separator clearance and the
   standalone emoji fallback are fixed; the extracted text contains no replacement glyphs.
 - Preview `Copy MD` was verified live. The iframe table-copy click was not independently proven by
   Computer Use, while table copy behavior remains covered by automated Preview tests.
