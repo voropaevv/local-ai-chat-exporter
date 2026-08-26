@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import type { ConversationExport, ExportedMessage } from "../../../src/core/schema";
+import { PdfFontRegistry } from "../../../src/renderers/pdf-font";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../../../src/renderers/pdf-settings";
 import { renderPdf, renderPdfFromNormalizedConversation } from "../../../src/renderers/pdf";
 import { extractPdfPositionedTextRuns, extractPdfText, pdfBodyFromBytes } from "../../helpers/pdf";
@@ -145,6 +146,71 @@ describe("renderPdf", () => {
     expect(pageCount).toBeGreaterThan(2);
     expect(quoteBorders).toHaveLength(pageCount);
     expect(extractPdfText(rendered.bytes)).toContain("After quote.");
+  });
+
+  test("segments a multi-page code background across every occupied page", () => {
+    const code = Array.from(
+      { length: 180 },
+      (_, index) => `line ${String(index + 1).padStart(3, "0")}: long local code remains visible`
+    ).join("\n");
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: `\`\`\`text\n${code}\n\`\`\`\n\nAfter code.`,
+            text: `${code}\nAfter code.`
+          })
+        ]
+      })
+    );
+    const body = pdfBodyFromBytes(rendered.bytes);
+    const pageCount = body.match(/\/Type \/Page\b/gu)?.length ?? 0;
+    const backgrounds = extractLightCodeBackgrounds(body);
+
+    expect(pageCount).toBeGreaterThan(2);
+    expect(backgrounds).toHaveLength(pageCount);
+    backgrounds.forEach((background) => {
+      expect(background.y).toBeGreaterThanOrEqual(DEFAULT_PDF_SETTINGS.marginPt);
+      expect(background.y + background.height).toBeLessThanOrEqual(
+        841.89 - DEFAULT_PDF_SETTINGS.marginPt + 0.01
+      );
+    });
+    expect(extractPdfText(rendered.bytes)).toContain("After code.");
+  });
+
+  test("centers code text vertically inside its background", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: '```text\nНЕ:\n"ребенок A буллит ребенка B"\n```',
+            text: 'НЕ:\n"ребенок A буллит ребенка B"'
+          })
+        ]
+      })
+    );
+    const body = pdfBodyFromBytes(rendered.bytes);
+    const backgrounds = extractLightCodeBackgrounds(body);
+    const codeRuns = extractPdfPositionedTextRuns(rendered.bytes).filter(
+      (run) => run.font === "F3" && (run.text === "НЕ:" || run.text.startsWith('"ребенок'))
+    );
+    const metrics = new PdfFontRegistry().metrics("mono");
+
+    expect(backgrounds).toHaveLength(1);
+    expect(codeRuns).toHaveLength(2);
+
+    const background = backgrounds[0];
+    const first = codeRuns[0];
+    const last = codeRuns[1];
+    const topInk = first.y + (metrics.capHeight * first.size) / 1000;
+    const bottomInk = last.y + (metrics.descent * last.size) / 1000;
+    const topPadding = background.y + background.height - topInk;
+    const bottomPadding = bottomInk - background.y;
+
+    expect(topPadding).toBeGreaterThan(6);
+    expect(Math.abs(topPadding - bottomPadding)).toBeLessThan(0.02);
   });
 
   test("does not create a trailing blank page when final spacing reaches the margin", () => {
@@ -460,6 +526,53 @@ describe("renderPdf", () => {
     expect(text).toContain("• Separate bullet");
   });
 
+  test("keeps immediate top-level list continuations aligned with item text", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown:
+              "1. **Быстрее находить инциденты.**\nВоспитатель или охрана не могут постоянно смотреть все камеры.\n2. **Можно использовать существующие камеры.**\nВ Казахстане уже есть видеонаблюдение.",
+            text: "Быстрее находить инциденты. Можно использовать существующие камеры."
+          })
+        ]
+      })
+    );
+    const runs = extractPdfPositionedTextRuns(rendered.bytes);
+    const firstTitle = runs.find((run) => run.text.startsWith("Быстрее находить"));
+    const firstContinuation = runs.find((run) => run.text.startsWith("Воспитатель или охрана"));
+    const secondTitle = runs.find((run) => run.text.startsWith("Можно использовать"));
+    const secondContinuation = runs.find((run) => run.text.startsWith("В Казахстане"));
+
+    expect(firstTitle).toBeDefined();
+    expect(firstContinuation?.x).toBe(firstTitle?.x);
+    expect(secondContinuation?.x).toBe(secondTitle?.x);
+  });
+
+  test("uses the vertically aligned symbols font for arrows in prose", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown:
+              "**9 → 10 → 11.**\n\n> **что снимать → как это выглядит → сколько раз.**",
+            text: "9 to 11. Что снимать."
+          })
+        ]
+      })
+    );
+    const body = pdfBodyFromBytes(rendered.bytes);
+    const runs = extractPdfPositionedTextRuns(rendered.bytes);
+    const arrows = runs.filter((run) => run.text === "→");
+
+    expect(body).toContain("/BaseFont /NotoSansSymbols-Regular");
+    expect(body).not.toContain("/BaseFont /NotoSansMono-Regular");
+    expect(arrows.length).toBeGreaterThanOrEqual(4);
+    expect(arrows.every((run) => run.font === "F5")).toBe(true);
+  });
+
   test("cleans emphasis markers, omits code-language labels, and keeps currency ranges intact", () => {
     const rendered = renderPdf(
       makeConversation({
@@ -622,4 +735,22 @@ function textFromBytes(bytes: string | Uint8Array): string {
   expect(bytes).toBeInstanceOf(Uint8Array);
 
   return pdfBodyFromBytes(bytes as Uint8Array);
+}
+
+function extractLightCodeBackgrounds(body: string): readonly {
+  readonly height: number;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+}[] {
+  return [
+    ...body.matchAll(
+      /q 0\.949 0\.965 0\.969 rg ([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) re f Q/gu
+    )
+  ].map((match) => ({
+    height: Number.parseFloat(match[4]),
+    width: Number.parseFloat(match[3]),
+    x: Number.parseFloat(match[1]),
+    y: Number.parseFloat(match[2])
+  }));
 }

@@ -1,7 +1,8 @@
 # Bundled PDF fonts
 
-Jelluvi embeds local subsets of Noto Sans Regular, Noto Sans Bold, Noto Sans Mono Regular, and
-Noto Emoji Regular in PDF exports. The fonts are never fetched at runtime.
+Jelluvi embeds local subsets of Noto Sans Regular, Noto Sans Bold, Noto Sans Mono Regular,
+Noto Sans Symbols Regular, and Noto Emoji Regular in PDF exports. The fonts are never fetched at
+runtime.
 
 Sources:
 
@@ -13,6 +14,7 @@ Original SHA256 values:
 - `NotoSans-Regular.ttf`: `b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5`
 - `NotoSans-Bold.ttf`: `c976e4b1b99edc88775377fcc21692ca4bfa46b6d6ca6522bfda505b28ff9d6a`
 - `NotoSansMono-Regular.ttf`: `d9e2b23d19f8230be7146f409a52b1d23117e635e28f2e2892cf91b7382f325b`
+- `NotoSansSymbols-Regular.ttf`: `8f02f31959bbdf6061547a188248e13f84dc5fdd940326ec494675f453f072bb`
 - `NotoEmoji[wght].ttf`: `de6c18832938afc99caf132b39d6a30a19bac7f2e812e28db2535b4608d27551`
 
 The bundled files retain the glyphs available in their source fonts for common Latin, Greek,
@@ -28,8 +30,9 @@ The emoji source is instantiated at weight 400 and retains its complete Unicode 
 monochrome vector fallback glyphs for common standalone emoji; complex joined emoji sequences are
 preserved as code points but may render as separate components.
 
-The selection is an upper bound: it cannot add glyphs missing from an original font. PDF text uses
-the bundled monospace font as a per-glyph fallback when Regular or Bold lacks a selected symbol, so
+The selection is an upper bound: it cannot add glyphs missing from an original font. PDF prose uses
+Noto Sans Symbols for common arrows so their vertical position matches surrounding proportional
+text. It then uses the bundled monospace font as a per-glyph fallback for other missing symbols, so
 operators such as `≤`, `≥`, and `≠` remain intact instead of becoming replacement characters.
 
 The subsets retain layout features, names, symbol and legacy cmaps, and the recommended/notdef
@@ -41,6 +44,7 @@ Bundled SHA256 values:
 - `NotoSans-Regular.ttf.zlib`: `a92af109a3bd24b823bb25b0cba89c750a4cb3b7b8b9e2584c52ac49b9560970`
 - `NotoSans-Bold.ttf.zlib`: `7999bb19345d20822d9bd5f86d0a13be44d42aadde8578860f946ac9329a8409`
 - `NotoSansMono-Regular.ttf.zlib`: `02d4e5af037ad891618deb00df30d96260a318e94f3fa474a83f2f68c8e42fe7`
+- `NotoSansSymbols-Regular.ttf.zlib`: `8008fb5e0dd024a061a50c9e37747b55b3efb46499f1e52f0099de9f828b02e9`
 - `NotoEmoji-Regular.ttf.zlib`: `8bece29d464172e2c4c1e00a0a932bf2cfe9b12ee0e2102db4a41eed4104114b`
 
 License: SIL Open Font License 1.1. See `OFL.txt` and the project-level

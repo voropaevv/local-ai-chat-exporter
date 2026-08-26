@@ -588,7 +588,11 @@ function parsePdfList(
         continue;
       }
 
-      if (countPdfIndent(lines[index]) <= baseIndent) {
+      // A top-level Markdown list commonly keeps an unindented continuation line
+      // directly below its marker (`1. **Title**\nExplanation`). It remains part of
+      // that item until a blank line or the next peer marker. Nested lists still use
+      // indentation to return control to their parent item.
+      if (baseIndent > 0 && countPdfIndent(lines[index]) <= baseIndent) {
         break;
       }
 
@@ -916,30 +920,67 @@ class PdfLayout {
     const wrappedLines = lines.flatMap((line) =>
       this.wrapExact(line.length > 0 ? line : " ", this.contentWidth - 16, size, "mono")
     );
-    const codeAreaHeight = lineHeight * wrappedLines.length;
-    const topGap = 11;
-    const blockHeight = topGap + codeAreaHeight + size + 14;
+    const paddingY = Math.max(7, size * 0.75);
+    const outerGap = 6;
+    const minimumSegmentHeight = paddingY * 2 + lineHeight;
+    const metrics = this.fonts.metrics("mono");
+    const inkAscent = (metrics.capHeight * size) / 1000;
+    const inkDescent = (-metrics.descent * size) / 1000;
+    const lineLeading = Math.max(0, lineHeight - inkAscent - inkDescent) / 2;
 
-    this.ensureSpace(blockHeight);
-    this.space(topGap);
+    this.ensureSpace(outerGap + minimumSegmentHeight);
+    this.space(outerGap);
 
-    if (this.theme.codeBackground !== undefined) {
-      const codeBottom = this.y - codeAreaHeight - 3;
-      const codeTop = this.y + size * 0.9;
+    let lineIndex = 0;
+    while (lineIndex < wrappedLines.length) {
+      if (this.y - minimumSegmentHeight < this.margin) {
+        this.addPage();
+      }
 
-      this.fillRect(
-        this.margin,
-        codeBottom,
-        this.contentWidth,
-        codeTop - codeBottom,
-        this.theme.codeBackground
+      const segmentTop = this.y;
+      const availableHeight = segmentTop - this.margin;
+      const linesOnPage = Math.max(
+        1,
+        Math.min(
+          wrappedLines.length - lineIndex,
+          Math.floor((availableHeight - paddingY * 2) / lineHeight)
+        )
       );
+      const segmentHeight = paddingY * 2 + linesOnPage * lineHeight;
+      const segmentBottom = segmentTop - segmentHeight;
+
+      if (this.theme.codeBackground !== undefined) {
+        this.fillRect(
+          this.margin,
+          segmentBottom,
+          this.contentWidth,
+          segmentHeight,
+          this.theme.codeBackground
+        );
+      }
+
+      let baseline = segmentTop - paddingY - lineLeading - inkAscent;
+      for (let offset = 0; offset < linesOnPage; offset += 1) {
+        this.drawText(
+          wrappedLines[lineIndex + offset],
+          this.margin + 8,
+          baseline,
+          "mono",
+          size,
+          this.theme.text
+        );
+        baseline -= lineHeight;
+      }
+
+      lineIndex += linesOnPage;
+      this.y = segmentBottom;
+
+      if (lineIndex < wrappedLines.length) {
+        this.addPage();
+      }
     }
 
-    wrappedLines.forEach((line) => {
-      this.line(line, this.margin + 8, "mono", size, this.theme.text);
-    });
-    this.space(size + 6);
+    this.space(8);
   }
 
   table(rows: readonly (readonly string[])[]): void {
@@ -1316,11 +1357,14 @@ function writePdf(document: PdfDocument): Uint8Array {
   const parentTreeEntries: string[] = [];
   const usesMonoFont = document.fonts.hasUsedGlyphs("mono");
   const usesEmojiFont = document.fonts.hasUsedGlyphs("emoji");
+  const usesSymbolsFont = document.fonts.hasUsedGlyphs("symbols");
   let nextObjectId = 13;
   const monoFontObjects = usesMonoFont ? embeddedFontObjectIds(nextObjectId) : undefined;
   nextObjectId += monoFontObjects === undefined ? 0 : 5;
   const emojiFontObjects = usesEmojiFont ? embeddedFontObjectIds(nextObjectId) : undefined;
   nextObjectId += emojiFontObjects === undefined ? 0 : 5;
+  const symbolsFontObjects = usesSymbolsFont ? embeddedFontObjectIds(nextObjectId) : undefined;
+  nextObjectId += symbolsFontObjects === undefined ? 0 : 5;
 
   objects[0] = "";
   objects[1] = "";
@@ -1332,9 +1376,13 @@ function writePdf(document: PdfDocument): Uint8Array {
   if (emojiFontObjects !== undefined) {
     addEmbeddedFontObjects(objects, document.fonts.snapshot("emoji"), emojiFontObjects);
   }
+  if (symbolsFontObjects !== undefined) {
+    addEmbeddedFontObjects(objects, document.fonts.snapshot("symbols"), symbolsFontObjects);
+  }
 
   const monoFontObjectId = monoFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
   const emojiFontObjectId = emojiFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
+  const symbolsFontObjectId = symbolsFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
   const imageObjectIds = new Map<string, number>();
 
   for (const image of document.images) {
@@ -1393,7 +1441,7 @@ function writePdf(document: PdfDocument): Uint8Array {
     objects[contentId - 1] = createStreamObject(content);
     objects[pageId - 1] =
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${formatNumber(document.size.width)} ${formatNumber(document.size.height)}] ` +
-      `/Resources << /Font << /F1 ${REGULAR_FONT_OBJECTS.type0} 0 R /F2 ${BOLD_FONT_OBJECTS.type0} 0 R /F3 ${monoFontObjectId} 0 R /F4 ${emojiFontObjectId} 0 R >> ` +
+      `/Resources << /Font << /F1 ${REGULAR_FONT_OBJECTS.type0} 0 R /F2 ${BOLD_FONT_OBJECTS.type0} 0 R /F3 ${monoFontObjectId} 0 R /F4 ${emojiFontObjectId} 0 R /F5 ${symbolsFontObjectId} 0 R >> ` +
       `${xObjects.length > 0 ? `/XObject << ${xObjects} >> ` : ""}>> ` +
       `${annotationIds.length > 0 ? `/Annots [${annotationIds.map((id) => `${id} 0 R`).join(" ")}] ` : ""}` +
       `/StructParents ${pageIndex} /Contents ${contentId} 0 R >>`;
@@ -2163,6 +2211,10 @@ function fontResource(font: PdfFont): string {
 
   if (font === "emoji") {
     return "F4";
+  }
+
+  if (font === "symbols") {
+    return "F5";
   }
 
   return "F1";

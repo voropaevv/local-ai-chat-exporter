@@ -7,7 +7,7 @@ export function pdfBodyFromBytes(bytes: string | Uint8Array): string {
 }
 
 export interface PdfPositionedTextRun {
-  readonly font: "F1" | "F2" | "F3" | "F4";
+  readonly font: "F1" | "F2" | "F3" | "F4" | "F5";
   readonly size: number;
   readonly text: string;
   readonly x: number;
@@ -34,12 +34,13 @@ export function extractPdfPositionedTextRuns(
     ["F1", fontMaps.get("NotoSans-Regular")],
     ["F2", fontMaps.get("NotoSans-Bold")],
     ["F3", fontMaps.get("NotoSansMono-Regular")],
-    ["F4", fontMaps.get("NotoEmoji-Regular")]
+    ["F4", fontMaps.get("NotoEmoji-Regular")],
+    ["F5", fontMaps.get("NotoSansSymbols-Regular")]
   ]);
 
   const positionedRuns = [
     ...body.matchAll(
-      /BT[^\r\n]*\/(F[1234])\s+([\d.]+)\s+Tf\s+([-\d.]+)\s+([-\d.]+)\s+Td\s+<([\da-f]+)>\s+Tj\s+ET/giu
+      /BT[^\r\n]*\/(F[12345])\s+([\d.]+)\s+Tf\s+([-\d.]+)\s+([-\d.]+)\s+Td\s+<([\da-f]+)>\s+Tj\s+ET/giu
     )
   ].map((match) => {
     const glyphMap = resourceMaps.get(match[1]);

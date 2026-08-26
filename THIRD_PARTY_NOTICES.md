@@ -62,10 +62,11 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FO
 OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## Noto Sans, Noto Sans Mono, and Noto Emoji — SIL Open Font License 1.1
+## Noto Sans, Noto Sans Mono, Noto Sans Symbols, and Noto Emoji — SIL Open Font License 1.1
 
-Bundled files: compressed local subsets of NotoSans-Regular.ttf, NotoSans-Bold.ttf, and
-NotoSansMono-Regular.ttf, plus a static local subset of NotoEmoji[wght].ttf.
+Bundled files: compressed local subsets of NotoSans-Regular.ttf, NotoSans-Bold.ttf,
+NotoSansMono-Regular.ttf, and NotoSansSymbols-Regular.ttf, plus a static local subset of
+NotoEmoji[wght].ttf.
 
 Copyright 2018 The Noto Project Authors (github.com/googlei18n/noto-fonts)
 

@@ -2,7 +2,7 @@
 
 Date: 2026-08-26
 
-Last verified locally: 2026-08-26 18:48 +04
+Last verified locally: 2026-08-26 20:50 +04
 
 ## Release status
 
@@ -58,13 +58,19 @@ Last verified locally: 2026-08-26 18:48 +04
   use a bundled monochrome vector fallback without runtime font requests.
 - Text following a table reserves a full line-height below the final border, preventing bold
   paragraphs from overlapping the final row.
+- Immediate continuation lines in top-level Markdown lists stay aligned with the item text instead
+  of returning to the page margin.
+- Common prose arrows use an aligned proportional symbols font rather than the low-baseline
+  monospaced fallback.
+- Multi-page code blocks draw a bounded background segment on every occupied page, and short code
+  blocks use equal visible top and bottom padding.
 - Trailing layout spacing no longer creates a blank final page.
 
 ## Verified checks
 
 | Check                                                                | Result                                                                                                                                                                           |
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test`                                                          | Pass — 66 test files / 345 tests.                                                                                                                                                |
+| `pnpm test`                                                          | Pass — 66 test files / 349 tests.                                                                                                                                                |
 | `pnpm lint`                                                          | Pass.                                                                                                                                                                            |
 | `pnpm typecheck`                                                     | Pass.                                                                                                                                                                            |
 | `pnpm build`                                                         | Pass; popup, options, Preview, service worker and classic content script rebuilt.                                                                                                |
@@ -77,14 +83,15 @@ Last verified locally: 2026-08-26 18:48 +04
 | `node scripts/check-export-output-hygiene.mjs tests/fixtures/golden` | Pass.                                                                                                                                                                            |
 | `pnpm audit --prod`                                                  | Pass — no known vulnerabilities.                                                                                                                                                 |
 | Direct PDF download through Preview                                  | Pass; browser download failure was `null`.                                                                                                                                       |
-| Regenerated long-chat PDF inspection                                 | Pass — 296 tagged A4 pages, no JavaScript, 84 links, five embedded images, searchable text, zero replacement glyphs, zero blank pages and zero overlapping text-line candidates. |
-| `pnpm package` twice                                                 | Pass; identical SHA256 `ff5a5968be0327922699174f8e55cf9e9098bde3200624a53f86d21d45cc07de`.                                                                                       |
+| Regenerated long-chat PDF inspection                                 | Pass — 288 tagged A4 pages, no JavaScript, 84 links, five embedded images, searchable text, zero replacement glyphs, zero blank pages and zero overlapping text-line candidates. |
+| Installed Brave extension readback                                   | Pass — active unpacked `0.1.0` reloaded with the `Reloaded` receipt, stayed enabled without an Errors control, and opened its popup on the supported long ChatGPT conversation.  |
+| `pnpm package` twice                                                 | Pass; identical SHA256 `6d49b55571781dd4e2523853466908f2f74a8d038ed14c85077d0e1901bde0e7`.                                                                                       |
 
 ## Release package
 
 - Path: `release/jelluvi-v0.1.0.zip`
-- Size: 2,221,005 bytes
-- SHA256: `ff5a5968be0327922699174f8e55cf9e9098bde3200624a53f86d21d45cc07de`
+- Size: 2,224,777 bytes
+- SHA256: `6d49b55571781dd4e2523853466908f2f74a8d038ed14c85077d0e1901bde0e7`
 - Production files: 24
 - Includes `LICENSE.txt`, `NOTO_FONT_LICENSE.txt` and `THIRD_PARTY_NOTICES.txt`.
 - Excludes source, tests, docs, Store screenshots, QA output, local archives and task files.
@@ -128,10 +135,10 @@ included in `dist/` or the Store ZIP.
 - Source-tab pinning was verified by changing the active Brave tab during capture; Preview still
   opened the original ChatGPT result.
 - The final PDF has SHA256
-  `fea50d5394ff70a8e112e2bd2043a0a4823b0559af8b7ef952fd8e10b13f7a98`. All 296 pages were
-  rendered and visually reviewed. Multi-page blockquote borders, Unicode code-tree glyphs, table
-  flow and the standalone emoji fallback are fixed; the extracted text contains no replacement
-  glyphs.
+  `e570ccd8b26ca92836edb835bd5a37ad007b8ee30ffed980514afaac834a3a79`. All 288 pages were
+  rendered and visually reviewed. Multi-page blockquote borders, multi-page code backgrounds,
+  code padding, list continuations, prose arrows, Unicode code-tree glyphs, table flow and the
+  standalone emoji fallback are fixed; the extracted text contains no replacement glyphs.
 - Preview `Copy MD` was verified live. The iframe table-copy click was not independently proven by
   Computer Use, while table copy behavior remains covered by automated Preview tests.
 
