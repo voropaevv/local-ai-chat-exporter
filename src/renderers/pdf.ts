@@ -694,15 +694,37 @@ class PdfLayout {
 
   blockquote(markdown: string): void {
     const size = this.settings.fontSizePt;
+    this.ensureSpace(size * 1.35);
+    const startPageIndex = this.pages.length - 1;
     const startY = this.y;
     this.drawRichWrappedText(markdown, {
       color: this.theme.muted,
       indent: 16,
       size
     });
+    const endPageIndex = this.pages.length - 1;
     const bottomY = this.y + size * 0.35;
     const topY = startY + size * 0.8;
-    this.strokeLine(this.margin + 4, bottomY, this.margin + 4, topY, this.theme.heading);
+    const lineX = this.margin + 4;
+
+    if (startPageIndex === endPageIndex) {
+      this.strokeLineOnPage(startPageIndex, lineX, bottomY, lineX, topY, this.theme.heading);
+    } else {
+      const pageTopY = this.size.height - this.margin + size * 0.8;
+
+      for (let pageIndex = startPageIndex; pageIndex <= endPageIndex; pageIndex += 1) {
+        const segmentBottomY = pageIndex === endPageIndex ? bottomY : this.margin;
+        const segmentTopY = pageIndex === startPageIndex ? topY : pageTopY;
+        this.strokeLineOnPage(
+          pageIndex,
+          lineX,
+          segmentBottomY,
+          lineX,
+          segmentTopY,
+          this.theme.heading
+        );
+      }
+    }
     this.space(5);
   }
 
@@ -1202,7 +1224,18 @@ class PdfLayout {
     endY: number,
     color: PdfColor
   ): void {
-    this.currentPage.commands.push(
+    this.strokeLineOnPage(this.pages.length - 1, startX, startY, endX, endY, color);
+  }
+
+  private strokeLineOnPage(
+    pageIndex: number,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    color: PdfColor
+  ): void {
+    this.pages[pageIndex].commands.push(
       `q ${colorOperator(color, "stroke")} 0.8 w ${formatNumber(startX)} ${formatNumber(startY)} m ${formatNumber(endX)} ${formatNumber(endY)} l S Q`
     );
   }

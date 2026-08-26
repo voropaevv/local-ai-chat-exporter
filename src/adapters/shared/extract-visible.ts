@@ -13,6 +13,7 @@ export interface VisibleMessageExtractionConfig {
   readonly contentSelector?: string;
   readonly messageSelectors: readonly VisibleMessageSelector[];
   readonly platformId: string;
+  readonly prepareContentElement?: (element: Element) => Element;
 }
 
 export function extractVisibleMessagesBySelectors(
@@ -33,7 +34,9 @@ export function extractVisibleMessagesBySelectors(
       messageElement,
       selectorConfig?.contentSelector ?? config.contentSelector
     );
-    const cleanedNode = cleanChatGptNode(contentElement, {
+    const preparedContentElement =
+      config.prepareContentElement?.(contentElement) ?? contentElement;
+    const cleanedNode = cleanChatGptNode(preparedContentElement, {
       chatGptSpecificCleanup: false
     });
 

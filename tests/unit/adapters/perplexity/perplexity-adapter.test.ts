@@ -76,8 +76,12 @@ describe("Perplexity adapter", () => {
 
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
     expect(messages[0].text).toBe("Предложи лучшие практики для каждого элемента моего сайта");
+    expect(messages[0].metadata.extraction).toBe("current-query-controls");
     expect(messages[1].text).toContain("Отлично, у меня достаточно данных");
     expect(messages[1].text).toContain("Command Palette");
+    expect(messages[1].text).not.toContain("chitai-gorod+1");
+    expect(messages[1].text).toContain("Формула x+1 должна остаться содержимым.");
+    expect(messages[1].markdown).toContain("[Example source](https://example.com/source)");
     expect(messages.map((message) => message.text)).not.toContain("Answer Links Images");
   });
 });

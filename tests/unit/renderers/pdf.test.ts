@@ -126,6 +126,29 @@ describe("renderPdf", () => {
     expect(pageCount).toBeGreaterThan(1);
   });
 
+  test("segments a multi-page blockquote border across every occupied page", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: `> ${"Long quoted evidence remains inside its page boundary. ".repeat(900)}\n\nAfter quote.`,
+            text: "Long quoted evidence. After quote."
+          })
+        ]
+      })
+    );
+    const body = textFromBytes(rendered.bytes);
+    const pageCount = body.match(/\/Type \/Page\b/gu)?.length ?? 0;
+    const quoteBorders = [
+      ...body.matchAll(/0\.8 w 58 [-\d.]+ m 58 [-\d.]+ l S/gu)
+    ];
+
+    expect(pageCount).toBeGreaterThan(2);
+    expect(quoteBorders).toHaveLength(pageCount);
+    expect(extractPdfText(rendered.bytes)).toContain("After quote.");
+  });
+
   test("does not create a trailing blank page when final spacing reaches the margin", () => {
     const rendered = renderPdf(
       makeConversation({

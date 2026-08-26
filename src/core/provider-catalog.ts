@@ -88,7 +88,7 @@ export const PROVIDER_CATALOG = [
     id: "notebooklm",
     label: "NotebookLM",
     limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
-    origins: ["https://notebooklm.google.com/*"],
+    origins: ["https://notebooklm.google.com/*", "https://notebook.google.com/*"],
     supportStatus: "experimental",
     supportWarning:
       "NotebookLM support is experimental. Verify first and last messages before relying on export."

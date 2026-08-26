@@ -101,6 +101,7 @@ export function normalizeMessagesWithStats(
       images.length === 0 &&
       sources.length === 0 &&
       thinkingBlocks.length === 0 &&
+      reasoningSummary === undefined &&
       toolInvocations.length === 0 &&
       canvas.length === 0
     ) {

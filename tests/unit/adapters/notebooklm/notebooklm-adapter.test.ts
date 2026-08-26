@@ -11,7 +11,7 @@ const fixturesDir = resolve(import.meta.dirname, "../../../fixtures/notebooklm")
 
 function loadFixture(
   name: string,
-  url = "https://notebooklm.google.com/notebook/example"
+  url = "https://notebook.google.com/notebook/example"
 ): Document {
   const html = readFileSync(resolve(fixturesDir, name), "utf8");
   return new JSDOM(html, { url }).window.document;
@@ -22,6 +22,7 @@ describe("NotebookLM adapter", () => {
     const document = loadFixture("simple-conversation.html", "https://example.com/local");
 
     expect(detectNotebookLm({ hostname: "notebooklm.google.com" })).toBe(true);
+    expect(detectNotebookLm({ hostname: "notebook.google.com" })).toBe(true);
     expect(detectNotebookLm({ document, hostname: "example.com" })).toBe(true);
     expect(detectNotebookLm({ hostname: "chatgpt.com" })).toBe(false);
   });

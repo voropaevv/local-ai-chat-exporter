@@ -48,9 +48,28 @@ export function extractVisibleChatGptMessages(
   options: ExtractVisibleChatGptMessagesOptions = {}
 ): readonly ExportedMessage[] {
   const messages: ExportedMessage[] = [];
-  const messageElements = Array.from(root.querySelectorAll(chatGptSelectors.messageByRole));
+  const messageElements = Array.from(
+    root.querySelectorAll(`${chatGptSelectors.conversationTurn}, ${chatGptSelectors.messageByRole}`)
+  ).filter(
+    (element) =>
+      element.matches(chatGptSelectors.messageByRole) ||
+      (element.getAttribute("data-turn") === "assistant" &&
+        element.querySelector(chatGptSelectors.messageByRole) === null)
+  );
 
   for (const messageElement of messageElements) {
+    if (!messageElement.matches(chatGptSelectors.messageByRole)) {
+      const advancedOnlyMessage = extractAdvancedOnlyAssistantTurn(
+        messageElement,
+        messages.length,
+        options
+      );
+      if (advancedOnlyMessage !== undefined) {
+        messages.push(advancedOnlyMessage);
+      }
+      continue;
+    }
+
     if (!isVisibleMessageElement(messageElement)) {
       continue;
     }
@@ -144,6 +163,97 @@ export function extractVisibleChatGptMessages(
   }
 
   return messages;
+}
+
+function extractAdvancedOnlyAssistantTurn(
+  turn: Element,
+  index: number,
+  options: ExtractVisibleChatGptMessagesOptions
+): ExportedMessage | undefined {
+  if (!isVisibleMessageElement(turn)) {
+    return undefined;
+  }
+
+  const stableId =
+    turn.getAttribute("data-turn-id")?.trim() ||
+    turn.getAttribute("data-turn-id-container")?.trim() ||
+    turn.getAttribute("data-testid")?.trim();
+  const stableRevision = getCheapStableMessageRevision(turn, turn);
+
+  if (
+    stableId !== undefined &&
+    options.knownStableMessageRevisions?.get(stableId) === stableRevision
+  ) {
+    options.onExcludedStableMessage?.(stableId);
+    return undefined;
+  }
+
+  const advancedContent = extractChatGptAdvancedContent(turn);
+  const hasAdvancedContent =
+    advancedContent.reasoningSummary !== undefined ||
+    advancedContent.sources.length > 0 ||
+    advancedContent.thinkingBlocks.length > 0 ||
+    advancedContent.toolInvocations.length > 0 ||
+    advancedContent.canvas.length > 0;
+
+  if (!hasAdvancedContent) {
+    return undefined;
+  }
+
+  const id =
+    stableId ??
+    `assistant-advanced-${stableHash(
+      JSON.stringify({
+        canvas: advancedContent.canvas,
+        reasoningSummary: advancedContent.reasoningSummary,
+        sources: advancedContent.sources,
+        thinkingBlocks: advancedContent.thinkingBlocks,
+        toolInvocations: advancedContent.toolInvocations
+      })
+    )}`;
+
+  if (stableId !== undefined) {
+    options.onStableMessageRevision?.(stableId, stableRevision);
+  }
+
+  return {
+    id,
+    index,
+    role: "assistant",
+    authorLabel: advancedContent.participant ?? "ChatGPT",
+    ...(advancedContent.participant !== undefined
+      ? { participant: advancedContent.participant }
+      : {}),
+    text: "",
+    markdown: "",
+    html: "",
+    codeBlocks: [],
+    images: [],
+    ...(advancedContent.sources.length > 0 ? { sources: advancedContent.sources } : {}),
+    ...(advancedContent.thinkingBlocks.length > 0
+      ? { thinkingBlocks: advancedContent.thinkingBlocks }
+      : {}),
+    ...(advancedContent.reasoningSummary !== undefined
+      ? { reasoningSummary: advancedContent.reasoningSummary }
+      : {}),
+    ...(advancedContent.toolInvocations.length > 0
+      ? { toolInvocations: advancedContent.toolInvocations }
+      : {}),
+    ...(advancedContent.canvas.length > 0 ? { canvas: advancedContent.canvas } : {}),
+    ...(advancedContent.createdAt !== undefined ? { createdAt: advancedContent.createdAt } : {}),
+    ...(advancedContent.model !== undefined ? { model: advancedContent.model } : {}),
+    metadata: {
+      ...(advancedContent.contentKind !== undefined
+        ? { contentKind: advancedContent.contentKind }
+        : {}),
+      ...(advancedContent.displayTimestamp !== undefined
+        ? { displayTimestamp: advancedContent.displayTimestamp }
+        : {}),
+      ...(advancedContent.sourceCaptureWarning !== undefined
+        ? { sourceCaptureWarning: advancedContent.sourceCaptureWarning }
+        : {})
+    }
+  };
 }
 
 function cleanMessageContent(
@@ -305,7 +415,9 @@ function getCheapStableMessageRevision(messageElement: Element, turn: Element | 
         "[data-testid*='reasoning' i]",
         "[data-testid*='thought' i]",
         "[data-source-id]",
-        "[data-citation-id]"
+        "[data-citation-id]",
+        "button[aria-label^='Open image' i]",
+        "img[src]"
       ].join(",")
     )
   ).map(getCheapElementSignal);

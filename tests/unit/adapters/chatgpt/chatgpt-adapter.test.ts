@@ -49,6 +49,62 @@ describe("extractVisibleChatGptMessages", () => {
     expect(messages[1].text).toBe("Sure. Here is a concise summary.");
   });
 
+  test("keeps an advanced-only assistant turn without a final answer node", () => {
+    const document = new JSDOM(
+      `<article data-testid="conversation-turn-1" data-turn="user" data-turn-id="user-1">
+        <div data-message-author-role="user" data-message-id="user-1">Question</div>
+      </article>
+      <section
+        data-testid="conversation-turn-2"
+        data-turn="assistant"
+        data-turn-id="assistant-advanced-only"
+      >
+        <button aria-expanded="true">Worked for 1m 56s</button>
+        <div data-jelluvi-advanced-kind="activity">
+          <h3>Activity</h3>
+          <p>Searched 6 websites.</p>
+        </div>
+        <section data-jelluvi-tool data-tool-name="Browser" data-status="complete">
+          <span data-jelluvi-tool-output>Searched 6 websites</span>
+        </section>
+      </section>`,
+      { url: "https://chatgpt.com/c/advanced-only" }
+    ).window.document;
+
+    const messages = extractVisibleChatGptMessages(document);
+
+    expect(messages.map((message) => message.id)).toEqual(["user-1", "assistant-advanced-only"]);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      text: "",
+      reasoningSummary: {
+        durationSeconds: 116,
+        label: "Worked for 1m 56s"
+      },
+      thinkingBlocks: [{ text: "Searched 6 websites.", title: "Activity" }],
+      toolInvocations: [
+        {
+          name: "Browser",
+          outputSummary: "Searched 6 websites",
+          status: "complete"
+        }
+      ]
+    });
+  });
+
+  test("does not turn a roleless empty assistant tombstone into a message", () => {
+    const document = new JSDOM(
+      `<section
+        data-testid="conversation-turn-2"
+        data-turn="assistant"
+        data-turn-id="empty-assistant"
+      ><h4 class="sr-only">ChatGPT said:</h4></section>`,
+      { url: "https://chatgpt.com/c/empty" }
+    ).window.document;
+
+    expect(extractVisibleChatGptMessages(document)).toEqual([]);
+  });
+
   test("preserves code block whitespace and visible language", () => {
     const [message] = extractVisibleChatGptMessages(loadFixture("code-block.html"));
 
@@ -302,6 +358,47 @@ describe("extractVisibleChatGptMessages", () => {
     expect(firstPass[0]?.metadata.displayTimestamp).toBeUndefined();
     expect(secondPass).toHaveLength(1);
     expect(secondPass[0]?.metadata.displayTimestamp).toBe("Thursday 9:52 AM");
+  });
+
+  test("re-extracts a stable message when a modern ChatGPT image hydrates late", () => {
+    const document = new JSDOM(
+      `<main>
+        <section data-testid="conversation-turn-1">
+          <div data-message-author-role="user" data-message-id="late-image">
+            <div class="markdown"><p>Image arrives after the text.</p></div>
+            <div class="group/message-image"></div>
+          </div>
+        </section>
+      </main>`,
+      { url: "https://chatgpt.com/c/late-image" }
+    ).window.document;
+    const revisions = new Map<string, string>();
+    const firstPass = extractVisibleChatGptMessages(document, {
+      onStableMessageRevision: (messageId, revision) => revisions.set(messageId, revision)
+    });
+    const imageContainer = document.querySelector("[class*='message-image']");
+
+    imageContainer?.insertAdjacentHTML(
+      "beforeend",
+      `<button aria-label="Open image: late-chart.png">
+        <img alt="late-chart.png" src="https://chatgpt.com/backend-api/late-chart.png" width="640" height="360">
+      </button>`
+    );
+
+    const secondPass = extractVisibleChatGptMessages(document, {
+      knownStableMessageRevisions: revisions
+    });
+
+    expect(firstPass[0]?.images).toEqual([]);
+    expect(secondPass).toHaveLength(1);
+    expect(secondPass[0]?.images).toEqual([
+      {
+        alt: "late-chart.png",
+        height: 360,
+        src: "https://chatgpt.com/backend-api/late-chart.png",
+        width: 640
+      }
+    ]);
   });
 
   test("does not mistake a time element inside message content for the message date", () => {

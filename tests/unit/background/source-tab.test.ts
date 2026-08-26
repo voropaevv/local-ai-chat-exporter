@@ -2,18 +2,28 @@ import { describe, expect, test, vi } from "vitest";
 
 import { getPopupSourceTab } from "../../../extension/background/source-tab";
 
+function makeTab(id: number, url: string): chrome.tabs.Tab {
+  return {
+    active: true,
+    autoDiscardable: true,
+    discarded: false,
+    frozen: false,
+    groupId: -1,
+    highlighted: true,
+    id,
+    incognito: false,
+    index: 0,
+    pinned: false,
+    selected: true,
+    url,
+    windowId: 1
+  };
+}
+
 describe("popup source tab resolution", () => {
   test("keeps using the pinned source tab after the active tab changes", async () => {
-    const get = vi.fn(async (tabId: number) => ({
-      id: tabId,
-      url: "https://chatgpt.com/c/source"
-    }));
-    const query = vi.fn(async () => [
-      {
-        id: 99,
-        url: "https://chatgpt.com/c/other"
-      }
-    ]);
+    const get = vi.fn(async (tabId: number) => makeTab(tabId, "https://chatgpt.com/c/source"));
+    const query = vi.fn(async () => [makeTab(99, "https://chatgpt.com/c/other")]);
 
     await expect(getPopupSourceTab(73, { get, query })).resolves.toMatchObject({ id: 73 });
     expect(get).toHaveBeenCalledWith(73);
@@ -22,12 +32,7 @@ describe("popup source tab resolution", () => {
 
   test("falls back to the active tab for a compatible request without a source id", async () => {
     const get = vi.fn();
-    const query = vi.fn(async () => [
-      {
-        id: 73,
-        url: "https://chatgpt.com/c/source"
-      }
-    ]);
+    const query = vi.fn(async () => [makeTab(73, "https://chatgpt.com/c/source")]);
 
     await expect(getPopupSourceTab(undefined, { get, query })).resolves.toMatchObject({ id: 73 });
     expect(get).not.toHaveBeenCalled();

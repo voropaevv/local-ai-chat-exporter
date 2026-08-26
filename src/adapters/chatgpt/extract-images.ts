@@ -97,8 +97,15 @@ function isContentImage(image: CandidateImageRef, options: ExtractImageRefsOptio
   }
 
   const insideAttachment = image.element.closest(CHATGPT_ATTACHMENT_SELECTORS) !== null;
+  const insideChatGptMessageImage = isChatGptMessageImage(image.element);
 
-  if (isInsideUiControl(image.element) && !(insideAttachment && options.includeAttachmentImages)) {
+  if (
+    isInsideUiControl(image.element) &&
+    !(
+      options.includeAttachmentImages === true &&
+      (insideAttachment || insideChatGptMessageImage)
+    )
+  ) {
     return false;
   }
 
@@ -139,6 +146,16 @@ function isContentImage(image: CandidateImageRef, options: ExtractImageRefsOptio
   }
 
   return Boolean(image.src ?? image.dataUri);
+}
+
+function isChatGptMessageImage(element: Element): boolean {
+  const openImageButton = element.closest("button[aria-label]");
+  const ariaLabel = openImageButton?.getAttribute("aria-label")?.trim() ?? "";
+
+  return (
+    /^open image(?:\s|:|$)/iu.test(ariaLabel) ||
+    element.closest("[class*='message-image']") !== null
+  );
 }
 
 function captureLoadedImageDataUri(image: HTMLImageElement): string | undefined {

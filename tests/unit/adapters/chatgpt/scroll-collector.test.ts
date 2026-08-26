@@ -144,6 +144,316 @@ describe("collectChatGptConversation", () => {
     ).toBe(true);
   });
 
+  test("revisits the restored viewport until a lazily expanding turn inventory stabilizes", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    const renderRange = (firstTurn: number) => {
+      container.innerHTML = Array.from({ length: 21 - firstTurn }, (_, index) => {
+        const turnNumber = firstTurn + index;
+        const role = turnNumber % 2 === 0 ? "assistant" : "user";
+        return `
+          <div data-turn-id-container="logical-turn-${turnNumber}" style="--last-known-height: 100px">
+            <div data-message-author-role="${role}" data-message-id="m${turnNumber}">
+              <div class="markdown"><p>Message ${turnNumber}</p></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    };
+
+    renderRange(11);
+    let topTransitions = 0;
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: (scrollTop, previousScrollTop) => {
+        if (scrollTop !== 0 || previousScrollTop <= 0) {
+          return;
+        }
+
+        topTransitions += 1;
+        if (topTransitions === 2) {
+          renderRange(6);
+        } else if (topTransitions === 5) {
+          renderRange(1);
+        }
+      },
+      scrollHeight: 300,
+      scrollTop: 200
+    });
+
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 200,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `m${index + 1}`)
+    );
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 20,
+      missingTurnIds: [],
+      reachedBottom: true,
+      reachedTop: true,
+      status: "complete"
+    });
+    expect(result.completeness.capturePhases).toContain("recheck");
+    expect(topTransitions).toBeGreaterThanOrEqual(5);
+  });
+
+  test("orders disjoint virtual turn windows by their scroll direction", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    const renderRange = (firstTurn: number, lastTurn: number) => {
+      container.innerHTML = Array.from({ length: lastTurn - firstTurn + 1 }, (_, index) => {
+        const turnNumber = firstTurn + index;
+        const role = turnNumber % 2 === 0 ? "assistant" : "user";
+        return `
+          <div data-turn-id-container="logical-turn-${turnNumber}" style="--last-known-height: 100px">
+            <div data-message-author-role="${role}" data-message-id="m${turnNumber}">
+              <div class="markdown"><p>Message ${turnNumber}</p></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    };
+
+    renderRange(11, 20);
+    let bottomTransitions = 0;
+    let topTransitions = 0;
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: (scrollTop, previousScrollTop) => {
+        if (scrollTop === 0 && previousScrollTop > 0) {
+          topTransitions += 1;
+          if (topTransitions === 1) {
+            renderRange(6, 10);
+          } else {
+            renderRange(1, 5);
+          }
+          return;
+        }
+
+        if (scrollTop >= 200 && previousScrollTop < 200) {
+          bottomTransitions += 1;
+          if (bottomTransitions === 1) {
+            renderRange(11, 15);
+          } else {
+            renderRange(16, 20);
+          }
+        }
+      },
+      scrollHeight: 300,
+      scrollTop: 200
+    });
+
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 200,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `m${index + 1}`)
+    );
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 20,
+      missingTurnIds: [],
+      status: "complete"
+    });
+  });
+
+  test("reconciles previously discovered keys to the latest complete DOM order", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-3">
+          <div data-message-author-role="user" data-message-id="m3">Message 3</div>
+        </div>
+        <div data-turn-id-container="logical-turn-1">
+          <div data-message-author-role="user" data-message-id="m1">Message 1</div>
+        </div>
+        <div data-turn-id-container="logical-turn-2">
+          <div data-message-author-role="assistant" data-message-id="m2">Message 2</div>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 100, scrollTop: 0 });
+    let waitCount = 0;
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        waitCount += 1;
+        if (waitCount === 2) {
+          ["logical-turn-1", "logical-turn-2", "logical-turn-3"].forEach((logicalKey) => {
+            const turn = container.querySelector(`[data-turn-id-container="${logicalKey}"]`);
+            if (turn) {
+              container.append(turn);
+            }
+          });
+        }
+        return Promise.resolve();
+      }
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2", "m3"]);
+    expect(result.completeness.status).toBe("complete");
+  });
+
+  test("prefers the final DOM skeleton over transient ChatGPT turn ordinals", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="user" data-message-id="m1">Message 1</div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2">
+          <article data-testid="conversation-turn-3">
+            <div data-message-author-role="assistant" data-message-id="m2">Message 2</div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-3">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m3">Message 3</div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 100, scrollTop: 0 });
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2", "m3"]);
+  });
+
+  test("uses native scrollIntoView to hydrate a missing virtual turn", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1">
+          <section data-testid="conversation-turn-1" data-turn="user">
+            <div data-message-author-role="user" data-message-id="m1">Message 1</div>
+          </section>
+        </div>
+        <div
+          data-turn-id-container="logical-turn-2"
+          data-is-intersecting="false"
+          style="--last-known-height: 120px"
+        ></div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+    const placeholder = container?.querySelector<HTMLElement>(
+      '[data-turn-id-container="logical-turn-2"]'
+    );
+
+    if (!container || !placeholder) {
+      throw new Error("fixture missing virtual turn");
+    }
+
+    const scrollIntoView = vi.fn(() => {
+      placeholder.setAttribute("data-is-intersecting", "true");
+      placeholder.innerHTML = `
+        <section data-testid="conversation-turn-2" data-turn="assistant">
+          <div data-message-author-role="assistant" data-message-id="m2">Message 2</div>
+        </section>
+      `;
+    });
+    placeholder.scrollIntoView = scrollIntoView;
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 200, scrollTop: 0 });
+
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 100,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.completeness).toMatchObject({
+      missingTurnIds: [],
+      status: "complete"
+    });
+  });
+
+  test("stays partial when a lazily expanding turn inventory never stabilizes", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    let firstTurn = 101;
+    const renderRange = () => {
+      container.innerHTML = Array.from({ length: 111 - firstTurn }, (_, index) => {
+        const turnNumber = firstTurn + index;
+        const role = turnNumber % 2 === 0 ? "assistant" : "user";
+        return `
+          <div data-turn-id-container="logical-turn-${turnNumber}" style="--last-known-height: 100px">
+            <div data-message-author-role="${role}" data-message-id="m${turnNumber}">
+              <div class="markdown"><p>Message ${turnNumber}</p></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    };
+
+    renderRange();
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: (scrollTop, previousScrollTop) => {
+        if (scrollTop === 0 && previousScrollTop > 0) {
+          firstTurn -= 1;
+          renderRange();
+        }
+      },
+      scrollHeight: 300,
+      scrollTop: 200
+    });
+
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 200,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.completeness.status).toBe("partial");
+    expect(result.completeness.reachedTop).toBe(false);
+    expect(result.completeness.warnings).toContain(
+      "ChatGPT's virtual turn inventory did not stabilize before the scan limit."
+    );
+  });
+
   test("runs a monotonic verification sweep when only sparse turn windows are mounted", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");
@@ -759,6 +1069,108 @@ describe("collectChatGptConversation", () => {
       maxSteps: 20,
       scrollContainer: container,
       waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 2,
+      missingTurnIds: [],
+      status: "complete"
+    });
+  });
+
+  test("drops a repeatedly observed stale key after a complete ordinal skeleton replaces it", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">Second</div>
+          </article>
+        </div>
+        <div data-turn-id-container="stale-placeholder" style="--estimated-turn-height: 100px"></div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 200, scrollTop: 100 });
+    let waitCount = 0;
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 40,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        waitCount += 1;
+        if (waitCount === 2) {
+          container.innerHTML = `
+            <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-1">
+                <div data-message-author-role="user" data-message-id="m1">First</div>
+              </article>
+            </div>
+            <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-2">
+                <div data-message-author-role="assistant" data-message-id="m2">Second</div>
+              </article>
+            </div>
+          `;
+        }
+        return Promise.resolve();
+      }
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 2,
+      missingTurnIds: [],
+      status: "complete"
+    });
+  });
+
+  test("rebinds a stable message when ChatGPT replaces its outer wrapper id", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="old-logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">Second</div>
+          </article>
+        </div>
+        <div data-turn-id-container="stale-placeholder" style="--estimated-turn-height: 100px"></div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 200, scrollTop: 100 });
+    let waitCount = 0;
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 40,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        waitCount += 1;
+        if (waitCount === 2) {
+          container.innerHTML = `
+            <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-1">
+                <div data-message-author-role="user" data-message-id="m1">First</div>
+              </article>
+            </div>
+            <div data-turn-id-container="new-logical-turn-2" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-2">
+                <div data-message-author-role="assistant" data-message-id="m2">Second</div>
+              </article>
+            </div>
+          `;
+        }
+        return Promise.resolve();
+      }
     });
 
     expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);

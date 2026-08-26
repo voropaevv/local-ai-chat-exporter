@@ -78,6 +78,24 @@ describe("normalizeMessages", () => {
     expect(messages.map((message) => message.attachments?.[0]?.name)).toEqual(["one.md", "two.md"]);
   });
 
+  test("retains a reasoning-summary-only assistant turn", () => {
+    const messages = normalizeMessages([
+      {
+        id: "reasoning-only",
+        role: "assistant",
+        text: "",
+        reasoningSummary: { durationSeconds: 116, label: "Worked for 1m 56s" }
+      }
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: "reasoning-only",
+      reasoningSummary: { durationSeconds: 116, label: "Worked for 1m 56s" },
+      text: ""
+    });
+  });
+
   test("keeps distinct no-id messages whose only content is code, an image, or an attachment", () => {
     const messages = normalizeMessages([
       {

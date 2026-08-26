@@ -42,4 +42,37 @@ describe("ChatGPT image filtering", () => {
       }
     ]);
   });
+
+  test("keeps modern ChatGPT message images nested inside Open image buttons", () => {
+    const dom = new JSDOM(`
+      <article data-testid="conversation-turn-1">
+        <div data-message-author-role="user">
+          <div class="group/message-image">
+            <button aria-label="Open image: uploaded-chart.png">
+              <img
+                alt="uploaded-chart.png"
+                src="data:image/png;base64,AAAA"
+                width="1290"
+                height="778"
+              >
+            </button>
+          </div>
+        </div>
+      </article>
+    `);
+
+    const images = extractImageRefs(dom.window.document.body, {
+      chatGptSpecificFiltering: true,
+      includeAttachmentImages: true
+    });
+
+    expect(images).toEqual([
+      {
+        alt: "uploaded-chart.png",
+        dataUri: "data:image/png;base64,AAAA",
+        height: 778,
+        width: 1290
+      }
+    ]);
+  });
 });

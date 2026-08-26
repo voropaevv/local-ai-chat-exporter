@@ -11,6 +11,7 @@ describe("adapter registry", () => {
     expect(getBestAdapter({ hostname: "gemini.google.com" })?.id).toBe("gemini");
     expect(getBestAdapter({ hostname: "www.perplexity.ai" })?.id).toBe("perplexity");
     expect(getBestAdapter({ hostname: "notebooklm.google.com" })?.id).toBe("notebooklm");
+    expect(getBestAdapter({ hostname: "notebook.google.com" })?.id).toBe("notebooklm");
     expect(getBestAdapter({ hostname: "example.com" })).toBeNull();
   });
 
@@ -53,6 +54,9 @@ describe("adapter registry", () => {
     expect(getBestAdapter({ hostname: "gemini.google.com" })?.supportStatus).toBe("beta");
     expect(getBestAdapter({ hostname: "www.perplexity.ai" })?.supportStatus).toBe("experimental");
     expect(getBestAdapter({ hostname: "notebooklm.google.com" })?.supportStatus).toBe(
+      "experimental"
+    );
+    expect(getBestAdapter({ hostname: "notebook.google.com" })?.supportStatus).toBe(
       "experimental"
     );
     expect(getBestAdapter({ hostname: "claude.ai" })?.supportWarning).toBe(

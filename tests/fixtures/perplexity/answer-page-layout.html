@@ -8,13 +8,28 @@
         <button>Images</button>
       </nav>
       <section aria-label="Search query">
-        <h1>Предложи лучшие практики для каждого элемента моего сайта</h1>
+        <div class="current-query-row">
+          <div class="query-controls">
+            <button data-testid="edit-query">Edit</button>
+            <button data-testid="copy-query">Copy</button>
+          </div>
+          <span>Предложи лучшие практики для каждого элемента моего сайта</span>
+          <span class="query-timestamp">Aug 23, 2:52 PM</span>
+        </div>
       </section>
       <article aria-label="Answer">
         <div class="prose">
-          <p>Отлично, у меня достаточно данных для полного ответа.</p>
+          <p>
+            Отлично, у меня достаточно данных для полного ответа.
+            <span class="citation-chip"><span>chitai-gorod</span><span>+1</span></span>
+          </p>
           <h2>Лучшие практики для Personal Life OS Dashboard</h2>
           <p>Разбиваю по архитектурным слоям: навигация и оболочка.</p>
+          <p>
+            Проверяем доступную ссылку
+            <a href="https://example.com/source">Example source</a>.
+          </p>
+          <p>Формула x+1 должна остаться содержимым.</p>
           <table>
             <thead>
               <tr>

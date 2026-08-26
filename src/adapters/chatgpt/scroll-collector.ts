@@ -32,6 +32,10 @@ const EXPECTED_TOP_TURN_WINDOW = 4;
 const EXPECTED_BOTTOM_TURN_WINDOW = 4;
 const MAX_BOTTOM_HYDRATION_PASSES = 2;
 const MAX_MISSING_TURN_ATTEMPTS = 2;
+const MAX_INVENTORY_STABILIZATION_PASSES = 32;
+const REQUIRED_STABLE_INVENTORY_PASSES = 2;
+const REQUIRED_LONG_INVENTORY_STABLE_PASSES = 6;
+const LONG_INVENTORY_TURN_THRESHOLD = 8;
 const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]";
 const REASONING_DISCLOSURE_SELECTOR = "button, summary, [role='button']";
 
@@ -86,6 +90,8 @@ export async function collectChatGptConversation(
   let consecutiveStalls = 0;
   let stalls = 0;
   let aborted = options.signal?.aborted ?? false;
+  let reachedTop = false;
+  let inventoryStabilized = true;
   let unresolvedTopHydration = false;
   let unresolvedBottomHydration = false;
   let bottomHydrationPasses = 0;
@@ -105,8 +111,8 @@ export async function collectChatGptConversation(
   try {
     scrollToTop(container);
     await waitForDomSettle(options.signal);
-    const reachedTop = isAtTop(container);
-    refreshTurnTrackingState(container, turnTrackingState);
+    reachedTop = isAtTop(container);
+    refreshTurnTrackingState(container, turnTrackingState, "prepend");
     unresolvedTopHydration =
       usesDefaultDomWait && reachedTop && getHydrationInventory(container).suspicious;
 
@@ -124,7 +130,8 @@ export async function collectChatGptConversation(
       options.extractMessages,
       messages,
       dedupeState,
-      turnTrackingState
+      turnTrackingState,
+      "prepend"
     );
     reportCaptureProgress(options.onProgress, "capture", messages, turnTrackingState, scrollSteps);
 
@@ -205,7 +212,8 @@ export async function collectChatGptConversation(
           options.extractMessages,
           messages,
           dedupeState,
-          turnTrackingState
+          turnTrackingState,
+          "append"
         );
 
         if (options.signal?.aborted) {
@@ -241,7 +249,8 @@ export async function collectChatGptConversation(
         options.extractMessages,
         messages,
         dedupeState,
-        turnTrackingState
+        turnTrackingState,
+        "append"
       );
       reportCaptureProgress(
         options.onProgress,
@@ -283,7 +292,8 @@ export async function collectChatGptConversation(
         options.extractMessages,
         messages,
         dedupeState,
-        turnTrackingState
+        turnTrackingState,
+        "append"
       );
       reportCaptureProgress(
         options.onProgress,
@@ -301,7 +311,8 @@ export async function collectChatGptConversation(
           options.extractMessages,
           messages,
           dedupeState,
-          turnTrackingState
+          turnTrackingState,
+          "append"
         );
       }
     }
@@ -341,7 +352,8 @@ export async function collectChatGptConversation(
         options.extractMessages,
         messages,
         dedupeState,
-        turnTrackingState
+        turnTrackingState,
+        "prepend"
       );
 
       let sweepStalls = 0;
@@ -371,7 +383,8 @@ export async function collectChatGptConversation(
           options.extractMessages,
           messages,
           dedupeState,
-          turnTrackingState
+          turnTrackingState,
+          "append"
         );
         reportCaptureProgress(
           options.onProgress,
@@ -393,7 +406,11 @@ export async function collectChatGptConversation(
       if (options.signal?.aborted) {
         aborted = true;
         warnings.push("Scan was cancelled.");
-      } else if (waitForBottomHydration !== undefined && isAtBottom(container) && !isAtTop(container)) {
+      } else if (
+        waitForBottomHydration !== undefined &&
+        isAtBottom(container) &&
+        !isAtTop(container)
+      ) {
         const bottomHydration = await waitForBottomHydration(options.signal);
         unresolvedBottomHydration = bottomHydration.unresolved;
         duplicateCount += collectStepMessages(
@@ -401,7 +418,8 @@ export async function collectChatGptConversation(
           options.extractMessages,
           messages,
           dedupeState,
-          turnTrackingState
+          turnTrackingState,
+          "append"
         );
       }
     }
@@ -482,7 +500,8 @@ export async function collectChatGptConversation(
           options.extractMessages,
           messages,
           dedupeState,
-          turnTrackingState
+          turnTrackingState,
+          "append"
         );
 
         if (waitForBottomHydration !== undefined && !isAtTop(container)) {
@@ -502,7 +521,8 @@ export async function collectChatGptConversation(
             options.extractMessages,
             messages,
             dedupeState,
-            turnTrackingState
+            turnTrackingState,
+            "append"
           );
         }
       }
@@ -510,6 +530,57 @@ export async function collectChatGptConversation(
       refreshTurnTrackingState(container, turnTrackingState);
       if (getMissingTurnContainerIds(turnTrackingState).length === 0) {
         break;
+      }
+    }
+
+    if (
+      !aborted &&
+      inventoryDrivenCapture &&
+      scrollSteps < maxSteps &&
+      shouldStabilizeTurnInventory(container, turnTrackingState)
+    ) {
+      const stabilization = await stabilizeTurnInventory({
+        container,
+        dedupeState,
+        expandedReasoningControls,
+        expandReasoningPanels,
+        extractMessages: options.extractMessages,
+        maxSteps: maxSteps - scrollSteps,
+        messages,
+        onProgress: options.onProgress,
+        originalScrollTop,
+        processedReasoningControls,
+        signal: options.signal,
+        turnTrackingState,
+        waitForDomSettle,
+        waitForTurnHydration: usesDefaultDomWait
+          ? createTurnContainerHydrationWait(container)
+          : undefined
+      });
+
+      duplicateCount += stabilization.duplicateCount;
+      scrollSteps += stabilization.scrollSteps;
+      stabilization.recheckedTurnIds.forEach((turnId) => recheckedTurnIds.add(turnId));
+      inventoryStabilized = stabilization.stabilized;
+      reachedTop = stabilization.stabilized && stabilization.reachedTop;
+
+      if (
+        stabilization.inventoryChanged ||
+        stabilization.recheckedTurnIds.length > 0 ||
+        !stabilization.stabilized
+      ) {
+        if (!capturePhases.includes("recheck")) {
+          capturePhases.push("recheck");
+        }
+      }
+
+      if (!stabilization.stabilized) {
+        warnings.push("ChatGPT's virtual turn inventory did not stabilize before the scan limit.");
+      }
+
+      if (options.signal?.aborted) {
+        aborted = true;
+        warnings.push("Scan was cancelled.");
       }
     }
 
@@ -521,7 +592,12 @@ export async function collectChatGptConversation(
     refreshTurnTrackingState(container, turnTrackingState);
     reconcileStalePlaceholderInventory(container, turnTrackingState);
     const missingTurnContainerIds = getMissingTurnContainerIds(turnTrackingState);
-    const orderedMessages = orderMessagesByTurnContainer(messages, dedupeState, turnTrackingState);
+    const orderedMessages = orderMessagesByTurnContainer(
+      container,
+      messages,
+      dedupeState,
+      turnTrackingState
+    );
     const reachedBottom = isAtBottom(container);
     capturePhases.push("verify");
     reportCaptureProgress(options.onProgress, "verify", messages, turnTrackingState, scrollSteps);
@@ -568,6 +644,7 @@ export async function collectChatGptConversation(
       scanWarnings: warnings,
       scrollSteps,
       virtualized:
+        !inventoryStabilized ||
         unresolvedKnownTopHydration ||
         unresolvedBottomHydration ||
         missingTurnContainerIds.length > 0
@@ -595,10 +672,11 @@ function collectStepMessages(
   extractMessages: ChatGptScrollCollectorOptions["extractMessages"],
   messages: ExportedMessage[],
   dedupeState: DedupeState,
-  turnTrackingState?: TurnTrackingState
+  turnTrackingState?: TurnTrackingState,
+  insertionHint?: TurnInventoryInsertionHint
 ): number {
   if (turnTrackingState !== undefined) {
-    refreshTurnTrackingState(root, turnTrackingState);
+    refreshTurnTrackingState(root, turnTrackingState, insertionHint);
   }
 
   let prefilteredDuplicateCount = 0;
@@ -607,8 +685,17 @@ function collectStepMessages(
     extractMessages?.(root) ??
     extractVisibleChatGptMessages(root, {
       knownStableMessageRevisions: dedupeState.revisions,
-      onExcludedStableMessage: () => {
+      onExcludedStableMessage: (messageId) => {
         prefilteredDuplicateCount += 1;
+        if (turnTrackingState !== undefined) {
+          reconcileExcludedStableMessage(
+            root,
+            messageId,
+            messages,
+            dedupeState,
+            turnTrackingState
+          );
+        }
       },
       onStableMessageRevision: (messageId, revision) => {
         stepRevisions.set(messageId, revision);
@@ -625,10 +712,27 @@ function collectStepMessages(
     const fingerprint = getMessageFingerprint(message);
 
     if (logicalKey.length > 0) {
-      const existingIndex = dedupeState.messageIndexesByKey.get(logicalKey);
+      const existingIndex =
+        dedupeState.messageIndexesById.get(idKey) ??
+        dedupeState.messageIndexesByKey.get(logicalKey);
 
       if (existingIndex !== undefined) {
-        if (dedupeState.messageFingerprintsByKey.get(logicalKey) === fingerprint) {
+        if (turnTrackingState !== undefined) {
+          rebindMessageLogicalKey(
+            root,
+            existingIndex,
+            logicalKey,
+            messages,
+            dedupeState,
+            turnTrackingState
+          );
+        }
+        const existingFingerprint =
+          dedupeState.messageFingerprintsByKey.get(logicalKey) ??
+          (messages[existingIndex] === undefined
+            ? undefined
+            : getMessageFingerprint(messages[existingIndex]));
+        if (existingFingerprint === fingerprint) {
           duplicateCount += 1;
         } else {
           messages[existingIndex] = { ...message, index: existingIndex };
@@ -636,6 +740,7 @@ function collectStepMessages(
         }
 
         turnTrackingState?.extractedTurnContainerIds.add(logicalKey);
+        dedupeState.messageIndexesById.set(idKey, existingIndex);
 
         const revision = stepRevisions.get(idKey);
         if (revision !== undefined) {
@@ -647,6 +752,7 @@ function collectStepMessages(
       const messageIndex = messages.length;
       dedupeState.messageFingerprintsByKey.set(logicalKey, fingerprint);
       dedupeState.messageIndexesByKey.set(logicalKey, messageIndex);
+      dedupeState.messageIndexesById.set(idKey, messageIndex);
       dedupeState.logicalKeysByMessageIndex.push(logicalKey);
       turnTrackingState?.extractedTurnContainerIds.add(logicalKey);
       const revision = stepRevisions.get(idKey);
@@ -673,6 +779,7 @@ interface DedupeState {
   readonly fingerprints: Set<string>;
   readonly logicalKeysByMessageIndex: string[];
   readonly messageFingerprintsByKey: Map<string, string>;
+  readonly messageIndexesById: Map<string, number>;
   readonly messageIndexesByKey: Map<string, number>;
   readonly revisions: Map<string, string>;
 }
@@ -682,9 +789,91 @@ function createDedupeState(): DedupeState {
     fingerprints: new Set<string>(),
     logicalKeysByMessageIndex: [],
     messageFingerprintsByKey: new Map<string, string>(),
+    messageIndexesById: new Map<string, number>(),
     messageIndexesByKey: new Map<string, number>(),
     revisions: new Map<string, string>()
   };
+}
+
+function reconcileExcludedStableMessage(
+  root: ParentNode,
+  messageId: string,
+  messages: readonly ExportedMessage[],
+  dedupeState: DedupeState,
+  turnTrackingState: TurnTrackingState
+): void {
+  const currentLogicalKey = turnTrackingState.logicalKeyByMessageId.get(messageId);
+  const messageIndex = dedupeState.messageIndexesById.get(messageId);
+
+  if (currentLogicalKey === undefined || messageIndex === undefined) {
+    return;
+  }
+
+  turnTrackingState.extractedTurnContainerIds.add(currentLogicalKey);
+  rebindMessageLogicalKey(
+    root,
+    messageIndex,
+    currentLogicalKey,
+    messages,
+    dedupeState,
+    turnTrackingState
+  );
+}
+
+function rebindMessageLogicalKey(
+  root: ParentNode,
+  messageIndex: number,
+  currentLogicalKey: string,
+  messages: readonly ExportedMessage[],
+  dedupeState: DedupeState,
+  turnTrackingState: TurnTrackingState
+): void {
+  const previousLogicalKey =
+    dedupeState.logicalKeysByMessageIndex[messageIndex] ?? messages[messageIndex]?.id;
+
+  if (previousLogicalKey === undefined || previousLogicalKey === currentLogicalKey) {
+    return;
+  }
+
+  const currentOwner = dedupeState.messageIndexesByKey.get(currentLogicalKey);
+  if (currentOwner !== undefined && currentOwner !== messageIndex) {
+    return;
+  }
+
+  const previousFingerprint =
+    dedupeState.messageFingerprintsByKey.get(previousLogicalKey) ??
+    (messages[messageIndex] === undefined
+      ? undefined
+      : getMessageFingerprint(messages[messageIndex]));
+
+  if (dedupeState.messageIndexesByKey.get(previousLogicalKey) === messageIndex) {
+    dedupeState.messageIndexesByKey.delete(previousLogicalKey);
+    dedupeState.messageFingerprintsByKey.delete(previousLogicalKey);
+  }
+  dedupeState.logicalKeysByMessageIndex[messageIndex] = currentLogicalKey;
+  dedupeState.messageIndexesByKey.set(currentLogicalKey, messageIndex);
+  if (previousFingerprint !== undefined) {
+    dedupeState.messageFingerprintsByKey.set(currentLogicalKey, previousFingerprint);
+  }
+
+  const previousKeyStillMounted = getOutermostTurnContainers(root).some(
+    (turnContainer) => getTurnContainerLogicalKey(turnContainer) === previousLogicalKey
+  );
+  if (!previousKeyStillMounted) {
+    removeTurnContainerAlias(turnTrackingState, previousLogicalKey);
+  }
+}
+
+function removeTurnContainerAlias(state: TurnTrackingState, logicalKey: string): void {
+  const index = state.expectedTurnContainerIds.indexOf(logicalKey);
+  if (index >= 0) {
+    state.expectedTurnContainerIds.splice(index, 1);
+  }
+  state.expectedTurnContainerIdSet.delete(logicalKey);
+  state.extractedTurnContainerIds.delete(logicalKey);
+  state.observationCountByLogicalKey.delete(logicalKey);
+  state.resolvedEmptyTurnContainerIds.delete(logicalKey);
+  state.turnNumberByLogicalKey.delete(logicalKey);
 }
 
 interface TurnTrackingState {
@@ -696,6 +885,8 @@ interface TurnTrackingState {
   readonly resolvedEmptyTurnContainerIds: Set<string>;
   readonly turnNumberByLogicalKey: Map<string, number>;
 }
+
+type TurnInventoryInsertionHint = "append" | "prepend";
 
 function createTurnTrackingState(root: ParentNode): TurnTrackingState {
   const state: TurnTrackingState = {
@@ -712,12 +903,35 @@ function createTurnTrackingState(root: ParentNode): TurnTrackingState {
   return state;
 }
 
-function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): void {
-  const discoveryOrder = new Map(
-    state.expectedTurnContainerIds.map((logicalKey, index) => [logicalKey, index])
+function refreshTurnTrackingState(
+  root: ParentNode,
+  state: TurnTrackingState,
+  insertionHint?: TurnInventoryInsertionHint
+): void {
+  const turnContainers = getTrackableTurnContainers(root);
+  const observedTrackableLogicalKeys = turnContainers
+    .map(getTurnContainerLogicalKey)
+    .filter((logicalKey): logicalKey is string => logicalKey !== undefined);
+  const previouslyKnownLogicalKeys = new Set(state.expectedTurnContainerIdSet);
+  const newlyObservedLogicalKeys = observedTrackableLogicalKeys.filter(
+    (logicalKey) => !previouslyKnownLogicalKeys.has(logicalKey)
+  );
+  const observedKnownLogicalKey = observedTrackableLogicalKeys.some((logicalKey) =>
+    previouslyKnownLogicalKeys.has(logicalKey)
   );
 
-  for (const turnContainer of getTrackableTurnContainers(root)) {
+  if (newlyObservedLogicalKeys.length > 0 && !observedKnownLogicalKey) {
+    newlyObservedLogicalKeys.forEach((logicalKey) =>
+      state.expectedTurnContainerIdSet.add(logicalKey)
+    );
+    if (insertionHint === "prepend") {
+      state.expectedTurnContainerIds.splice(0, 0, ...newlyObservedLogicalKeys);
+    } else {
+      state.expectedTurnContainerIds.push(...newlyObservedLogicalKeys);
+    }
+  }
+
+  for (const turnContainer of turnContainers) {
     const logicalKey = getTurnContainerLogicalKey(turnContainer);
 
     if (logicalKey === undefined) {
@@ -726,52 +940,133 @@ function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): v
 
     if (!state.expectedTurnContainerIdSet.has(logicalKey)) {
       state.expectedTurnContainerIdSet.add(logicalKey);
-      discoveryOrder.set(logicalKey, discoveryOrder.size);
-      state.expectedTurnContainerIds.push(logicalKey);
+      insertObservedLogicalKey(
+        state.expectedTurnContainerIds,
+        observedTrackableLogicalKeys,
+        logicalKey
+      );
     }
     state.observationCountByLogicalKey.set(
       logicalKey,
       (state.observationCountByLogicalKey.get(logicalKey) ?? 0) + 1
     );
 
-    const turnNumbers = Array.from(
+    const conversationTurns = Array.from(
       turnContainer.querySelectorAll(chatGptSelectors.conversationTurn)
-    )
+    );
+    const turnNumbers = conversationTurns
       .map((turn) => parseTurnNumber(turn.getAttribute("data-testid")))
       .filter((turnNumber): turnNumber is number => turnNumber !== undefined);
     if (turnNumbers.length > 0) {
       state.turnNumberByLogicalKey.set(logicalKey, Math.min(...turnNumbers));
     }
 
+    for (const conversationTurn of conversationTurns) {
+      const turnStableIds = getConversationTurnStableIds(conversationTurn);
+
+      for (const turnStableId of turnStableIds) {
+        state.logicalKeyByMessageId.set(turnStableId, logicalKey);
+      }
+
+      for (const messageElement of Array.from(
+        conversationTurn.querySelectorAll(chatGptSelectors.messageByRole)
+      )) {
+        const messageId = getMessageElementStableId(messageElement);
+
+        if (messageId !== undefined) {
+          state.logicalKeyByMessageId.set(messageId, logicalKey);
+        }
+      }
+    }
+
     for (const messageElement of Array.from(
       turnContainer.querySelectorAll(chatGptSelectors.messageByRole)
     )) {
       const messageId = getMessageElementStableId(messageElement);
-      const turnId = messageElement
-        .closest(chatGptSelectors.conversationTurn)
-        ?.getAttribute("data-testid")
-        ?.trim();
+      if (messageId === undefined) {
+        continue;
+      }
 
-      if (messageId !== undefined) {
+      if (!state.logicalKeyByMessageId.has(messageId)) {
         state.logicalKeyByMessageId.set(messageId, logicalKey);
       }
 
-      if (turnId !== undefined && turnId.length > 0) {
-        state.logicalKeyByMessageId.set(turnId, logicalKey);
+      const owningTurnNumber = parseTurnNumber(
+        messageElement
+          .closest(chatGptSelectors.conversationTurn)
+          ?.getAttribute("data-testid") ?? null
+      );
+      if (owningTurnNumber !== undefined) {
+        if (!state.turnNumberByLogicalKey.has(logicalKey)) {
+          state.turnNumberByLogicalKey.set(logicalKey, owningTurnNumber);
+        }
       }
     }
   }
 
-  state.expectedTurnContainerIds.sort((left, right) => {
-    const leftTurnNumber = state.turnNumberByLogicalKey.get(left);
-    const rightTurnNumber = state.turnNumberByLogicalKey.get(right);
+  const observedOutermostLogicalKeys = getOutermostTurnContainers(root)
+    .map(getTurnContainerLogicalKey)
+    .filter(
+      (logicalKey): logicalKey is string =>
+        logicalKey !== undefined && state.expectedTurnContainerIdSet.has(logicalKey)
+    );
+  reconcileObservedLogicalKeyOrder(
+    state.expectedTurnContainerIds,
+    observedOutermostLogicalKeys
+  );
+}
 
-    if (leftTurnNumber !== undefined && rightTurnNumber !== undefined) {
-      return leftTurnNumber - rightTurnNumber;
+function reconcileObservedLogicalKeyOrder(
+  expectedLogicalKeys: string[],
+  observedLogicalKeys: readonly string[]
+): void {
+  const expectedLogicalKeySet = new Set(expectedLogicalKeys);
+  const observedExpectedKeys = observedLogicalKeys.filter((logicalKey) =>
+    expectedLogicalKeySet.has(logicalKey)
+  );
+
+  if (observedExpectedKeys.length < 2) {
+    return;
+  }
+
+  const observedExpectedKeySet = new Set(observedExpectedKeys);
+  let observedIndex = 0;
+  for (let index = 0; index < expectedLogicalKeys.length; index += 1) {
+    if (!observedExpectedKeySet.has(expectedLogicalKeys[index])) {
+      continue;
     }
 
-    return (discoveryOrder.get(left) ?? 0) - (discoveryOrder.get(right) ?? 0);
-  });
+    expectedLogicalKeys[index] = observedExpectedKeys[observedIndex];
+    observedIndex += 1;
+  }
+}
+
+function insertObservedLogicalKey(
+  expectedLogicalKeys: string[],
+  observedLogicalKeys: readonly string[],
+  logicalKey: string
+): void {
+  const observedIndex = observedLogicalKeys.indexOf(logicalKey);
+  const nextKnownKey = observedLogicalKeys
+    .slice(observedIndex + 1)
+    .find((candidate) => expectedLogicalKeys.includes(candidate));
+
+  if (nextKnownKey !== undefined) {
+    expectedLogicalKeys.splice(expectedLogicalKeys.indexOf(nextKnownKey), 0, logicalKey);
+    return;
+  }
+
+  const previousKnownKey = observedLogicalKeys
+    .slice(0, observedIndex)
+    .reverse()
+    .find((candidate) => expectedLogicalKeys.includes(candidate));
+
+  if (previousKnownKey !== undefined) {
+    expectedLogicalKeys.splice(expectedLogicalKeys.indexOf(previousKnownKey) + 1, 0, logicalKey);
+    return;
+  }
+
+  expectedLogicalKeys.push(logicalKey);
 }
 
 function getTrackableTurnContainers(root: ParentNode): readonly Element[] {
@@ -808,11 +1103,20 @@ function getOutermostTurnContainers(root: ParentNode): readonly Element[] {
 }
 
 function reconcileStalePlaceholderInventory(root: ParentNode, state: TurnTrackingState): void {
+  const outermostTurnContainers = getOutermostTurnContainers(root);
   const currentlyMountedKeys = new Set(
-    getOutermostTurnContainers(root)
+    outermostTurnContainers
       .map(getTurnContainerLogicalKey)
       .filter((logicalKey): logicalKey is string => logicalKey !== undefined)
   );
+  const highestKnownTurnNumber = Math.max(0, ...state.turnNumberByLogicalKey.values());
+  const mountedTrackableKeyCount = new Set(
+    getTrackableTurnContainers(root)
+      .map(getTurnContainerLogicalKey)
+      .filter((logicalKey): logicalKey is string => logicalKey !== undefined)
+  ).size;
+  const hasCompleteMountedTurnSkeleton =
+    highestKnownTurnNumber > 0 && mountedTrackableKeyCount >= highestKnownTurnNumber;
 
   for (let index = state.expectedTurnContainerIds.length - 1; index >= 0; index -= 1) {
     const logicalKey = state.expectedTurnContainerIds[index];
@@ -824,7 +1128,7 @@ function reconcileStalePlaceholderInventory(root: ParentNode, state: TurnTrackin
 
     if (
       currentlyMountedKeys.has(logicalKey) ||
-      !wasOnlySeenInTheInitialInventory ||
+      (!wasOnlySeenInTheInitialInventory && !hasCompleteMountedTurnSkeleton) ||
       !unresolved ||
       state.turnNumberByLogicalKey.has(logicalKey)
     ) {
@@ -834,6 +1138,7 @@ function reconcileStalePlaceholderInventory(root: ParentNode, state: TurnTrackin
     state.expectedTurnContainerIds.splice(index, 1);
     state.expectedTurnContainerIdSet.delete(logicalKey);
     state.observationCountByLogicalKey.delete(logicalKey);
+    state.turnNumberByLogicalKey.delete(logicalKey);
   }
 }
 
@@ -857,6 +1162,16 @@ function getMessageElementStableId(messageElement: Element): string | undefined 
     ?.getAttribute("data-testid")
     ?.trim();
   return turnId !== undefined && turnId.length > 0 ? turnId : undefined;
+}
+
+function getConversationTurnStableIds(conversationTurn: Element): readonly string[] {
+  return [
+    conversationTurn.getAttribute("data-turn-id"),
+    conversationTurn.getAttribute("data-turn-id-container"),
+    conversationTurn.getAttribute("data-testid")
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => value !== undefined && value.length > 0);
 }
 
 function getMissingTurnContainerIds(state: TurnTrackingState): readonly string[] {
@@ -969,7 +1284,8 @@ async function captureKnownTurnContainers(
       options.extractMessages,
       options.messages,
       options.dedupeState,
-      options.turnTrackingState
+      options.turnTrackingState,
+      "append"
     );
     reportCaptureProgress(
       options.onProgress,
@@ -1060,6 +1376,180 @@ async function recoverMissingTurnContainers(
   }
 
   return { duplicateCount, recheckedTurnIds: [...recheckedTurnIds], scrollSteps };
+}
+
+function shouldStabilizeTurnInventory(container: Element, state: TurnTrackingState): boolean {
+  return (
+    state.expectedTurnContainerIds.length >= LONG_INVENTORY_TURN_THRESHOLD ||
+    getScrollHeight(container) > getClientHeight(container)
+  );
+}
+
+interface TurnInventoryStabilizationOptions {
+  readonly container: Element;
+  readonly dedupeState: DedupeState;
+  readonly expandedReasoningControls: ReasoningDisclosureRecord[];
+  readonly expandReasoningPanels: boolean;
+  readonly extractMessages: ChatGptScrollCollectorOptions["extractMessages"];
+  readonly maxSteps: number;
+  readonly messages: ExportedMessage[];
+  readonly onProgress?: (progress: ConversationCaptureProgress) => void;
+  readonly originalScrollTop: number;
+  readonly processedReasoningControls: WeakSet<Element>;
+  readonly signal?: AbortSignal;
+  readonly turnTrackingState: TurnTrackingState;
+  readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
+  readonly waitForTurnHydration?: (logicalKey: string, signal?: AbortSignal) => Promise<void>;
+}
+
+interface TurnInventoryStabilizationResult {
+  readonly duplicateCount: number;
+  readonly inventoryChanged: boolean;
+  readonly reachedBottom: boolean;
+  readonly reachedTop: boolean;
+  readonly recheckedTurnIds: readonly string[];
+  readonly scrollSteps: number;
+  readonly stabilized: boolean;
+}
+
+async function stabilizeTurnInventory(
+  options: TurnInventoryStabilizationOptions
+): Promise<TurnInventoryStabilizationResult> {
+  const recheckedTurnIds = new Set<string>();
+  let duplicateCount = 0;
+  let inventoryChanged = false;
+  let lastInventorySignature = getTurnInventorySignature(options.turnTrackingState);
+  let reachedBottom = false;
+  let reachedTop = false;
+  let scrollSteps = 0;
+  let stablePasses = 0;
+  const requiredStablePasses =
+    options.turnTrackingState.expectedTurnContainerIds.length >=
+    LONG_INVENTORY_TURN_THRESHOLD
+      ? REQUIRED_LONG_INVENTORY_STABLE_PASSES
+      : REQUIRED_STABLE_INVENTORY_PASSES;
+
+  const probe = async (
+    scrollTop: number,
+    insertionHint?: TurnInventoryInsertionHint
+  ): Promise<boolean> => {
+    if (options.signal?.aborted || scrollSteps >= options.maxSteps) {
+      return false;
+    }
+
+    setScrollTop(options.container, scrollTop);
+    scrollSteps += 1;
+    await options.waitForDomSettle(options.signal);
+    duplicateCount += collectStepMessages(
+      options.container,
+      options.extractMessages,
+      options.messages,
+      options.dedupeState,
+      options.turnTrackingState,
+      insertionHint
+    );
+    return !options.signal?.aborted;
+  };
+
+  for (
+    let pass = 0;
+    pass < MAX_INVENTORY_STABILIZATION_PASSES && scrollSteps < options.maxSteps;
+    pass += 1
+  ) {
+    if (!(await probe(options.originalScrollTop))) {
+      break;
+    }
+    if (!(await probe(0, "prepend"))) {
+      break;
+    }
+    reachedTop = isAtTop(options.container);
+
+    if (!(await probe(getScrollHeight(options.container), "append"))) {
+      break;
+    }
+    reachedBottom = isAtBottom(options.container);
+
+    if (!(await probe(options.originalScrollTop))) {
+      break;
+    }
+    if (!(await probe(getScrollHeight(options.container), "append"))) {
+      break;
+    }
+    reachedBottom = reachedBottom && isAtBottom(options.container);
+
+    const recovery = await recoverMissingTurnContainers({
+      container: options.container,
+      dedupeState: options.dedupeState,
+      expandedReasoningControls: options.expandedReasoningControls,
+      expandReasoningPanels: options.expandReasoningPanels,
+      extractMessages: options.extractMessages,
+      maxSteps: options.maxSteps - scrollSteps,
+      messages: options.messages,
+      processedReasoningControls: options.processedReasoningControls,
+      signal: options.signal,
+      turnTrackingState: options.turnTrackingState,
+      waitForDomSettle: options.waitForDomSettle,
+      waitForTurnHydration: options.waitForTurnHydration
+    });
+    duplicateCount += recovery.duplicateCount;
+    scrollSteps += recovery.scrollSteps;
+    recovery.recheckedTurnIds.forEach((turnId) => recheckedTurnIds.add(turnId));
+
+    if (!(await probe(getScrollHeight(options.container), "append"))) {
+      break;
+    }
+    reachedBottom = isAtBottom(options.container);
+
+    refreshTurnTrackingState(options.container, options.turnTrackingState);
+    reconcileStalePlaceholderInventory(options.container, options.turnTrackingState);
+    const inventorySignature = getTurnInventorySignature(options.turnTrackingState);
+    const inventoryUnchanged = inventorySignature === lastInventorySignature;
+    const hasMissingTurns = getMissingTurnContainerIds(options.turnTrackingState).length > 0;
+
+    if (!inventoryUnchanged) {
+      inventoryChanged = true;
+      stablePasses = 0;
+    } else if (reachedTop && reachedBottom && !hasMissingTurns) {
+      stablePasses += 1;
+    } else {
+      stablePasses = 0;
+    }
+    lastInventorySignature = inventorySignature;
+
+    reportCaptureProgress(
+      options.onProgress,
+      "recheck",
+      options.messages,
+      options.turnTrackingState,
+      scrollSteps
+    );
+
+    if (stablePasses >= requiredStablePasses) {
+      return {
+        duplicateCount,
+        inventoryChanged,
+        reachedBottom,
+        reachedTop,
+        recheckedTurnIds: [...recheckedTurnIds],
+        scrollSteps,
+        stabilized: true
+      };
+    }
+  }
+
+  return {
+    duplicateCount,
+    inventoryChanged,
+    reachedBottom,
+    reachedTop,
+    recheckedTurnIds: [...recheckedTurnIds],
+    scrollSteps,
+    stabilized: false
+  };
+}
+
+function getTurnInventorySignature(state: TurnTrackingState): string {
+  return [...state.expectedTurnContainerIdSet].sort().join("|");
 }
 
 interface ReasoningDisclosureRecord {
@@ -1247,6 +1737,15 @@ function scrollTurnContainerIntoView(
   forwardOnly = false,
   scrollBy?: (container: Element, pixels: number) => void
 ): void {
+  if (
+    !forwardOnly &&
+    scrollBy === undefined &&
+    typeof turnContainer.scrollIntoView === "function"
+  ) {
+    turnContainer.scrollIntoView({ block: "center", inline: "nearest" });
+    return;
+  }
+
   const containerTop = container.getBoundingClientRect().top;
   const turnTop = turnContainer.getBoundingClientRect().top;
   const topPadding = Math.min(64, Math.max(0, getClientHeight(container) * 0.1));
@@ -1266,6 +1765,7 @@ function scrollTurnContainerIntoView(
 }
 
 function orderMessagesByTurnContainer(
+  root: ParentNode,
   messages: readonly ExportedMessage[],
   dedupeState: DedupeState,
   turnTrackingState: TurnTrackingState
@@ -1277,16 +1777,37 @@ function orderMessagesByTurnContainer(
   const orderByLogicalKey = new Map(
     turnTrackingState.expectedTurnContainerIds.map((logicalKey, index) => [logicalKey, index])
   );
+  const mountedExpectedLogicalKeys = new Set(
+    getOutermostTurnContainers(root)
+      .map(getTurnContainerLogicalKey)
+      .filter(
+        (logicalKey): logicalKey is string =>
+          logicalKey !== undefined && turnTrackingState.expectedTurnContainerIdSet.has(logicalKey)
+      )
+  );
+  const hasCompleteDomSkeleton =
+    mountedExpectedLogicalKeys.size >= turnTrackingState.expectedTurnContainerIds.length;
 
   return messages
     .map((message, originalIndex) => ({
       logicalKey: dedupeState.logicalKeysByMessageIndex[originalIndex] ?? message.id,
       message,
-      originalIndex
+      originalIndex,
+      turnNumber: hasCompleteDomSkeleton
+        ? undefined
+        : turnTrackingState.turnNumberByLogicalKey.get(
+            dedupeState.logicalKeysByMessageIndex[originalIndex] ?? message.id
+          )
     }))
     .sort((left, right) => {
-      const leftOrder = orderByLogicalKey.get(left.logicalKey);
-      const rightOrder = orderByLogicalKey.get(right.logicalKey);
+      const leftOrder =
+        left.turnNumber !== undefined
+          ? left.turnNumber - 1
+          : orderByLogicalKey.get(left.logicalKey);
+      const rightOrder =
+        right.turnNumber !== undefined
+          ? right.turnNumber - 1
+          : orderByLogicalKey.get(right.logicalKey);
 
       if (leftOrder === undefined && rightOrder === undefined) {
         return left.originalIndex - right.originalIndex;
@@ -1300,7 +1821,7 @@ function orderMessagesByTurnContainer(
         return -1;
       }
 
-      return leftOrder - rightOrder;
+      return leftOrder - rightOrder || left.originalIndex - right.originalIndex;
     })
     .map(({ message }) => message);
 }
