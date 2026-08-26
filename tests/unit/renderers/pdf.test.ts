@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import type { ConversationExport, ExportedMessage } from "../../../src/core/schema";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../../../src/renderers/pdf-settings";
 import { renderPdf, renderPdfFromNormalizedConversation } from "../../../src/renderers/pdf";
-import { extractPdfText, pdfBodyFromBytes } from "../../helpers/pdf";
+import { extractPdfPositionedTextRuns, extractPdfText, pdfBodyFromBytes } from "../../helpers/pdf";
 
 const onePixelJpeg =
   "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAEf/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABAf/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=";
@@ -140,9 +140,7 @@ describe("renderPdf", () => {
     );
     const body = textFromBytes(rendered.bytes);
     const pageCount = body.match(/\/Type \/Page\b/gu)?.length ?? 0;
-    const quoteBorders = [
-      ...body.matchAll(/0\.8 w 58 [-\d.]+ m 58 [-\d.]+ l S/gu)
-    ];
+    const quoteBorders = [...body.matchAll(/0\.8 w 58 [-\d.]+ m 58 [-\d.]+ l S/gu)];
 
     expect(pageCount).toBeGreaterThan(2);
     expect(quoteBorders).toHaveLength(pageCount);
@@ -306,6 +304,81 @@ describe("renderPdf", () => {
     expect(text).toContain("Мероприятие: 30 июля 2026 года.");
     expect(text).toContain('const привет = "мир";');
     expect(text).not.toContain("????");
+  });
+
+  test("preserves box-drawing glyphs in monospaced code blocks", () => {
+    const tree = [
+      "kazakhstan-child-safety-cv/",
+      "├── README.md",
+      "├── docs/",
+      "│   ├── PROJECT_CHARTER.md",
+      "│   └── RISK_REGISTER.md",
+      "└── reports/"
+    ].join("\n");
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: `\`\`\`\n${tree}\n\`\`\``,
+            text: tree
+          })
+        ]
+      })
+    );
+    const text = extractPdfText(rendered.bytes);
+
+    expect(text).toContain(tree);
+    expect(text).not.toContain("�");
+  });
+
+  test("preserves common standalone emoji with a local embedded fallback font", () => {
+    const emoji = "Ready 👍 ✅ ⚠ 😀 🚀";
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown: emoji,
+            text: emoji
+          })
+        ]
+      })
+    );
+    const body = textFromBytes(rendered.bytes);
+    const text = extractPdfText(rendered.bytes);
+
+    expect(body).toContain("/BaseFont /NotoEmoji-Regular");
+    expect(body).not.toContain("/BaseFont /NotoSansMono-Regular");
+    expect(text).toContain(emoji);
+    expect(text).not.toContain("�");
+  });
+
+  test("keeps a following bold paragraph below the final table border", () => {
+    const rendered = renderPdf(
+      makeConversation({
+        messages: [
+          makeMessage({
+            codeBlocks: [],
+            markdown:
+              "| Решение | Оценка |\n| --- | --- |\n| Начать discovery после подтверждения | 8/10 |\n| Отказаться от Казахстана сейчас | 3/10 |\n\n**Лучший следующий шаг — дождаться письменного подтверждения.**",
+            text: "Решение. Лучший следующий шаг."
+          })
+        ]
+      })
+    );
+    const body = pdfBodyFromBytes(rendered.bytes);
+    const runs = extractPdfPositionedTextRuns(rendered.bytes);
+    const paragraph = runs.find((run) => run.text.startsWith("Лучший следующий шаг"));
+    const tableBottoms = [
+      ...body.matchAll(/[-\d.]+\s+([-\d.]+)\s+[-\d.]+\s+[-\d.]+\s+re\s+S\s+Q/gu)
+    ].map((match) => Number.parseFloat(match[1]));
+
+    expect(paragraph).toBeDefined();
+    expect(tableBottoms.length).toBeGreaterThan(0);
+    expect(Math.min(...tableBottoms) - (paragraph?.y ?? Number.POSITIVE_INFINITY)).toBeGreaterThan(
+      paragraph?.size ?? 0
+    );
   });
 
   test("preserves mathematical relations in headings, paragraphs, and table cells", () => {

@@ -62,19 +62,22 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FO
 OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## Noto Sans and Noto Sans Mono — SIL Open Font License 1.1
+## Noto Sans, Noto Sans Mono, and Noto Emoji — SIL Open Font License 1.1
 
 Bundled files: compressed local subsets of NotoSans-Regular.ttf, NotoSans-Bold.ttf, and
-NotoSansMono-Regular.ttf.
+NotoSansMono-Regular.ttf, plus a static local subset of NotoEmoji[wght].ttf.
 
 Copyright 2018 The Noto Project Authors (github.com/googlei18n/noto-fonts)
+
+Copyright 2013 Google LLC (Noto Emoji)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
 
-Source: https://github.com/notofonts/noto-fonts
+Sources: https://github.com/notofonts/noto-fonts and
+https://github.com/google/fonts/tree/main/ofl/notoemoji
 
 ---
 

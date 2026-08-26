@@ -1005,7 +1005,10 @@ class PdfLayout {
 
     rows.forEach((row, index) => renderRow(row, index === 0));
 
-    this.space(6);
+    // `this.y` is the bottom border of the final row, while normal text starts at a
+    // baseline. Reserve a full table line before the next block so its glyph ascent
+    // cannot cross the border (especially for bold paragraphs).
+    this.space(lineHeight);
   }
 
   keepWithNext(): void {
@@ -1306,31 +1309,32 @@ const BOLD_FONT_OBJECTS: EmbeddedFontObjectIds = {
   toUnicode: 12,
   type0: 8
 };
-const MONO_FONT_OBJECTS: EmbeddedFontObjectIds = {
-  cidFont: 14,
-  descriptor: 15,
-  fontFile: 16,
-  toUnicode: 17,
-  type0: 13
-};
-
 function writePdf(document: PdfDocument): Uint8Array {
   const objects: PdfObject[] = [];
   const pageRefs: string[] = [];
   const structureRefs: string[] = [];
   const parentTreeEntries: string[] = [];
   const usesMonoFont = document.fonts.hasUsedGlyphs("mono");
+  const usesEmojiFont = document.fonts.hasUsedGlyphs("emoji");
+  let nextObjectId = 13;
+  const monoFontObjects = usesMonoFont ? embeddedFontObjectIds(nextObjectId) : undefined;
+  nextObjectId += monoFontObjects === undefined ? 0 : 5;
+  const emojiFontObjects = usesEmojiFont ? embeddedFontObjectIds(nextObjectId) : undefined;
+  nextObjectId += emojiFontObjects === undefined ? 0 : 5;
 
   objects[0] = "";
   objects[1] = "";
   addEmbeddedFontObjects(objects, document.fonts.snapshot("regular"), REGULAR_FONT_OBJECTS);
   addEmbeddedFontObjects(objects, document.fonts.snapshot("bold"), BOLD_FONT_OBJECTS);
-  if (usesMonoFont) {
-    addEmbeddedFontObjects(objects, document.fonts.snapshot("mono"), MONO_FONT_OBJECTS);
+  if (monoFontObjects !== undefined) {
+    addEmbeddedFontObjects(objects, document.fonts.snapshot("mono"), monoFontObjects);
+  }
+  if (emojiFontObjects !== undefined) {
+    addEmbeddedFontObjects(objects, document.fonts.snapshot("emoji"), emojiFontObjects);
   }
 
-  let nextObjectId = usesMonoFont ? 18 : 13;
-  const monoFontObjectId = usesMonoFont ? MONO_FONT_OBJECTS.type0 : REGULAR_FONT_OBJECTS.type0;
+  const monoFontObjectId = monoFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
+  const emojiFontObjectId = emojiFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
   const imageObjectIds = new Map<string, number>();
 
   for (const image of document.images) {
@@ -1389,7 +1393,7 @@ function writePdf(document: PdfDocument): Uint8Array {
     objects[contentId - 1] = createStreamObject(content);
     objects[pageId - 1] =
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${formatNumber(document.size.width)} ${formatNumber(document.size.height)}] ` +
-      `/Resources << /Font << /F1 ${REGULAR_FONT_OBJECTS.type0} 0 R /F2 ${BOLD_FONT_OBJECTS.type0} 0 R /F3 ${monoFontObjectId} 0 R >> ` +
+      `/Resources << /Font << /F1 ${REGULAR_FONT_OBJECTS.type0} 0 R /F2 ${BOLD_FONT_OBJECTS.type0} 0 R /F3 ${monoFontObjectId} 0 R /F4 ${emojiFontObjectId} 0 R >> ` +
       `${xObjects.length > 0 ? `/XObject << ${xObjects} >> ` : ""}>> ` +
       `${annotationIds.length > 0 ? `/Annots [${annotationIds.map((id) => `${id} 0 R`).join(" ")}] ` : ""}` +
       `/StructParents ${pageIndex} /Contents ${contentId} 0 R >>`;
@@ -1412,6 +1416,16 @@ function writePdf(document: PdfDocument): Uint8Array {
     `/ViewerPreferences << /DisplayDocTitle true >> >>`;
 
   return serializePdfObjects(objects, infoId);
+}
+
+function embeddedFontObjectIds(type0: number): EmbeddedFontObjectIds {
+  return {
+    cidFont: type0 + 1,
+    descriptor: type0 + 2,
+    fontFile: type0 + 3,
+    toUnicode: type0 + 4,
+    type0
+  };
 }
 
 function addEmbeddedFontObjects(
@@ -2145,6 +2159,10 @@ function fontResource(font: PdfFont): string {
 
   if (font === "mono") {
     return "F3";
+  }
+
+  if (font === "emoji") {
+    return "F4";
   }
 
   return "F1";

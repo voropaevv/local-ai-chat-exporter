@@ -6,7 +6,17 @@ export function pdfBodyFromBytes(bytes: string | Uint8Array): string {
   return new TextDecoder("latin1").decode(bytes);
 }
 
-export function extractPdfText(bytes: string | Uint8Array): string {
+export interface PdfPositionedTextRun {
+  readonly font: "F1" | "F2" | "F3" | "F4";
+  readonly size: number;
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
+}
+
+export function extractPdfPositionedTextRuns(
+  bytes: string | Uint8Array
+): readonly PdfPositionedTextRun[] {
   const body = pdfBodyFromBytes(bytes);
   const fontMaps = new Map<string, ReadonlyMap<string, string>>();
 
@@ -23,27 +33,36 @@ export function extractPdfText(bytes: string | Uint8Array): string {
   const resourceMaps = new Map([
     ["F1", fontMaps.get("NotoSans-Regular")],
     ["F2", fontMaps.get("NotoSans-Bold")],
-    ["F3", fontMaps.get("NotoSansMono-Regular")]
+    ["F3", fontMaps.get("NotoSansMono-Regular")],
+    ["F4", fontMaps.get("NotoEmoji-Regular")]
   ]);
 
   const positionedRuns = [
     ...body.matchAll(
-      /BT[^\r\n]*\/(F[123])\s+[\d.]+\s+Tf\s+([-\d.]+)\s+([-\d.]+)\s+Td\s+<([\da-f]+)>\s+Tj\s+ET/giu
+      /BT[^\r\n]*\/(F[1234])\s+([\d.]+)\s+Tf\s+([-\d.]+)\s+([-\d.]+)\s+Td\s+<([\da-f]+)>\s+Tj\s+ET/giu
     )
   ].map((match) => {
     const glyphMap = resourceMaps.get(match[1]);
 
     return {
+      font: match[1] as PdfPositionedTextRun["font"],
+      size: Number.parseFloat(match[2]),
       text: (glyphMap === undefined
         ? []
-        : (match[4].match(/[\da-f]{4}/giu) ?? []).map(
+        : (match[5].match(/[\da-f]{4}/giu) ?? []).map(
             (glyphId) => glyphMap.get(glyphId.toLowerCase()) ?? "�"
           )
       ).join(""),
-      x: Number.parseFloat(match[2]),
-      y: Number.parseFloat(match[3])
+      x: Number.parseFloat(match[3]),
+      y: Number.parseFloat(match[4])
     };
   });
+
+  return positionedRuns;
+}
+
+export function extractPdfText(bytes: string | Uint8Array): string {
+  const positionedRuns = extractPdfPositionedTextRuns(bytes);
   const lines: { text: string; x: number; y: number }[] = [];
 
   for (const run of positionedRuns) {

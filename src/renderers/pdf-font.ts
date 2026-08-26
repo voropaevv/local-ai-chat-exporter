@@ -1,10 +1,11 @@
 import { unzlibSync } from "fflate";
 
+import notoEmojiRegularDataUrl from "./fonts/NotoEmoji-Regular.ttf.zlib?inline";
 import notoSansBoldDataUrl from "./fonts/NotoSans-Bold.ttf.zlib?inline";
 import notoSansRegularDataUrl from "./fonts/NotoSans-Regular.ttf.zlib?inline";
 import notoSansMonoRegularDataUrl from "./fonts/NotoSansMono-Regular.ttf.zlib?inline";
 
-export type PdfFont = "regular" | "bold" | "mono";
+export type PdfFont = "regular" | "bold" | "emoji" | "mono";
 
 export interface PdfFontGlyph {
   readonly glyphId: number;
@@ -43,6 +44,7 @@ interface CmapOffsets {
 export class PdfFontRegistry {
   private readonly usedGlyphs = {
     bold: new Map<number, number>(),
+    emoji: new Map<number, number>(),
     mono: new Map<number, number>(),
     regular: new Map<number, number>()
   };
@@ -249,11 +251,16 @@ function resolveFontForCodePoint(font: PdfFont, codePoint: number): PdfFont {
     return "mono";
   }
 
+  if (font !== "emoji" && getFontProgram("emoji").hasGlyph(codePoint)) {
+    return "emoji";
+  }
+
   return font;
 }
 
 let regularFont: TrueTypeFontProgram | undefined;
 let boldFont: TrueTypeFontProgram | undefined;
+let emojiFont: TrueTypeFontProgram | undefined;
 let monoFont: TrueTypeFontProgram | undefined;
 
 function getFontProgram(font: PdfFont): TrueTypeFontProgram {
@@ -268,6 +275,14 @@ function getFontProgram(font: PdfFont): TrueTypeFontProgram {
       decodeInlineFont(notoSansMonoRegularDataUrl)
     );
     return monoFont;
+  }
+
+  if (font === "emoji") {
+    emojiFont ??= new TrueTypeFontProgram(
+      "NotoEmoji-Regular",
+      decodeInlineFont(notoEmojiRegularDataUrl)
+    );
+    return emojiFont;
   }
 
   regularFont ??= new TrueTypeFontProgram(
