@@ -658,6 +658,117 @@ describe("collectChatGptConversation", () => {
     );
   });
 
+  test("resolves an intersecting mounted empty assistant tombstone", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>First</p></div>
+            </div>
+          </article>
+        </div>
+        <div
+          data-is-intersecting="true"
+          data-turn-id-container="logical-turn-2"
+          style="--estimated-turn-height: 144px"
+        >
+          <section
+            data-testid="conversation-turn-2"
+            data-turn="assistant"
+            data-turn-id-container="logical-turn-2"
+          >
+            <h4 class="sr-only">ChatGPT said:</h4>
+            <div class="agent-turn"><div class="grow"></div></div>
+            <span class="sr-only"><br /></span>
+          </section>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 200, scrollHeight: 200, scrollTop: 0 });
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1"]);
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 2,
+      missingTurnIds: [],
+      status: "complete"
+    });
+    expect(result.completeness.warnings).not.toContain(
+      "Platform virtualization may hide unloaded messages."
+    );
+  });
+
+  test("reconciles a stale placeholder id after ChatGPT rebuilds the turn inventory", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">
+              <div class="markdown"><p>Second</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="stale-placeholder" style="--estimated-turn-height: 100px"></div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: (scrollTop, previousScrollTop) => {
+        if (previousScrollTop > 0 && scrollTop === 0) {
+          container.innerHTML = `
+            <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-1">
+                <div data-message-author-role="user" data-message-id="m1">
+                  <div class="markdown"><p>First</p></div>
+                </div>
+              </article>
+            </div>
+            <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-2">
+                <div data-message-author-role="assistant" data-message-id="m2">
+                  <div class="markdown"><p>Second</p></div>
+                </div>
+              </article>
+            </div>
+          `;
+        }
+      },
+      scrollHeight: 200,
+      scrollTop: 100
+    });
+
+    const result = await collectChatGptConversation({
+      document,
+      maxSteps: 20,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 2,
+      missingTurnIds: [],
+      status: "complete"
+    });
+  });
+
   test("waits for a suspicious virtualized turn inventory to hydrate", async () => {
     vi.useFakeTimers();
 

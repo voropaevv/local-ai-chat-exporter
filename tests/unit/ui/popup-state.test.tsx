@@ -5,12 +5,14 @@ import type { PopupState } from "../../../src/ui/state/popup-state";
 import {
   buildCopyMarkdownStatusMessage,
   buildExportStatusMessage,
+  buildCancelScanRequest,
   buildCopyMarkdownRequest,
   buildBatchExportRequest,
   buildDownloadRequest,
   buildGetActiveTabInfoRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPreviewRequest,
+  buildScanRequest,
   createInitialPopupState,
   popupReducer,
   toggleFormat
@@ -107,6 +109,7 @@ describe("popup state", () => {
   test("builds download, copy markdown, and open PDF requests", () => {
     const state: PopupState = {
       ...createInitialPopupState(),
+      sourceTabId: 73,
       options: {
         ...createInitialPopupState().options,
         filenameTemplate: "{title}.{format}",
@@ -131,15 +134,26 @@ describe("popup state", () => {
         scope: "all"
       },
       returnFiles: false,
+      sourceTabId: 73,
       type: "jelluvi/export-current-tab"
     });
     expect(buildCopyMarkdownRequest(state)).toMatchObject({
       copyToClipboard: false,
       download: false,
       options: { formats: ["md"] },
-      returnFiles: true
+      returnFiles: true,
+      sourceTabId: 73
     });
-    expect(buildGetScanCacheSummaryRequest()).toEqual({
+    expect(buildScanRequest(state)).toEqual({
+      sourceTabId: 73,
+      type: "jelluvi/scan-current-tab"
+    });
+    expect(buildCancelScanRequest(state)).toEqual({
+      sourceTabId: 73,
+      type: "jelluvi/cancel-scan"
+    });
+    expect(buildGetScanCacheSummaryRequest(state)).toEqual({
+      sourceTabId: 73,
       type: "jelluvi/get-scan-cache-summary"
     });
     expect(buildGetActiveTabInfoRequest()).toEqual({
@@ -147,6 +161,7 @@ describe("popup state", () => {
     });
     expect(buildOpenPreviewRequest(state)).toEqual({
       formats: ["md", "html"],
+      sourceTabId: 73,
       type: "jelluvi/open-preview"
     });
   });
@@ -176,12 +191,14 @@ describe("popup state", () => {
 
   test("stores active tab host before scan results are available", () => {
     const state = popupReducer(createInitialPopupState(), {
+      sourceTabId: 73,
       sourceUrl: "https://chatgpt.com/c/example",
       supported: true,
       type: "set_active_tab_info"
     });
 
     expect(state.sourceUrl).toBe("https://chatgpt.com/c/example");
+    expect(state.sourceTabId).toBe(73);
     expect(state.activeTabStatus).toBe("ready");
     expect(state.sourceSupported).toBe(true);
   });

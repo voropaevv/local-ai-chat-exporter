@@ -59,6 +59,7 @@ export interface PopupState {
   readonly progressLabel: string;
   readonly scanStatus: PopupScanStatus;
   readonly sourceSupported?: boolean;
+  readonly sourceTabId?: number;
   readonly sourceUrl?: string;
 }
 
@@ -86,6 +87,7 @@ export type PopupAction =
   | { readonly type: "export_finished"; readonly message: string }
   | {
       readonly platformLabel?: string;
+      readonly sourceTabId?: number;
       readonly sourceUrl?: string;
       readonly supported: boolean;
       readonly type: "set_active_tab_info";
@@ -243,6 +245,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         errorMessage: undefined,
         ...(action.platformLabel !== undefined ? { platformLabel: action.platformLabel } : {}),
         sourceSupported: action.supported,
+        sourceTabId: action.sourceTabId,
         sourceUrl: action.sourceUrl
       };
     case "set_format":
@@ -397,25 +400,28 @@ export function toggleBundleFormat(state: PopupState, format: PopupFileFormat): 
   };
 }
 
-export function buildScanRequest(): PopupScanRequest {
-  return { type: POPUP_SCAN_MESSAGE };
+export function buildScanRequest(state: PopupState): PopupScanRequest {
+  return { ...getSourceTabRequest(state), type: POPUP_SCAN_MESSAGE };
 }
 
-export function buildCancelScanRequest(): PopupCancelScanRequest {
-  return { type: POPUP_CANCEL_SCAN_MESSAGE };
+export function buildCancelScanRequest(state: PopupState): PopupCancelScanRequest {
+  return { ...getSourceTabRequest(state), type: POPUP_CANCEL_SCAN_MESSAGE };
 }
 
 export function buildGetActiveTabInfoRequest(): PopupGetActiveTabInfoRequest {
   return { type: POPUP_GET_ACTIVE_TAB_INFO_MESSAGE };
 }
 
-export function buildGetScanCacheSummaryRequest(): PopupGetScanCacheSummaryRequest {
-  return { type: POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE };
+export function buildGetScanCacheSummaryRequest(
+  state: PopupState
+): PopupGetScanCacheSummaryRequest {
+  return { ...getSourceTabRequest(state), type: POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE };
 }
 
 export function buildOpenPreviewRequest(state: PopupState): PopupOpenPreviewRequest {
   return {
     formats: state.options.outputMode === "zip" ? ["zip"] : state.options.formats,
+    ...getSourceTabRequest(state),
     type: POPUP_OPEN_PREVIEW_MESSAGE,
     ...(state.options.outputMode === "zip" ? { zipFormats: state.options.bundleFormats } : {})
   };
@@ -442,6 +448,7 @@ export function buildDownloadRequest(state: PopupState): PopupExportRequest {
     download: true,
     options: buildExportOptions(state),
     returnFiles: false,
+    ...getSourceTabRequest(state),
     type: POPUP_EXPORT_MESSAGE
   };
 }
@@ -452,8 +459,13 @@ export function buildCopyMarkdownRequest(state: PopupState): PopupExportRequest 
     download: false,
     options: buildExportOptions(state, ["md"]),
     returnFiles: true,
+    ...getSourceTabRequest(state),
     type: POPUP_EXPORT_MESSAGE
   };
+}
+
+function getSourceTabRequest(state: PopupState): { readonly sourceTabId?: number } {
+  return state.sourceTabId === undefined ? {} : { sourceTabId: state.sourceTabId };
 }
 
 export function buildExportOptions(

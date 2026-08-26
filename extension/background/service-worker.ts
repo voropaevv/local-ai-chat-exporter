@@ -48,6 +48,7 @@ import { getSupportedChatPageInfo } from "../../src/core/batch";
 import { buildPreviewPageUrl } from "../../src/ui/preview-url";
 import { ensureContentScript } from "../../src/utils/content-script";
 import { handlePopupBatchExportRequest, handlePopupBatchListRequest } from "./batch";
+import { getPopupSourceTab } from "./source-tab";
 
 chrome.runtime.onInstalled.addListener(() => {
   // Reserved for local-only extension setup in later tasks.
@@ -89,11 +90,11 @@ async function handlePopupRequest(
   | { readonly cancelled: true }
 > {
   if (request.type === POPUP_SCAN_MESSAGE) {
-    return handlePopupScanRequest();
+    return handlePopupScanRequest(request);
   }
 
   if (request.type === POPUP_CANCEL_SCAN_MESSAGE) {
-    return handlePopupCancelScanRequest();
+    return handlePopupCancelScanRequest(request);
   }
 
   if (request.type === POPUP_GET_ACTIVE_TAB_INFO_MESSAGE) {
@@ -101,7 +102,7 @@ async function handlePopupRequest(
   }
 
   if (request.type === POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE) {
-    return handlePopupGetScanCacheSummaryRequest();
+    return handlePopupGetScanCacheSummaryRequest(request);
   }
 
   if (request.type === POPUP_OPEN_PREVIEW_MESSAGE) {
@@ -129,19 +130,20 @@ async function handlePopupRequest(
 }
 
 async function handlePopupGetActiveTabInfoRequest(): Promise<ActiveTabInfoResult> {
-  const tab = await getActiveTab();
+  const tab = await getPopupSourceTab();
   const sourceUrl = typeof tab.url === "string" && tab.url.length > 0 ? tab.url : undefined;
   const supportedPage = sourceUrl === undefined ? undefined : getSupportedChatPageInfo(sourceUrl);
 
   return {
     ...(supportedPage !== undefined ? { platformLabel: supportedPage.label } : {}),
     ...(sourceUrl !== undefined ? { sourceUrl } : {}),
+    sourceTabId: requireTabId(tab),
     supported: supportedPage !== undefined
   };
 }
 
-async function handlePopupScanRequest(): Promise<ScanSummary> {
-  const tab = await getActiveTab();
+async function handlePopupScanRequest(request: PopupScanRequest): Promise<ScanSummary> {
+  const tab = await getPopupSourceTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await ensureContentScript(tabId);
@@ -157,9 +159,11 @@ async function handlePopupScanRequest(): Promise<ScanSummary> {
   return response.value;
 }
 
-async function handlePopupGetScanCacheSummaryRequest(): Promise<ScanCacheSummaryResult> {
+async function handlePopupGetScanCacheSummaryRequest(
+  request: PopupGetScanCacheSummaryRequest
+): Promise<ScanCacheSummaryResult> {
   try {
-    const tab = await getActiveTab();
+    const tab = await getPopupSourceTab(request.sourceTabId);
     const tabId = requireTabId(tab);
 
     await ensureContentScript(tabId);
@@ -181,7 +185,7 @@ async function handlePopupGetScanCacheSummaryRequest(): Promise<ScanCacheSummary
 async function handlePopupOpenPreviewRequest(
   request: PopupOpenPreviewRequest
 ): Promise<PreviewOpenSuccess> {
-  const tab = await getActiveTab();
+  const tab = await getPopupSourceTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await ensureContentScript(tabId);
@@ -235,8 +239,10 @@ async function handlePreviewGetCachedConversationRequest(
   }
 }
 
-async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: true }> {
-  const tab = await getActiveTab();
+async function handlePopupCancelScanRequest(
+  request: PopupCancelScanRequest
+): Promise<{ readonly cancelled: true }> {
+  const tab = await getPopupSourceTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await sendContentMessage<{ readonly cancelled: true }>(tabId, {
@@ -247,7 +253,7 @@ async function handlePopupCancelScanRequest(): Promise<{ readonly cancelled: tru
 }
 
 async function handlePopupExportRequest(request: PopupExportRequest): Promise<PopupExportSuccess> {
-  const tab = await getActiveTab();
+  const tab = await getPopupSourceTab(request.sourceTabId);
   const tabId = requireTabId(tab);
 
   await ensureContentScript(tabId);
@@ -273,17 +279,6 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
     messageCount: contentResponse.value.messageCount,
     warnings: contentResponse.value.warnings
   };
-}
-
-async function getActiveTab(): Promise<chrome.tabs.Tab> {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const activeTab = tabs[0];
-
-  if (activeTab === undefined) {
-    throw new ExportPipelineError("unsupported_platform", "No active tab is available to export.");
-  }
-
-  return activeTab;
 }
 
 function requireTabId(tab: chrome.tabs.Tab): number {

@@ -44,6 +44,16 @@ describe("active tab info", () => {
     ).toBe(false);
   });
 
+  test("preserves the pinned source tab id from the current worker", () => {
+    expect(
+      normalizeActiveTabInfo({
+        sourceTabId: 73,
+        sourceUrl: "https://chatgpt.com/c/example",
+        supported: true
+      }).sourceTabId
+    ).toBe(73);
+  });
+
   test("ends checking when the worker never responds", async () => {
     vi.useFakeTimers();
 

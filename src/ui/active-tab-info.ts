@@ -18,6 +18,7 @@ export function normalizeActiveTabInfo(value: CompatibleActiveTabInfo): ActiveTa
       : supportedPage !== undefined
         ? { platformLabel: supportedPage.label }
         : {}),
+    ...(value.sourceTabId !== undefined ? { sourceTabId: value.sourceTabId } : {}),
     ...(value.sourceUrl !== undefined ? { sourceUrl: value.sourceUrl } : {}),
     supported: typeof value.supported === "boolean" ? value.supported : supportedPage !== undefined
   };

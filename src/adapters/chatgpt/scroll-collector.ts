@@ -27,6 +27,7 @@ const DEFAULT_DOM_QUIET_MS = 100;
 const DEFAULT_DOM_SETTLE_MAX_MS = 500;
 const DEFAULT_DOM_HYDRATION_MAX_MS = 3_000;
 const DEFAULT_DOM_INVENTORY_POLL_MS = 40;
+const EMPTY_TURN_QUIET_MS = 400;
 const EXPECTED_TOP_TURN_WINDOW = 4;
 const EXPECTED_BOTTOM_TURN_WINDOW = 4;
 const MAX_BOTTOM_HYDRATION_PASSES = 2;
@@ -105,12 +106,9 @@ export async function collectChatGptConversation(
     scrollToTop(container);
     await waitForDomSettle(options.signal);
     const reachedTop = isAtTop(container);
+    refreshTurnTrackingState(container, turnTrackingState);
     unresolvedTopHydration =
       usesDefaultDomWait && reachedTop && getHydrationInventory(container).suspicious;
-
-    if (unresolvedTopHydration) {
-      warnings.push("ChatGPT's early turn window did not finish loading before the scan timeout.");
-    }
 
     if (expandReasoningPanels) {
       await hydrateReasoningDisclosures(
@@ -414,6 +412,7 @@ export async function collectChatGptConversation(
       completionPass += 1
     ) {
       refreshTurnTrackingState(container, turnTrackingState);
+      reconcileStalePlaceholderInventory(container, turnTrackingState);
       if (getMissingTurnContainerIds(turnTrackingState).length > 0) {
         if (!capturePhases.includes("recheck")) {
           capturePhases.push("recheck");
@@ -520,6 +519,7 @@ export async function collectChatGptConversation(
     }
 
     refreshTurnTrackingState(container, turnTrackingState);
+    reconcileStalePlaceholderInventory(container, turnTrackingState);
     const missingTurnContainerIds = getMissingTurnContainerIds(turnTrackingState);
     const orderedMessages = orderMessagesByTurnContainer(messages, dedupeState, turnTrackingState);
     const reachedBottom = isAtBottom(container);
@@ -532,6 +532,14 @@ export async function collectChatGptConversation(
           missingTurnContainerIds.length === 1 ? "turn" : "turns"
         } before the scan timeout.`
       );
+    }
+
+    const unresolvedKnownTopHydration =
+      unresolvedTopHydration &&
+      (turnTrackingState.expectedTurnContainerIds.length === 0 ||
+        missingTurnContainerIds.length > 0);
+    if (unresolvedKnownTopHydration) {
+      warnings.push("ChatGPT's early turn window did not finish loading before the scan timeout.");
     }
 
     if (unresolvedBottomHydration) {
@@ -560,7 +568,9 @@ export async function collectChatGptConversation(
       scanWarnings: warnings,
       scrollSteps,
       virtualized:
-        unresolvedTopHydration || unresolvedBottomHydration || missingTurnContainerIds.length > 0
+        unresolvedKnownTopHydration ||
+        unresolvedBottomHydration ||
+        missingTurnContainerIds.length > 0
     });
 
     return {
@@ -682,6 +692,8 @@ interface TurnTrackingState {
   readonly expectedTurnContainerIds: string[];
   readonly extractedTurnContainerIds: Set<string>;
   readonly logicalKeyByMessageId: Map<string, string>;
+  readonly observationCountByLogicalKey: Map<string, number>;
+  readonly resolvedEmptyTurnContainerIds: Set<string>;
   readonly turnNumberByLogicalKey: Map<string, number>;
 }
 
@@ -691,6 +703,8 @@ function createTurnTrackingState(root: ParentNode): TurnTrackingState {
     expectedTurnContainerIds: [],
     extractedTurnContainerIds: new Set<string>(),
     logicalKeyByMessageId: new Map<string, string>(),
+    observationCountByLogicalKey: new Map<string, number>(),
+    resolvedEmptyTurnContainerIds: new Set<string>(),
     turnNumberByLogicalKey: new Map<string, number>()
   };
 
@@ -715,6 +729,10 @@ function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): v
       discoveryOrder.set(logicalKey, discoveryOrder.size);
       state.expectedTurnContainerIds.push(logicalKey);
     }
+    state.observationCountByLogicalKey.set(
+      logicalKey,
+      (state.observationCountByLogicalKey.get(logicalKey) ?? 0) + 1
+    );
 
     const turnNumbers = Array.from(
       turnContainer.querySelectorAll(chatGptSelectors.conversationTurn)
@@ -757,18 +775,16 @@ function refreshTurnTrackingState(root: ParentNode, state: TurnTrackingState): v
 }
 
 function getTrackableTurnContainers(root: ParentNode): readonly Element[] {
-  return Array.from(root.querySelectorAll(TURN_CONTAINER_SELECTOR)).filter((element) => {
-    const ancestorTurnContainer = element.parentElement?.closest(TURN_CONTAINER_SELECTOR);
-
-    if (ancestorTurnContainer !== null && ancestorTurnContainer !== undefined) {
-      return false;
-    }
-
+  return getOutermostTurnContainers(root).filter((element) => {
     if (getTurnContainerLogicalKey(element) === undefined) {
       return false;
     }
 
     if (element.querySelector(chatGptSelectors.messageByRole) !== null) {
+      return true;
+    }
+
+    if (element.querySelector(chatGptSelectors.conversationTurn) !== null) {
       return true;
     }
 
@@ -782,6 +798,43 @@ function getTrackableTurnContainers(root: ParentNode): readonly Element[] {
       className.includes("last-known-height")
     );
   });
+}
+
+function getOutermostTurnContainers(root: ParentNode): readonly Element[] {
+  return Array.from(root.querySelectorAll(TURN_CONTAINER_SELECTOR)).filter((element) => {
+    const ancestorTurnContainer = element.parentElement?.closest(TURN_CONTAINER_SELECTOR);
+    return ancestorTurnContainer === null || ancestorTurnContainer === undefined;
+  });
+}
+
+function reconcileStalePlaceholderInventory(root: ParentNode, state: TurnTrackingState): void {
+  const currentlyMountedKeys = new Set(
+    getOutermostTurnContainers(root)
+      .map(getTurnContainerLogicalKey)
+      .filter((logicalKey): logicalKey is string => logicalKey !== undefined)
+  );
+
+  for (let index = state.expectedTurnContainerIds.length - 1; index >= 0; index -= 1) {
+    const logicalKey = state.expectedTurnContainerIds[index];
+    const wasOnlySeenInTheInitialInventory =
+      (state.observationCountByLogicalKey.get(logicalKey) ?? 0) <= 1;
+    const unresolved =
+      !state.extractedTurnContainerIds.has(logicalKey) &&
+      !state.resolvedEmptyTurnContainerIds.has(logicalKey);
+
+    if (
+      currentlyMountedKeys.has(logicalKey) ||
+      !wasOnlySeenInTheInitialInventory ||
+      !unresolved ||
+      state.turnNumberByLogicalKey.has(logicalKey)
+    ) {
+      continue;
+    }
+
+    state.expectedTurnContainerIds.splice(index, 1);
+    state.expectedTurnContainerIdSet.delete(logicalKey);
+    state.observationCountByLogicalKey.delete(logicalKey);
+  }
 }
 
 function getTurnContainerLogicalKey(turnContainer: Element): string | undefined {
@@ -808,14 +861,18 @@ function getMessageElementStableId(messageElement: Element): string | undefined 
 
 function getMissingTurnContainerIds(state: TurnTrackingState): readonly string[] {
   const missingKnownContainers = state.expectedTurnContainerIds.filter(
-    (logicalKey) => !state.extractedTurnContainerIds.has(logicalKey)
+    (logicalKey) =>
+      !state.extractedTurnContainerIds.has(logicalKey) &&
+      !state.resolvedEmptyTurnContainerIds.has(logicalKey)
   );
   return [...missingKnownContainers, ...getUntrackedTurnOrdinalIds(state)];
 }
 
 function getMissingKnownTurnContainerIds(state: TurnTrackingState): readonly string[] {
   return state.expectedTurnContainerIds.filter(
-    (logicalKey) => !state.extractedTurnContainerIds.has(logicalKey)
+    (logicalKey) =>
+      !state.extractedTurnContainerIds.has(logicalKey) &&
+      !state.resolvedEmptyTurnContainerIds.has(logicalKey)
   );
 }
 
@@ -891,9 +948,16 @@ async function captureKnownTurnContainers(
     scrollSteps += 1;
     await options.waitForDomSettle(options.signal);
     await options.waitForTurnHydration?.(logicalKey, options.signal);
-    if (options.expandReasoningPanels) {
+    const resolvedAsEmpty = markConfirmedEmptyTurnContainer(
+      options.container,
+      options.turnTrackingState,
+      logicalKey
+    );
+    const hydratedTurnContainer =
+      findTrackableTurnContainer(options.container, logicalKey) ?? turnContainer;
+    if (options.expandReasoningPanels && !resolvedAsEmpty) {
       await hydrateReasoningDisclosures(
-        turnContainer,
+        hydratedTurnContainer,
         options.processedReasoningControls,
         options.expandedReasoningControls,
         options.waitForDomSettle,
@@ -970,9 +1034,16 @@ async function recoverMissingTurnContainers(
     scrollSteps += 1;
     await options.waitForDomSettle(options.signal);
     await options.waitForTurnHydration?.(logicalKey, options.signal);
-    if (options.expandReasoningPanels) {
+    const resolvedAsEmpty = markConfirmedEmptyTurnContainer(
+      options.container,
+      options.turnTrackingState,
+      logicalKey
+    );
+    const hydratedTurnContainer =
+      findTrackableTurnContainer(options.container, logicalKey) ?? turnContainer;
+    if (options.expandReasoningPanels && !resolvedAsEmpty) {
       await hydrateReasoningDisclosures(
-        turnContainer,
+        hydratedTurnContainer,
         options.processedReasoningControls,
         options.expandedReasoningControls,
         options.waitForDomSettle,
@@ -1075,6 +1146,101 @@ function findTrackableTurnContainer(root: ParentNode, logicalKey: string): Eleme
   );
 }
 
+function findOutermostTurnContainer(root: ParentNode, logicalKey: string): Element | undefined {
+  return getOutermostTurnContainers(root).find(
+    (turnContainer) => getTurnContainerLogicalKey(turnContainer) === logicalKey
+  );
+}
+
+function markConfirmedEmptyTurnContainer(
+  root: ParentNode,
+  state: TurnTrackingState,
+  logicalKey: string
+): boolean {
+  const turnContainer = findOutermostTurnContainer(root, logicalKey);
+
+  if (turnContainer === undefined || !isConfirmedHydratedEmptyTurn(turnContainer)) {
+    return false;
+  }
+
+  state.resolvedEmptyTurnContainerIds.add(logicalKey);
+  return true;
+}
+
+function isConfirmedHydratedEmptyTurn(turnContainer: Element): boolean {
+  if (turnContainer.getAttribute("data-is-intersecting") !== "true") {
+    return false;
+  }
+
+  const conversationTurn = Array.from(
+    turnContainer.querySelectorAll(chatGptSelectors.conversationTurn)
+  ).find((turn) => turn.getAttribute("data-turn") === "assistant");
+
+  if (conversationTurn === undefined) {
+    return false;
+  }
+
+  if (
+    conversationTurn.querySelector(
+      [
+        chatGptSelectors.messageByRole,
+        ".markdown",
+        "[data-message-id]",
+        "[data-jelluvi-advanced-kind]",
+        "a[href]",
+        "audio",
+        "button",
+        "canvas",
+        "code",
+        "iframe",
+        "img",
+        "input",
+        "picture",
+        "pre",
+        "select",
+        "table",
+        "textarea",
+        "video",
+        "[aria-busy='true']",
+        "[role='button']",
+        "[data-testid*='attachment']",
+        "[data-testid*='loading']",
+        "[data-testid*='tool']"
+      ].join(",")
+    ) !== null
+  ) {
+    return false;
+  }
+
+  const visibleClone = conversationTurn.cloneNode(true) as Element;
+  visibleClone
+    .querySelectorAll(".sr-only, [class*='sr-only'], [aria-hidden='true'], script, style")
+    .forEach((element) => element.remove());
+
+  return (visibleClone.textContent ?? "").replace(/\s+/gu, " ").trim().length === 0;
+}
+
+function isHydratedOrResolvedConversationTurn(turn: Element): boolean {
+  if (hasHydratedRoleContent(turn)) {
+    return true;
+  }
+
+  let outermostTurnContainer = turn.closest(TURN_CONTAINER_SELECTOR);
+  while (outermostTurnContainer?.parentElement !== null) {
+    const ancestor = outermostTurnContainer?.parentElement?.closest(TURN_CONTAINER_SELECTOR);
+    if (ancestor === null || ancestor === undefined) {
+      break;
+    }
+    outermostTurnContainer = ancestor;
+  }
+
+  return (
+    outermostTurnContainer !== null &&
+    outermostTurnContainer !== undefined &&
+    isConfirmedHydratedEmptyTurn(outermostTurnContainer)
+  );
+}
+
 function scrollTurnContainerIntoView(
   container: Element,
   turnContainer: Element,
@@ -1151,7 +1317,10 @@ function reportCaptureProgress(
   }
 
   const knownTurnCount = getKnownTurnCount(turnTrackingState);
-  const capturedTurnCount = turnTrackingState.extractedTurnContainerIds.size;
+  const capturedTurnCount = new Set([
+    ...turnTrackingState.extractedTurnContainerIds,
+    ...turnTrackingState.resolvedEmptyTurnContainerIds
+  ]).size;
 
   onProgress({
     capturedTurnCount,
@@ -1468,11 +1637,16 @@ function createTurnContainerHydrationWait(
           lastChangeAt = Date.now();
         }
 
-        const turnContainer = findTrackableTurnContainer(container, logicalKey);
+        const turnContainer = findOutermostTurnContainer(container, logicalKey);
+        const isHydratedMessage =
+          turnContainer !== undefined && hasHydratedRoleContent(turnContainer);
+        const isHydratedEmptyTurn =
+          turnContainer !== undefined && isConfirmedHydratedEmptyTurn(turnContainer);
+        const requiredQuietMs = isHydratedEmptyTurn ? EMPTY_TURN_QUIET_MS : quietMs;
         if (
           turnContainer !== undefined &&
-          hasHydratedRoleContent(turnContainer) &&
-          Date.now() - lastChangeAt >= quietMs
+          (isHydratedMessage || isHydratedEmptyTurn) &&
+          Date.now() - lastChangeAt >= requiredQuietMs
         ) {
           finish();
         }
@@ -1485,6 +1659,8 @@ function createTurnContainerHydrationWait(
           attributeFilter: [
             "aria-hidden",
             "class",
+            "data-is-intersecting",
+            "data-turn",
             "data-message-author-role",
             "data-message-id",
             "data-testid",
@@ -1506,7 +1682,7 @@ function createTurnContainerHydrationWait(
 }
 
 function getTurnContainerHydrationSignature(container: Element, logicalKey: string): string {
-  const turnContainer = findTrackableTurnContainer(container, logicalKey);
+  const turnContainer = findOutermostTurnContainer(container, logicalKey);
 
   if (turnContainer === undefined) {
     return "missing";
@@ -1516,6 +1692,7 @@ function getTurnContainerHydrationSignature(container: Element, logicalKey: stri
   const text = turnContainer.textContent ?? "";
 
   return [
+    turnContainer.getAttribute("data-is-intersecting") ?? "",
     roleElements.length,
     roleElements
       .map(
@@ -1669,7 +1846,7 @@ function hasIncompleteExpectedTopTurn(
 
   return turns
     .filter(({ number }) => number <= highestExpectedTurn)
-    .some(({ turn }) => !hasHydratedRoleContent(turn));
+    .some(({ turn }) => !isHydratedOrResolvedConversationTurn(turn));
 }
 
 function hasIncompleteFinalTurn(
@@ -1690,7 +1867,7 @@ function hasIncompleteFinalTurn(
     }
   }
 
-  return !hasHydratedRoleContent(bottomTurns[bottomTurns.length - 1].turn);
+  return !isHydratedOrResolvedConversationTurn(bottomTurns[bottomTurns.length - 1].turn);
 }
 
 function hasHydratedRoleContent(turn: Element): boolean {

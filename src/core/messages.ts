@@ -34,10 +34,12 @@ export interface ScanSummary {
 }
 
 export interface PopupScanRequest {
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_SCAN_MESSAGE;
 }
 
 export interface PopupCancelScanRequest {
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_CANCEL_SCAN_MESSAGE;
 }
 
@@ -47,6 +49,7 @@ export interface PopupExportRequest {
   readonly download?: boolean;
   readonly options?: Partial<ExportOptions>;
   readonly returnFiles?: boolean;
+  readonly sourceTabId?: number;
 }
 
 export interface PopupBatchListRequest {
@@ -60,6 +63,7 @@ export interface PopupBatchExportRequest {
 }
 
 export interface PopupGetScanCacheSummaryRequest {
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE;
 }
 
@@ -69,6 +73,7 @@ export interface PopupGetActiveTabInfoRequest {
 
 export interface PopupOpenPreviewRequest {
   readonly formats: readonly ExportFormat[];
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_OPEN_PREVIEW_MESSAGE;
   readonly zipFormats?: readonly Exclude<ExportFormat, "zip">[];
 }
@@ -141,6 +146,7 @@ export type ScanCacheSummaryResult =
 
 export interface ActiveTabInfoResult {
   readonly platformLabel?: string;
+  readonly sourceTabId?: number;
   readonly sourceUrl?: string;
   readonly supported: boolean;
 }

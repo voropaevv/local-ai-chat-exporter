@@ -111,6 +111,7 @@ export function PopupApp() {
 
           dispatch({
             platformLabel: activeTabInfo.platformLabel,
+            sourceTabId: activeTabInfo.sourceTabId,
             sourceUrl: activeTabInfo.sourceUrl,
             supported: activeTabInfo.supported,
             type: "set_active_tab_info"
@@ -132,9 +133,13 @@ export function PopupApp() {
   }, [activeTabRetryKey]);
 
   useEffect(() => {
+    if (state.activeTabStatus !== "ready") {
+      return;
+    }
+
     let cancelled = false;
 
-    sendRuntimeMessage<ScanCacheSummaryResult>(buildGetScanCacheSummaryRequest())
+    sendRuntimeMessage<ScanCacheSummaryResult>(buildGetScanCacheSummaryRequest(state))
       .then((response) => {
         const cachedScan = response.ok ? getCachedScanSummary(response.value) : undefined;
 
@@ -149,12 +154,12 @@ export function PopupApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [state.activeTabStatus, state.sourceTabId]);
 
   async function handleScan(): Promise<boolean> {
     dispatch({ type: "scan_started" });
 
-    const response = await sendRuntimeMessage<ScanSummary>(buildScanRequest());
+    const response = await sendRuntimeMessage<ScanSummary>(buildScanRequest(state));
 
     if (response.ok) {
       dispatch({ scan: response.value, type: "scan_succeeded" });
@@ -167,7 +172,7 @@ export function PopupApp() {
 
   async function ensureFreshConversation(): Promise<boolean> {
     const cacheResponse = await sendRuntimeMessage<ScanCacheSummaryResult>(
-      buildGetScanCacheSummaryRequest()
+      buildGetScanCacheSummaryRequest(state)
     );
 
     if (cacheResponse.ok && cacheResponse.value.hasCache) {
@@ -180,7 +185,7 @@ export function PopupApp() {
 
   async function handleCancelScan() {
     dispatch({ type: "scan_cancelled" });
-    await sendRuntimeMessage(buildCancelScanRequest());
+    await sendRuntimeMessage(buildCancelScanRequest(state));
   }
 
   async function handleDownload() {
