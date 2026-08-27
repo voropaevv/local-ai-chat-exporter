@@ -27,15 +27,15 @@ const DEFAULT_DOM_QUIET_MS = 100;
 const DEFAULT_DOM_SETTLE_MAX_MS = 500;
 const DEFAULT_DOM_HYDRATION_MAX_MS = 3_000;
 const DEFAULT_DOM_INVENTORY_POLL_MS = 40;
+const DEFAULT_TOP_BOUNDARY_QUIET_MS = 1_500;
 const EMPTY_TURN_QUIET_MS = 400;
 const EXPECTED_TOP_TURN_WINDOW = 4;
 const EXPECTED_BOTTOM_TURN_WINDOW = 4;
 const MAX_BOTTOM_HYDRATION_PASSES = 2;
 const MAX_MISSING_TURN_ATTEMPTS = 2;
-const MAX_INVENTORY_STABILIZATION_PASSES = 32;
-const REQUIRED_STABLE_INVENTORY_PASSES = 2;
-const REQUIRED_LONG_INVENTORY_STABLE_PASSES = 6;
-const LONG_INVENTORY_TURN_THRESHOLD = 8;
+const MAX_UNRESOLVED_TOP_BOUNDARY_PASSES = 3;
+const REQUIRED_STABLE_TOP_BOUNDARY_PASSES = 3;
+const TOP_BOUNDARY_REENTRY_VIEWPORTS = 2;
 const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]";
 const REASONING_DISCLOSURE_SELECTOR = "button, summary, [role='button']";
 
@@ -105,16 +105,33 @@ export async function collectChatGptConversation(
   const waitForBottomHydration = usesDefaultDomWait
     ? createBottomHydrationWait(container)
     : undefined;
+  const waitForTopBoundaryHydration = usesDefaultDomWait
+    ? createTopBoundaryHydrationWait(container)
+    : undefined;
 
   reportCaptureProgress(options.onProgress, "inventory", messages, turnTrackingState, scrollSteps);
 
   try {
-    scrollToTop(container);
-    await waitForDomSettle(options.signal);
-    reachedTop = isAtTop(container);
-    refreshTurnTrackingState(container, turnTrackingState, "prepend");
-    unresolvedTopHydration =
-      usesDefaultDomWait && reachedTop && getHydrationInventory(container).suspicious;
+    const topBoundary = await hydrateTopBoundary({
+      container,
+      maxSteps,
+      messages,
+      onProgress: options.onProgress,
+      scrollStepRatio,
+      signal: options.signal,
+      turnTrackingState,
+      usesDefaultDomWait,
+      waitForDomSettle,
+      waitForTopBoundaryHydration
+    });
+    scrollSteps += topBoundary.scrollSteps;
+    reachedTop = topBoundary.stabilized && topBoundary.reachedTop;
+    inventoryStabilized = topBoundary.stabilized;
+    unresolvedTopHydration = usesDefaultDomWait && topBoundary.unresolvedHydration;
+
+    if (!topBoundary.stabilized && !options.signal?.aborted) {
+      warnings.push("ChatGPT's virtual turn inventory did not stabilize before the scan limit.");
+    }
 
     if (expandReasoningPanels) {
       await hydrateReasoningDisclosures(
@@ -172,12 +189,7 @@ export async function collectChatGptConversation(
       }
     }
 
-    while (
-      !inventoryDrivenCapture &&
-      !aborted &&
-      scrollSteps < maxSteps &&
-      consecutiveStalls < maxStalls
-    ) {
+    while (!aborted && scrollSteps < maxSteps && consecutiveStalls < maxStalls) {
       if (isAtBottom(container)) {
         const shouldHydrateBottom =
           waitForBottomHydration !== undefined &&
@@ -317,113 +329,6 @@ export async function collectChatGptConversation(
       }
     }
 
-    refreshTurnTrackingState(container, turnTrackingState);
-    if (
-      !aborted &&
-      inventoryDrivenCapture &&
-      getUntrackedTurnOrdinalIds(turnTrackingState).length > 0 &&
-      scrollSteps < maxSteps
-    ) {
-      if (!capturePhases.includes("recheck")) {
-        capturePhases.push("recheck");
-      }
-      reportCaptureProgress(
-        options.onProgress,
-        "recheck",
-        messages,
-        turnTrackingState,
-        scrollSteps
-      );
-
-      scrollToTop(container);
-      scrollSteps += 1;
-      await waitForDomSettle(options.signal);
-      if (expandReasoningPanels) {
-        await hydrateReasoningDisclosures(
-          container,
-          processedReasoningControls,
-          expandedReasoningControls,
-          waitForDomSettle,
-          options.signal
-        );
-      }
-      duplicateCount += collectStepMessages(
-        container,
-        options.extractMessages,
-        messages,
-        dedupeState,
-        turnTrackingState,
-        "prepend"
-      );
-
-      let sweepStalls = 0;
-      while (
-        !options.signal?.aborted &&
-        !isAtBottom(container) &&
-        scrollSteps < maxSteps &&
-        sweepStalls < maxStalls
-      ) {
-        const previousScrollTop = getScrollTop(container);
-        const scrollPixels = Math.max(1, Math.floor(getClientHeight(container) * scrollStepRatio));
-
-        scrollBy(container, scrollPixels);
-        scrollSteps += 1;
-        await waitForDomSettle(options.signal);
-        if (expandReasoningPanels) {
-          await hydrateReasoningDisclosures(
-            container,
-            processedReasoningControls,
-            expandedReasoningControls,
-            waitForDomSettle,
-            options.signal
-          );
-        }
-        duplicateCount += collectStepMessages(
-          container,
-          options.extractMessages,
-          messages,
-          dedupeState,
-          turnTrackingState,
-          "append"
-        );
-        reportCaptureProgress(
-          options.onProgress,
-          "recheck",
-          messages,
-          turnTrackingState,
-          scrollSteps
-        );
-
-        if (getScrollTop(container) <= previousScrollTop) {
-          sweepStalls += 1;
-          stalls += 1;
-        } else {
-          sweepStalls = 0;
-        }
-      }
-
-      consecutiveStalls = Math.max(consecutiveStalls, sweepStalls);
-      if (options.signal?.aborted) {
-        aborted = true;
-        warnings.push("Scan was cancelled.");
-      } else if (
-        waitForBottomHydration !== undefined &&
-        isAtBottom(container) &&
-        !isAtTop(container)
-      ) {
-        const bottomHydration = await waitForBottomHydration(options.signal);
-        unresolvedBottomHydration = bottomHydration.unresolved;
-        duplicateCount += collectStepMessages(
-          container,
-          options.extractMessages,
-          messages,
-          dedupeState,
-          turnTrackingState,
-          "append"
-        );
-      }
-    }
-
     for (
       let completionPass = 0;
       !aborted && completionPass < MAX_BOTTOM_HYDRATION_PASSES && scrollSteps < maxSteps;
@@ -533,57 +438,6 @@ export async function collectChatGptConversation(
       }
     }
 
-    if (
-      !aborted &&
-      inventoryDrivenCapture &&
-      scrollSteps < maxSteps &&
-      shouldStabilizeTurnInventory(container, turnTrackingState)
-    ) {
-      const stabilization = await stabilizeTurnInventory({
-        container,
-        dedupeState,
-        expandedReasoningControls,
-        expandReasoningPanels,
-        extractMessages: options.extractMessages,
-        maxSteps: maxSteps - scrollSteps,
-        messages,
-        onProgress: options.onProgress,
-        originalScrollTop,
-        processedReasoningControls,
-        signal: options.signal,
-        turnTrackingState,
-        waitForDomSettle,
-        waitForTurnHydration: usesDefaultDomWait
-          ? createTurnContainerHydrationWait(container)
-          : undefined
-      });
-
-      duplicateCount += stabilization.duplicateCount;
-      scrollSteps += stabilization.scrollSteps;
-      stabilization.recheckedTurnIds.forEach((turnId) => recheckedTurnIds.add(turnId));
-      inventoryStabilized = stabilization.stabilized;
-      reachedTop = stabilization.stabilized && stabilization.reachedTop;
-
-      if (
-        stabilization.inventoryChanged ||
-        stabilization.recheckedTurnIds.length > 0 ||
-        !stabilization.stabilized
-      ) {
-        if (!capturePhases.includes("recheck")) {
-          capturePhases.push("recheck");
-        }
-      }
-
-      if (!stabilization.stabilized) {
-        warnings.push("ChatGPT's virtual turn inventory did not stabilize before the scan limit.");
-      }
-
-      if (options.signal?.aborted) {
-        aborted = true;
-        warnings.push("Scan was cancelled.");
-      }
-    }
-
     if (options.signal?.aborted && !aborted) {
       aborted = true;
       warnings.push("Scan was cancelled.");
@@ -688,13 +542,7 @@ function collectStepMessages(
       onExcludedStableMessage: (messageId) => {
         prefilteredDuplicateCount += 1;
         if (turnTrackingState !== undefined) {
-          reconcileExcludedStableMessage(
-            root,
-            messageId,
-            messages,
-            dedupeState,
-            turnTrackingState
-          );
+          reconcileExcludedStableMessage(root, messageId, messages, dedupeState, turnTrackingState);
         }
       },
       onStableMessageRevision: (messageId, revision) => {
@@ -992,9 +840,8 @@ function refreshTurnTrackingState(
       }
 
       const owningTurnNumber = parseTurnNumber(
-        messageElement
-          .closest(chatGptSelectors.conversationTurn)
-          ?.getAttribute("data-testid") ?? null
+        messageElement.closest(chatGptSelectors.conversationTurn)?.getAttribute("data-testid") ??
+          null
       );
       if (owningTurnNumber !== undefined) {
         if (!state.turnNumberByLogicalKey.has(logicalKey)) {
@@ -1010,10 +857,7 @@ function refreshTurnTrackingState(
       (logicalKey): logicalKey is string =>
         logicalKey !== undefined && state.expectedTurnContainerIdSet.has(logicalKey)
     );
-  reconcileObservedLogicalKeyOrder(
-    state.expectedTurnContainerIds,
-    observedOutermostLogicalKeys
-  );
+  reconcileObservedLogicalKeyOrder(state.expectedTurnContainerIds, observedOutermostLogicalKeys);
 }
 
 function reconcileObservedLogicalKeyOrder(
@@ -1117,6 +961,17 @@ function reconcileStalePlaceholderInventory(root: ParentNode, state: TurnTrackin
   ).size;
   const hasCompleteMountedTurnSkeleton =
     highestKnownTurnNumber > 0 && mountedTrackableKeyCount >= highestKnownTurnNumber;
+  const mountedLogicalKeyByTurnNumber = new Map<number, string>();
+  for (const turnContainer of getTrackableTurnContainers(root)) {
+    const logicalKey = getTurnContainerLogicalKey(turnContainer);
+    const turnNumber = Array.from(turnContainer.querySelectorAll(chatGptSelectors.conversationTurn))
+      .map((turn) => parseTurnNumber(turn.getAttribute("data-testid")))
+      .find((candidate): candidate is number => candidate !== undefined);
+
+    if (logicalKey !== undefined && turnNumber !== undefined) {
+      mountedLogicalKeyByTurnNumber.set(turnNumber, logicalKey);
+    }
+  }
 
   for (let index = state.expectedTurnContainerIds.length - 1; index >= 0; index -= 1) {
     const logicalKey = state.expectedTurnContainerIds[index];
@@ -1125,6 +980,21 @@ function reconcileStalePlaceholderInventory(root: ParentNode, state: TurnTrackin
     const unresolved =
       !state.extractedTurnContainerIds.has(logicalKey) &&
       !state.resolvedEmptyTurnContainerIds.has(logicalKey);
+    const knownTurnNumber = state.turnNumberByLogicalKey.get(logicalKey);
+    const replacementLogicalKey =
+      knownTurnNumber === undefined
+        ? undefined
+        : mountedLogicalKeyByTurnNumber.get(knownTurnNumber);
+    const wasReplacedByMountedTurn =
+      replacementLogicalKey !== undefined && replacementLogicalKey !== logicalKey;
+
+    if (!currentlyMountedKeys.has(logicalKey) && unresolved && wasReplacedByMountedTurn) {
+      state.expectedTurnContainerIds.splice(index, 1);
+      state.expectedTurnContainerIdSet.delete(logicalKey);
+      state.observationCountByLogicalKey.delete(logicalKey);
+      state.turnNumberByLogicalKey.delete(logicalKey);
+      continue;
+    }
 
     if (
       currentlyMountedKeys.has(logicalKey) ||
@@ -1231,6 +1101,190 @@ interface KnownTurnCaptureOptions {
   readonly turnTrackingState: TurnTrackingState;
   readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
   readonly waitForTurnHydration?: (logicalKey: string, signal?: AbortSignal) => Promise<void>;
+}
+
+interface TopBoundaryHydrationOptions {
+  readonly container: Element;
+  readonly maxSteps: number;
+  readonly messages: readonly ExportedMessage[];
+  readonly onProgress?: (progress: ConversationCaptureProgress) => void;
+  readonly scrollStepRatio: number;
+  readonly signal?: AbortSignal;
+  readonly turnTrackingState: TurnTrackingState;
+  readonly usesDefaultDomWait: boolean;
+  readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
+  readonly waitForTopBoundaryHydration?: (signal?: AbortSignal) => Promise<void>;
+}
+
+interface TopBoundaryHydrationResult {
+  readonly reachedTop: boolean;
+  readonly scrollSteps: number;
+  readonly stabilized: boolean;
+  readonly unresolvedHydration: boolean;
+}
+
+async function hydrateTopBoundary(
+  options: TopBoundaryHydrationOptions
+): Promise<TopBoundaryHydrationResult> {
+  let lastStableSignature: string | undefined;
+  let lastUnresolvedSignature: string | undefined;
+  let scrollSteps = 0;
+  let stablePasses = 0;
+  let returningFromTopBoundaryReentry = false;
+  let unresolvedPasses = 0;
+  let unresolvedHydration = false;
+  const canReenterTopBoundary =
+    options.usesDefaultDomWait &&
+    getScrollHeight(options.container) > getClientHeight(options.container);
+  const requiredStablePasses =
+    options.usesDefaultDomWait && !canReenterTopBoundary ? 1 : REQUIRED_STABLE_TOP_BOUNDARY_PASSES;
+  const maximumPasses = options.maxSteps + requiredStablePasses;
+
+  for (let pass = 0; pass < maximumPasses; pass += 1) {
+    if (options.signal?.aborted) {
+      break;
+    }
+
+    const wasAtTop = isAtTop(options.container);
+    if (!wasAtTop && scrollSteps >= options.maxSteps) {
+      break;
+    }
+
+    if (wasAtTop) {
+      scrollToTop(options.container);
+    } else if (returningFromTopBoundaryReentry) {
+      scrollToTop(options.container);
+      returningFromTopBoundaryReentry = false;
+      scrollSteps += 1;
+    } else {
+      const scrollPixels = Math.max(
+        1,
+        Math.floor(getClientHeight(options.container) * options.scrollStepRatio)
+      );
+      setScrollTop(options.container, Math.max(0, getScrollTop(options.container) - scrollPixels));
+      scrollSteps += 1;
+    }
+    await options.waitForDomSettle(options.signal);
+    refreshTurnTrackingState(options.container, options.turnTrackingState, "prepend");
+    reportCaptureProgress(
+      options.onProgress,
+      "inventory",
+      options.messages,
+      options.turnTrackingState,
+      scrollSteps
+    );
+
+    if (options.signal?.aborted) {
+      break;
+    }
+
+    if (!isAtTop(options.container)) {
+      lastStableSignature = undefined;
+      stablePasses = 0;
+      continue;
+    }
+
+    let hydrationInventory = getHydrationInventory(options.container);
+    if (options.waitForTopBoundaryHydration !== undefined && !hydrationInventory.suspicious) {
+      await options.waitForTopBoundaryHydration(options.signal);
+      refreshTurnTrackingState(options.container, options.turnTrackingState, "prepend");
+      reportCaptureProgress(
+        options.onProgress,
+        "inventory",
+        options.messages,
+        options.turnTrackingState,
+        scrollSteps
+      );
+
+      if (options.signal?.aborted) {
+        break;
+      }
+
+      if (!isAtTop(options.container)) {
+        lastStableSignature = undefined;
+        stablePasses = 0;
+        continue;
+      }
+
+      hydrationInventory = getHydrationInventory(options.container);
+    }
+    const stableSignature = [
+      getScrollHeight(options.container),
+      getTurnInventorySignature(options.turnTrackingState),
+      hydrationInventory.signature
+    ].join("|");
+
+    unresolvedHydration = options.usesDefaultDomWait && hydrationInventory.suspicious;
+    if (unresolvedHydration) {
+      if (stableSignature === lastUnresolvedSignature) {
+        unresolvedPasses += 1;
+      } else {
+        lastUnresolvedSignature = stableSignature;
+        unresolvedPasses = 1;
+      }
+      lastStableSignature = undefined;
+      stablePasses = 0;
+
+      if (!canReenterTopBoundary || unresolvedPasses >= MAX_UNRESOLVED_TOP_BOUNDARY_PASSES) {
+        return {
+          reachedTop: true,
+          scrollSteps,
+          stabilized: canReenterTopBoundary,
+          unresolvedHydration: true
+        };
+      }
+    } else {
+      lastUnresolvedSignature = undefined;
+      unresolvedPasses = 0;
+      if (stableSignature === lastStableSignature) {
+        stablePasses += 1;
+      } else {
+        lastStableSignature = stableSignature;
+        stablePasses = 1;
+      }
+
+      if (stablePasses >= requiredStablePasses) {
+        return {
+          reachedTop: true,
+          scrollSteps,
+          stabilized: true,
+          unresolvedHydration: false
+        };
+      }
+    }
+
+    const maximumScrollTop = Math.max(
+      0,
+      getScrollHeight(options.container) - getClientHeight(options.container)
+    );
+    if (canReenterTopBoundary && maximumScrollTop > 0 && scrollSteps + 2 <= options.maxSteps) {
+      const reentryScrollTop = Math.min(
+        maximumScrollTop,
+        Math.max(1, Math.floor(getClientHeight(options.container) * TOP_BOUNDARY_REENTRY_VIEWPORTS))
+      );
+      setScrollTop(options.container, reentryScrollTop);
+      returningFromTopBoundaryReentry = true;
+      scrollSteps += 1;
+      await options.waitForDomSettle(options.signal);
+      refreshTurnTrackingState(options.container, options.turnTrackingState, "prepend");
+      reportCaptureProgress(
+        options.onProgress,
+        "inventory",
+        options.messages,
+        options.turnTrackingState,
+        scrollSteps
+      );
+    }
+  }
+
+  return {
+    reachedTop: isAtTop(options.container),
+    scrollSteps,
+    stabilized: false,
+    unresolvedHydration:
+      unresolvedHydration ||
+      (options.usesDefaultDomWait && getHydrationInventory(options.container).suspicious)
+  };
 }
 
 interface KnownTurnCaptureResult {
@@ -1376,176 +1430,6 @@ async function recoverMissingTurnContainers(
   }
 
   return { duplicateCount, recheckedTurnIds: [...recheckedTurnIds], scrollSteps };
-}
-
-function shouldStabilizeTurnInventory(container: Element, state: TurnTrackingState): boolean {
-  return (
-    state.expectedTurnContainerIds.length >= LONG_INVENTORY_TURN_THRESHOLD ||
-    getScrollHeight(container) > getClientHeight(container)
-  );
-}
-
-interface TurnInventoryStabilizationOptions {
-  readonly container: Element;
-  readonly dedupeState: DedupeState;
-  readonly expandedReasoningControls: ReasoningDisclosureRecord[];
-  readonly expandReasoningPanels: boolean;
-  readonly extractMessages: ChatGptScrollCollectorOptions["extractMessages"];
-  readonly maxSteps: number;
-  readonly messages: ExportedMessage[];
-  readonly onProgress?: (progress: ConversationCaptureProgress) => void;
-  readonly originalScrollTop: number;
-  readonly processedReasoningControls: WeakSet<Element>;
-  readonly signal?: AbortSignal;
-  readonly turnTrackingState: TurnTrackingState;
-  readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
-  readonly waitForTurnHydration?: (logicalKey: string, signal?: AbortSignal) => Promise<void>;
-}
-
-interface TurnInventoryStabilizationResult {
-  readonly duplicateCount: number;
-  readonly inventoryChanged: boolean;
-  readonly reachedBottom: boolean;
-  readonly reachedTop: boolean;
-  readonly recheckedTurnIds: readonly string[];
-  readonly scrollSteps: number;
-  readonly stabilized: boolean;
-}
-
-async function stabilizeTurnInventory(
-  options: TurnInventoryStabilizationOptions
-): Promise<TurnInventoryStabilizationResult> {
-  const recheckedTurnIds = new Set<string>();
-  let duplicateCount = 0;
-  let inventoryChanged = false;
-  let lastInventorySignature = getTurnInventorySignature(options.turnTrackingState);
-  let reachedBottom = false;
-  let reachedTop = false;
-  let scrollSteps = 0;
-  let stablePasses = 0;
-  const requiredStablePasses =
-    options.turnTrackingState.expectedTurnContainerIds.length >=
-    LONG_INVENTORY_TURN_THRESHOLD
-      ? REQUIRED_LONG_INVENTORY_STABLE_PASSES
-      : REQUIRED_STABLE_INVENTORY_PASSES;
-
-  const probe = async (
-    scrollTop: number,
-    insertionHint?: TurnInventoryInsertionHint
-  ): Promise<boolean> => {
-    if (options.signal?.aborted || scrollSteps >= options.maxSteps) {
-      return false;
-    }
-
-    setScrollTop(options.container, scrollTop);
-    scrollSteps += 1;
-    await options.waitForDomSettle(options.signal);
-    duplicateCount += collectStepMessages(
-      options.container,
-      options.extractMessages,
-      options.messages,
-      options.dedupeState,
-      options.turnTrackingState,
-      insertionHint
-    );
-    return !options.signal?.aborted;
-  };
-
-  for (
-    let pass = 0;
-    pass < MAX_INVENTORY_STABILIZATION_PASSES && scrollSteps < options.maxSteps;
-    pass += 1
-  ) {
-    if (!(await probe(options.originalScrollTop))) {
-      break;
-    }
-    if (!(await probe(0, "prepend"))) {
-      break;
-    }
-    reachedTop = isAtTop(options.container);
-
-    if (!(await probe(getScrollHeight(options.container), "append"))) {
-      break;
-    }
-    reachedBottom = isAtBottom(options.container);
-
-    if (!(await probe(options.originalScrollTop))) {
-      break;
-    }
-    if (!(await probe(getScrollHeight(options.container), "append"))) {
-      break;
-    }
-    reachedBottom = reachedBottom && isAtBottom(options.container);
-
-    const recovery = await recoverMissingTurnContainers({
-      container: options.container,
-      dedupeState: options.dedupeState,
-      expandedReasoningControls: options.expandedReasoningControls,
-      expandReasoningPanels: options.expandReasoningPanels,
-      extractMessages: options.extractMessages,
-      maxSteps: options.maxSteps - scrollSteps,
-      messages: options.messages,
-      processedReasoningControls: options.processedReasoningControls,
-      signal: options.signal,
-      turnTrackingState: options.turnTrackingState,
-      waitForDomSettle: options.waitForDomSettle,
-      waitForTurnHydration: options.waitForTurnHydration
-    });
-    duplicateCount += recovery.duplicateCount;
-    scrollSteps += recovery.scrollSteps;
-    recovery.recheckedTurnIds.forEach((turnId) => recheckedTurnIds.add(turnId));
-
-    if (!(await probe(getScrollHeight(options.container), "append"))) {
-      break;
-    }
-    reachedBottom = isAtBottom(options.container);
-
-    refreshTurnTrackingState(options.container, options.turnTrackingState);
-    reconcileStalePlaceholderInventory(options.container, options.turnTrackingState);
-    const inventorySignature = getTurnInventorySignature(options.turnTrackingState);
-    const inventoryUnchanged = inventorySignature === lastInventorySignature;
-    const hasMissingTurns = getMissingTurnContainerIds(options.turnTrackingState).length > 0;
-
-    if (!inventoryUnchanged) {
-      inventoryChanged = true;
-      stablePasses = 0;
-    } else if (reachedTop && reachedBottom && !hasMissingTurns) {
-      stablePasses += 1;
-    } else {
-      stablePasses = 0;
-    }
-    lastInventorySignature = inventorySignature;
-
-    reportCaptureProgress(
-      options.onProgress,
-      "recheck",
-      options.messages,
-      options.turnTrackingState,
-      scrollSteps
-    );
-
-    if (stablePasses >= requiredStablePasses) {
-      return {
-        duplicateCount,
-        inventoryChanged,
-        reachedBottom,
-        reachedTop,
-        recheckedTurnIds: [...recheckedTurnIds],
-        scrollSteps,
-        stabilized: true
-      };
-    }
-  }
-
-  return {
-    duplicateCount,
-    inventoryChanged,
-    reachedBottom,
-    reachedTop,
-    recheckedTurnIds: [...recheckedTurnIds],
-    scrollSteps,
-    stabilized: false
-  };
 }
 
 function getTurnInventorySignature(state: TurnTrackingState): string {
@@ -2028,6 +1912,103 @@ function createDomHydrationWait(
       }
     });
   };
+}
+
+function createTopBoundaryHydrationWait(
+  container: Element,
+  quietMs = DEFAULT_TOP_BOUNDARY_QUIET_MS,
+  maximumMs = DEFAULT_DOM_HYDRATION_MAX_MS
+): (signal?: AbortSignal) => Promise<void> {
+  const ownerWindow = container.ownerDocument?.defaultView;
+  const Observer =
+    ownerWindow?.MutationObserver ??
+    (typeof globalThis.MutationObserver === "undefined" ? undefined : globalThis.MutationObserver);
+
+  return (signal?: AbortSignal) => {
+    if (signal?.aborted || !isAtTop(container)) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let finished = false;
+      let observer: MutationObserver | undefined;
+      let signature = getTopBoundaryHydrationSignature(container);
+      let lastChangeAt = Date.now();
+
+      const finish = () => {
+        if (finished) {
+          return;
+        }
+
+        finished = true;
+        observer?.disconnect();
+        globalThis.clearInterval(inventoryPoll);
+        globalThis.clearTimeout(maximumTimer);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+
+      const sample = () => {
+        if (finished) {
+          return;
+        }
+
+        if (!isAtTop(container)) {
+          finish();
+          return;
+        }
+
+        const nextSignature = getTopBoundaryHydrationSignature(container);
+        if (nextSignature !== signature) {
+          signature = nextSignature;
+          lastChangeAt = Date.now();
+        }
+
+        if (Date.now() - lastChangeAt >= quietMs) {
+          finish();
+        }
+      };
+
+      if (Observer !== undefined) {
+        observer = new Observer(sample);
+        observer.observe(container, {
+          attributes: true,
+          attributeFilter: [
+            "aria-hidden",
+            "data-is-intersecting",
+            "data-message-author-role",
+            "data-message-id",
+            "data-testid",
+            "hidden",
+            "style"
+          ],
+          characterData: true,
+          childList: true,
+          subtree: true
+        });
+      }
+
+      const inventoryPoll = globalThis.setInterval(sample, DEFAULT_DOM_INVENTORY_POLL_MS);
+      const maximumTimer = globalThis.setTimeout(finish, maximumMs);
+      signal?.addEventListener("abort", finish, { once: true });
+      sample();
+    });
+  };
+}
+
+function getTopBoundaryHydrationSignature(container: Element): string {
+  const logicalKeys = getOutermostTurnContainers(container)
+    .map(getTurnContainerLogicalKey)
+    .filter((logicalKey): logicalKey is string => logicalKey !== undefined);
+
+  return [
+    getScrollTop(container),
+    getScrollHeight(container),
+    logicalKeys.length,
+    logicalKeys[0] ?? "",
+    logicalKeys[logicalKeys.length - 1] ?? "",
+    getHydrationInventory(container).signature
+  ].join("|");
 }
 
 interface BottomHydrationWaitResult {

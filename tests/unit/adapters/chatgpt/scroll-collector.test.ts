@@ -144,7 +144,270 @@ describe("collectChatGptConversation", () => {
     ).toBe(true);
   });
 
-  test("revisits the restored viewport until a lazily expanding turn inventory stabilizes", async () => {
+  test("hydrates a scroll-anchored top boundary before the first capture pass", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    const renderRange = (firstTurn: number) => {
+      container.innerHTML = Array.from({ length: 21 - firstTurn }, (_, index) => {
+        const turnNumber = firstTurn + index;
+        const role = turnNumber % 2 === 0 ? "assistant" : "user";
+        return `
+          <div data-turn-id-container="logical-turn-${turnNumber}" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-${turnNumber}">
+              <div data-message-author-role="${role}" data-message-id="m${turnNumber}">
+                <div class="markdown"><p>Message ${turnNumber}</p></div>
+              </div>
+            </article>
+          </div>
+        `;
+      }).join("");
+    };
+
+    renderRange(11);
+    let applyingScrollAnchor = false;
+    let topLoads = 0;
+    setScrollMetrics(container, {
+      clientHeight: 100,
+      onScrollTopChange: (scrollTop, previousScrollTop) => {
+        if (
+          applyingScrollAnchor ||
+          scrollTop !== 0 ||
+          previousScrollTop <= 0 ||
+          previousScrollTop > 100
+        ) {
+          return;
+        }
+
+        topLoads += 1;
+        if (topLoads === 1) {
+          renderRange(6);
+        } else if (topLoads === 2) {
+          renderRange(1);
+        } else {
+          return;
+        }
+
+        applyingScrollAnchor = true;
+        container.scrollTop = 100;
+        applyingScrollAnchor = false;
+      },
+      scrollHeight: 1100,
+      scrollTop: 1000
+    });
+
+    const extractionScrollTops: number[] = [];
+    const result = await collectChatGptConversation({
+      document,
+      extractMessages: () => {
+        extractionScrollTops.push(container.scrollTop);
+        return undefined;
+      },
+      maxSteps: 200,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(topLoads).toBeGreaterThanOrEqual(2);
+    expect(extractionScrollTops[0]).toBe(0);
+    expect(result.messages.map((message) => message.id)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `m${index + 1}`)
+    );
+    expect(result.completeness).toMatchObject({
+      knownTurnCount: 20,
+      missingTurnIds: [],
+      reachedTop: true,
+      status: "complete"
+    });
+  });
+
+  test("waits for delayed prepend batches even when each lazy window is renumbered from one", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      const renderRange = (firstTurn: number) => {
+        container.innerHTML = Array.from({ length: 13 - firstTurn }, (_, index) => {
+          const messageNumber = firstTurn + index;
+          const role = messageNumber % 2 === 0 ? "assistant" : "user";
+          return `
+            <div data-turn-id-container="logical-turn-${messageNumber}" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-${index + 1}">
+                <div data-message-author-role="${role}" data-message-id="m${messageNumber}">
+                  <div class="markdown"><p>Message ${messageNumber}</p></div>
+                </div>
+              </article>
+            </div>
+          `;
+        }).join("");
+      };
+
+      renderRange(9);
+      let applyingScrollAnchor = false;
+      let loadPending = false;
+      let loadedBatchCount = 0;
+      setScrollMetrics(container, {
+        clientHeight: 100,
+        onScrollTopChange: (scrollTop, previousScrollTop) => {
+          if (
+            applyingScrollAnchor ||
+            loadPending ||
+            loadedBatchCount >= 2 ||
+            scrollTop !== 0 ||
+            previousScrollTop <= 0
+          ) {
+            return;
+          }
+
+          loadPending = true;
+          globalThis.setTimeout(() => {
+            loadedBatchCount += 1;
+            renderRange(loadedBatchCount === 1 ? 5 : 1);
+            applyingScrollAnchor = true;
+            container.scrollTop = 100;
+            applyingScrollAnchor = false;
+            loadPending = false;
+          }, 500);
+        },
+        scrollHeight: 200,
+        scrollTop: 100
+      });
+
+      const firstExtractedIds: string[] = [];
+      const resultPromise = collectChatGptConversation({
+        document,
+        extractMessages: () => {
+          const firstMessageId = container
+            .querySelector("[data-message-id]")
+            ?.getAttribute("data-message-id");
+          if (firstMessageId !== null && firstMessageId !== undefined) {
+            firstExtractedIds.push(firstMessageId);
+          }
+          return undefined;
+        },
+        maxSteps: 100,
+        scrollContainer: container
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      const result = await resultPromise;
+
+      expect(loadedBatchCount).toBe(2);
+      expect(firstExtractedIds[0]).toBe("m1");
+      expect(result.messages.map((message) => message.id)).toEqual(
+        Array.from({ length: 12 }, (_, index) => `m${index + 1}`)
+      );
+      expect(result.completeness).toMatchObject({
+        knownTurnCount: 12,
+        missingTurnIds: [],
+        reachedTop: true,
+        status: "complete"
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("re-enters the top boundary from beyond the viewport before accepting it as stable", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      const renderRange = (firstMessage: number) => {
+        container.innerHTML = Array.from({ length: 13 - firstMessage }, (_, index) => {
+          const messageNumber = firstMessage + index;
+          const role = messageNumber % 2 === 0 ? "assistant" : "user";
+          return `
+            <div data-turn-id-container="logical-turn-${messageNumber}" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-${index + 1}">
+                <div data-message-author-role="${role}" data-message-id="m${messageNumber}">
+                  <div class="markdown"><p>Message ${messageNumber}</p></div>
+                </div>
+              </article>
+            </div>
+          `;
+        }).join("");
+      };
+
+      renderRange(9);
+      let applyingScrollAnchor = false;
+      let furthestScrollTop = 0;
+      let loadedBatchCount = 0;
+      let topSentinelExited = false;
+      setScrollMetrics(container, {
+        clientHeight: 100,
+        onScrollTopChange: (scrollTop, previousScrollTop) => {
+          furthestScrollTop = Math.max(furthestScrollTop, scrollTop);
+          if (applyingScrollAnchor) {
+            return;
+          }
+
+          if (scrollTop >= 150) {
+            topSentinelExited = true;
+            return;
+          }
+
+          if (!topSentinelExited || scrollTop !== 0 || previousScrollTop <= 0) {
+            return;
+          }
+
+          topSentinelExited = false;
+          if (loadedBatchCount >= 2) {
+            return;
+          }
+
+          loadedBatchCount += 1;
+          renderRange(loadedBatchCount === 1 ? 5 : 1);
+          applyingScrollAnchor = true;
+          container.scrollTop = 100;
+          applyingScrollAnchor = false;
+        },
+        scrollHeight: 300,
+        scrollTop: 0
+      });
+
+      const resultPromise = collectChatGptConversation({
+        document,
+        maxSteps: 100,
+        scrollContainer: container
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(furthestScrollTop).toBeGreaterThanOrEqual(200);
+      expect(loadedBatchCount).toBe(2);
+      expect(result.messages.map((message) => message.id)).toEqual(
+        Array.from({ length: 12 }, (_, index) => `m${index + 1}`)
+      );
+      expect(result.completeness).toMatchObject({
+        knownTurnCount: 12,
+        missingTurnIds: [],
+        reachedTop: true,
+        status: "complete"
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("preloads anchored top batches before traversing downward without returning to the top", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");
 
@@ -167,20 +430,33 @@ describe("collectChatGptConversation", () => {
     };
 
     renderRange(11);
+    let applyingScrollAnchor = false;
+    let captureStarted = false;
     let topTransitions = 0;
+    let upwardTransitionsAfterCapture = 0;
     setScrollMetrics(container, {
       clientHeight: 100,
       onScrollTopChange: (scrollTop, previousScrollTop) => {
-        if (scrollTop !== 0 || previousScrollTop <= 0) {
+        if (captureStarted && scrollTop < previousScrollTop) {
+          upwardTransitionsAfterCapture += 1;
+        }
+
+        if (applyingScrollAnchor || scrollTop !== 0 || previousScrollTop <= 0) {
           return;
         }
 
         topTransitions += 1;
-        if (topTransitions === 2) {
+        if (topTransitions === 1) {
           renderRange(6);
-        } else if (topTransitions === 5) {
+        } else if (topTransitions === 2) {
           renderRange(1);
+        } else {
+          return;
         }
+
+        applyingScrollAnchor = true;
+        container.scrollTop = 100;
+        applyingScrollAnchor = false;
       },
       scrollHeight: 300,
       scrollTop: 200
@@ -188,6 +464,10 @@ describe("collectChatGptConversation", () => {
 
     const result = await collectChatGptConversation({
       document,
+      extractMessages: () => {
+        captureStarted = true;
+        return undefined;
+      },
       maxSteps: 200,
       scrollContainer: container,
       waitForDomSettle: () => Promise.resolve()
@@ -203,11 +483,12 @@ describe("collectChatGptConversation", () => {
       reachedTop: true,
       status: "complete"
     });
-    expect(result.completeness.capturePhases).toContain("recheck");
-    expect(topTransitions).toBeGreaterThanOrEqual(5);
+    expect(result.completeness.capturePhases).toEqual(["inventory", "capture", "verify"]);
+    expect(topTransitions).toBe(3);
+    expect(upwardTransitionsAfterCapture).toBe(0);
   });
 
-  test("orders disjoint virtual turn windows by their scroll direction", async () => {
+  test("orders disjoint virtual turn windows during one monotonic downward traversal", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");
 
@@ -230,28 +511,47 @@ describe("collectChatGptConversation", () => {
     };
 
     renderRange(11, 20);
-    let bottomTransitions = 0;
+    let applyingScrollAnchor = false;
+    let captureStarted = false;
     let topTransitions = 0;
+    let upwardTransitionsAfterCapture = 0;
     setScrollMetrics(container, {
       clientHeight: 100,
       onScrollTopChange: (scrollTop, previousScrollTop) => {
+        if (captureStarted && scrollTop < previousScrollTop) {
+          upwardTransitionsAfterCapture += 1;
+        }
+
+        if (applyingScrollAnchor) {
+          return;
+        }
+
         if (scrollTop === 0 && previousScrollTop > 0) {
           topTransitions += 1;
           if (topTransitions === 1) {
             renderRange(6, 10);
-          } else {
+          } else if (topTransitions === 2) {
             renderRange(1, 5);
+          } else {
+            return;
           }
+
+          applyingScrollAnchor = true;
+          container.scrollTop = 100;
+          applyingScrollAnchor = false;
           return;
         }
 
-        if (scrollTop >= 200 && previousScrollTop < 200) {
-          bottomTransitions += 1;
-          if (bottomTransitions === 1) {
-            renderRange(11, 15);
-          } else {
-            renderRange(16, 20);
-          }
+        if (!captureStarted) {
+          return;
+        }
+
+        if (scrollTop > 0 && scrollTop < 100) {
+          renderRange(6, 10);
+        } else if (scrollTop >= 100 && scrollTop < 200) {
+          renderRange(11, 15);
+        } else if (scrollTop >= 200) {
+          renderRange(16, 20);
         }
       },
       scrollHeight: 300,
@@ -260,6 +560,10 @@ describe("collectChatGptConversation", () => {
 
     const result = await collectChatGptConversation({
       document,
+      extractMessages: () => {
+        captureStarted = true;
+        return undefined;
+      },
       maxSteps: 200,
       scrollContainer: container,
       waitForDomSettle: () => Promise.resolve()
@@ -273,6 +577,7 @@ describe("collectChatGptConversation", () => {
       missingTurnIds: [],
       status: "complete"
     });
+    expect(upwardTransitionsAfterCapture).toBe(0);
   });
 
   test("reconciles previously discovered keys to the latest complete DOM order", async () => {
@@ -428,12 +733,16 @@ describe("collectChatGptConversation", () => {
     };
 
     renderRange();
+    let applyingScrollAnchor = false;
     setScrollMetrics(container, {
       clientHeight: 100,
       onScrollTopChange: (scrollTop, previousScrollTop) => {
-        if (scrollTop === 0 && previousScrollTop > 0) {
+        if (!applyingScrollAnchor && scrollTop === 0 && previousScrollTop > 0) {
           firstTurn -= 1;
           renderRange();
+          applyingScrollAnchor = true;
+          container.scrollTop = 100;
+          applyingScrollAnchor = false;
         }
       },
       scrollHeight: 300,
@@ -442,7 +751,7 @@ describe("collectChatGptConversation", () => {
 
     const result = await collectChatGptConversation({
       document,
-      maxSteps: 200,
+      maxSteps: 20,
       scrollContainer: container,
       waitForDomSettle: () => Promise.resolve()
     });
@@ -454,7 +763,7 @@ describe("collectChatGptConversation", () => {
     );
   });
 
-  test("runs a monotonic verification sweep when only sparse turn windows are mounted", async () => {
+  test("runs a monotonic capture sweep when only sparse turn windows are mounted", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");
 
@@ -517,13 +826,8 @@ describe("collectChatGptConversation", () => {
       missingTurnIds: [],
       status: "complete"
     });
-    expect(result.completeness.capturePhases).toEqual([
-      "inventory",
-      "capture",
-      "recheck",
-      "verify"
-    ]);
-    expect(phases).toContain("recheck");
+    expect(result.completeness.capturePhases).toEqual(["inventory", "capture", "verify"]);
+    expect(phases).not.toContain("recheck");
   });
 
   test("opens collapsed reasoning disclosures sequentially before extraction", async () => {
@@ -1215,6 +1519,7 @@ describe("collectChatGptConversation", () => {
         "5|user|Fifth user message"
       ]);
       await vi.advanceTimersByTimeAsync(120);
+      await vi.advanceTimersByTimeAsync(2_000);
 
       const result = await resultPromise;
       expect(result.messages.map((message) => message.id)).toEqual(["1", "2", "3", "4", "5"]);
@@ -1253,7 +1558,48 @@ describe("collectChatGptConversation", () => {
       const result = await resultPromise;
       expect(result.messages.map((message) => message.id)).toEqual(["1", "5"]);
       expect(settled).toBe(true);
-      expect(result.completeness.status).toBe("probably_complete");
+      expect(result.completeness.status).toBe("partial");
+      expect(result.completeness.reachedTop).toBe(false);
+      expect(result.completeness.warnings).toContain(
+        "ChatGPT's virtual turn inventory did not stabilize before the scan limit."
+      );
+      expect(result.completeness.warnings).toContain(
+        "ChatGPT's early turn window did not finish loading before the scan timeout."
+      );
+      expect(result.completeness.warnings).toContain(
+        "Platform virtualization may hide unloaded messages."
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("confirms a repeatedly unchanged scrollable top while retaining its hydration warning", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`<main id="chat-scroll"></main>`);
+      const container = document.getElementById("chat-scroll");
+
+      if (!container) {
+        throw new Error("fixture missing chat-scroll");
+      }
+
+      setScrollMetrics(container, { clientHeight: 100, scrollHeight: 300, scrollTop: 0 });
+      renderMessages(container, ["1|user|First user message", "5|user|Fifth user message"]);
+      const resultPromise = collectChatGptConversation({
+        document,
+        scrollContainer: container
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(result.completeness).toMatchObject({
+        reachedBottom: true,
+        reachedTop: true,
+        status: "probably_complete"
+      });
       expect(result.completeness.warnings).toContain(
         "ChatGPT's early turn window did not finish loading before the scan timeout."
       );
@@ -1310,7 +1656,7 @@ describe("collectChatGptConversation", () => {
 
       await vi.advanceTimersByTimeAsync(1_000);
       expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.runAllTimersAsync();
 
       const result = await resultPromise;
       expect(result.messages.map((message) => message.id)).toEqual(["1", "2", "3", "4"]);
@@ -1354,7 +1700,7 @@ describe("collectChatGptConversation", () => {
         scrollContainer: container
       });
 
-      await vi.advanceTimersByTimeAsync(3_600);
+      await vi.runAllTimersAsync();
 
       const result = await resultPromise;
       expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
@@ -1394,6 +1740,7 @@ describe("collectChatGptConversation", () => {
         "2|assistant|First assistant message"
       ]);
       await vi.advanceTimersByTimeAsync(120);
+      await vi.advanceTimersByTimeAsync(2_000);
 
       const result = await resultPromise;
       expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
@@ -1434,6 +1781,7 @@ describe("collectChatGptConversation", () => {
         </div>`
       );
       await vi.advanceTimersByTimeAsync(120);
+      await vi.advanceTimersByTimeAsync(2_000);
 
       const result = await resultPromise;
       expect(result.messages.map((message) => message.id)).toEqual(["1", "2"]);
