@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { JSDOM } from "jsdom";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import type { ExportPipelineError } from "../../../src/core/export-options";
+import type { ExportedMessage } from "../../../src/core/schema";
 import { scanCurrentConversationExport } from "../../../src/content/scan";
 
 const claudeFixturesDir = resolve(import.meta.dirname, "../../fixtures/claude");
@@ -118,4 +119,122 @@ describe("scanCurrentConversationExport", () => {
       message: "Perplexity layout not recognized. Adapter update needed."
     } satisfies Partial<ExportPipelineError>);
   });
+
+  test("uses authenticated ChatGPT history when the source tab becomes inactive", async () => {
+    const document = new JSDOM(
+      `<main>
+        <article data-testid="conversation-turn-3">
+          <div data-message-author-role="user" data-message-id="user-2">Recent question</div>
+        </article>
+        <article data-testid="conversation-turn-4">
+          <div data-message-author-role="assistant" data-message-id="assistant-2">
+            Recent answer
+          </div>
+        </article>
+      </main>`,
+      { pretendToBeVisual: true, url: "https://chatgpt.com/c/history-backed" }
+    ).window.document;
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    const historyMessages = [
+      historyMessage("user-1", "user", "First question"),
+      historyMessage("assistant-1", "assistant", "First answer"),
+      historyMessage("user-2", "user", "Recent question"),
+      historyMessage("assistant-2", "assistant", "Recent answer")
+    ];
+    const historyLoader = vi.fn(async () => ({
+      duplicateCount: 0,
+      messages: historyMessages,
+      pageCount: 2,
+      reachedBottom: true,
+      reachedTop: true,
+      warnings: []
+    }));
+
+    const conversation = await scanCurrentConversationExport({
+      chatGptHistoryLoader: historyLoader,
+      document,
+      exportedAt: "2026-08-29T10:00:00.000Z",
+      hostname: "chatgpt.com",
+      href: "https://chatgpt.com/c/history-backed",
+      title: "Background history"
+    });
+
+    expect(historyLoader).toHaveBeenCalledOnce();
+    expect(conversation.messages.map((message) => message.id)).toEqual([
+      "user-1",
+      "assistant-1",
+      "user-2",
+      "assistant-2"
+    ]);
+    expect(conversation.completeness).toMatchObject({
+      knownTurnCount: 4,
+      reachedBottom: true,
+      reachedTop: true,
+      scrollSteps: 0,
+      status: "complete"
+    });
+    expect(conversation.completeness.platformWarnings).toContain(
+      "ChatGPT history pages completed the export while the source tab was inactive; provider-only transient tool UI may be less detailed than in an active-tab capture."
+    );
+  });
+
+  test("keeps active ChatGPT progress at or above the authenticated history inventory", async () => {
+    const document = new JSDOM(
+      `<main>
+        <article data-testid="conversation-turn-3">
+          <div data-message-author-role="user" data-message-id="user-2">Recent question</div>
+        </article>
+        <article data-testid="conversation-turn-4">
+          <div data-message-author-role="assistant" data-message-id="assistant-2">
+            Recent answer
+          </div>
+        </article>
+      </main>`,
+      { pretendToBeVisual: true, url: "https://chatgpt.com/c/history-backed" }
+    ).window.document;
+    const historyMessages = [
+      historyMessage("user-1", "user", "First question"),
+      historyMessage("assistant-1", "assistant", "First answer"),
+      historyMessage("user-2", "user", "Recent question"),
+      historyMessage("assistant-2", "assistant", "Recent answer")
+    ];
+    const progressKnownTurnCounts: number[] = [];
+
+    await scanCurrentConversationExport({
+      chatGptHistoryLoader: async () => ({
+        duplicateCount: 0,
+        messages: historyMessages,
+        pageCount: 1,
+        reachedBottom: true,
+        reachedTop: true,
+        warnings: []
+      }),
+      document,
+      hostname: "chatgpt.com",
+      href: "https://chatgpt.com/c/history-backed",
+      onProgress: (progress) => progressKnownTurnCounts.push(progress.knownTurnCount),
+      waitForDomSettle: async () => undefined
+    });
+
+    expect(progressKnownTurnCounts.length).toBeGreaterThan(0);
+    expect(progressKnownTurnCounts.every((count) => count >= historyMessages.length)).toBe(true);
+  });
 });
+
+function historyMessage(
+  id: string,
+  role: "assistant" | "user",
+  text: string
+): ExportedMessage {
+  return {
+    authorLabel: role === "assistant" ? "ChatGPT" : "User",
+    codeBlocks: [],
+    id,
+    images: [],
+    index: 0,
+    markdown: text,
+    metadata: { captureSource: "chatgpt-history-api" },
+    role,
+    text
+  };
+}

@@ -318,7 +318,7 @@ describe("collectChatGptConversation", () => {
     }
   });
 
-  test("re-enters the top boundary from beyond the viewport before accepting it as stable", async () => {
+  test("waits for a slow cold prepend at the true top without deliberately scrolling down", async () => {
     vi.useFakeTimers();
 
     try {
@@ -347,61 +347,124 @@ describe("collectChatGptConversation", () => {
 
       renderRange(9);
       let applyingScrollAnchor = false;
-      let furthestScrollTop = 0;
+      let captureStarted = false;
+      let deliberateDownwardMoves = 0;
+      let loadPending = false;
       let loadedBatchCount = 0;
-      let topSentinelExited = false;
       setScrollMetrics(container, {
         clientHeight: 100,
         onScrollTopChange: (scrollTop, previousScrollTop) => {
-          furthestScrollTop = Math.max(furthestScrollTop, scrollTop);
-          if (applyingScrollAnchor) {
+          if (!captureStarted && !applyingScrollAnchor && scrollTop > previousScrollTop) {
+            deliberateDownwardMoves += 1;
+          }
+
+          if (
+            applyingScrollAnchor ||
+            loadPending ||
+            loadedBatchCount > 0 ||
+            scrollTop !== 0 ||
+            previousScrollTop <= 0
+          ) {
             return;
           }
 
-          if (scrollTop >= 150) {
-            topSentinelExited = true;
-            return;
-          }
-
-          if (!topSentinelExited || scrollTop !== 0 || previousScrollTop <= 0) {
-            return;
-          }
-
-          topSentinelExited = false;
-          if (loadedBatchCount >= 2) {
-            return;
-          }
-
-          loadedBatchCount += 1;
-          renderRange(loadedBatchCount === 1 ? 5 : 1);
-          applyingScrollAnchor = true;
-          container.scrollTop = 100;
-          applyingScrollAnchor = false;
+          loadPending = true;
+          globalThis.setTimeout(() => {
+            loadedBatchCount += 1;
+            renderRange(1);
+            applyingScrollAnchor = true;
+            container.scrollTop = 100;
+            applyingScrollAnchor = false;
+            loadPending = false;
+          }, 12_000);
         },
         scrollHeight: 300,
-        scrollTop: 0
+        scrollTop: 200
       });
 
+      const firstExtractedIds: string[] = [];
       const resultPromise = collectChatGptConversation({
         document,
+        extractMessages: () => {
+          captureStarted = true;
+          const firstMessageId = container
+            .querySelector("[data-message-id]")
+            ?.getAttribute("data-message-id");
+          if (firstMessageId !== null && firstMessageId !== undefined) {
+            firstExtractedIds.push(firstMessageId);
+          }
+          return undefined;
+        },
         maxSteps: 100,
+        minimumExpectedTurnCount: 12,
         scrollContainer: container
       });
 
-      await vi.runAllTimersAsync();
+      await vi.advanceTimersByTimeAsync(60_000);
       const result = await resultPromise;
 
-      expect(furthestScrollTop).toBeGreaterThanOrEqual(200);
-      expect(loadedBatchCount).toBe(2);
+      expect(loadedBatchCount).toBe(1);
+      expect(firstExtractedIds[0]).toBe("m1");
+      expect(deliberateDownwardMoves).toBe(0);
       expect(result.messages.map((message) => message.id)).toEqual(
         Array.from({ length: 12 }, (_, index) => `m${index + 1}`)
       );
       expect(result.completeness).toMatchObject({
-        knownTurnCount: 12,
         missingTurnIds: [],
         reachedTop: true,
         status: "complete"
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("continues DOM hydration in a hidden tab when animation frames are suspended", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const document = createDocument(`
+        <main id="chat-scroll">
+          <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-1">
+              <div data-message-author-role="user" data-message-id="m1">First</div>
+            </article>
+          </div>
+          <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-2">
+              <div data-message-author-role="assistant" data-message-id="m2">Second</div>
+            </article>
+          </div>
+        </main>
+      `);
+      const container = document.getElementById("chat-scroll");
+      const ownerWindow = document.defaultView;
+
+      if (!container || !ownerWindow) {
+        throw new Error("fixture missing hidden-tab DOM");
+      }
+
+      const requestAnimationFrame = vi.fn(() => 42);
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "hidden"
+      });
+      Object.defineProperty(ownerWindow, "requestAnimationFrame", {
+        configurable: true,
+        value: requestAnimationFrame
+      });
+      setScrollMetrics(container, { clientHeight: 100, scrollHeight: 200, scrollTop: 100 });
+
+      let result: Awaited<ReturnType<typeof collectChatGptConversation>> | undefined;
+      void collectChatGptConversation({ document, scrollContainer: container }).then((value) => {
+        result = value;
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(result?.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+      expect(result?.completeness.reachedTop).toBe(true);
+      expect(requestAnimationFrame).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
@@ -1551,7 +1614,7 @@ describe("collectChatGptConversation", () => {
         return result;
       });
 
-      await vi.advanceTimersByTimeAsync(2_999);
+      await vi.advanceTimersByTimeAsync(12_999);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
 
@@ -1574,7 +1637,7 @@ describe("collectChatGptConversation", () => {
     }
   });
 
-  test("confirms a repeatedly unchanged scrollable top while retaining its hydration warning", async () => {
+  test("does not accept a repeatedly unchanged suspicious top as complete", async () => {
     vi.useFakeTimers();
 
     try {
@@ -1597,8 +1660,8 @@ describe("collectChatGptConversation", () => {
 
       expect(result.completeness).toMatchObject({
         reachedBottom: true,
-        reachedTop: true,
-        status: "probably_complete"
+        reachedTop: false,
+        status: "partial"
       });
       expect(result.completeness.warnings).toContain(
         "ChatGPT's early turn window did not finish loading before the scan timeout."

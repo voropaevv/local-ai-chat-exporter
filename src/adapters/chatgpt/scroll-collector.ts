@@ -27,15 +27,14 @@ const DEFAULT_DOM_QUIET_MS = 100;
 const DEFAULT_DOM_SETTLE_MAX_MS = 500;
 const DEFAULT_DOM_HYDRATION_MAX_MS = 3_000;
 const DEFAULT_DOM_INVENTORY_POLL_MS = 40;
-const DEFAULT_TOP_BOUNDARY_QUIET_MS = 1_500;
+const DEFAULT_TOP_BOUNDARY_QUIET_MS = 10_000;
+const DEFAULT_TOP_BOUNDARY_MAX_MS = 180_000;
 const EMPTY_TURN_QUIET_MS = 400;
 const EXPECTED_TOP_TURN_WINDOW = 4;
 const EXPECTED_BOTTOM_TURN_WINDOW = 4;
 const MAX_BOTTOM_HYDRATION_PASSES = 2;
 const MAX_MISSING_TURN_ATTEMPTS = 2;
-const MAX_UNRESOLVED_TOP_BOUNDARY_PASSES = 3;
-const REQUIRED_STABLE_TOP_BOUNDARY_PASSES = 3;
-const TOP_BOUNDARY_REENTRY_VIEWPORTS = 2;
+const MAX_UNRESOLVED_TOP_BOUNDARY_PASSES = 1;
 const TURN_CONTAINER_SELECTOR = "[data-turn-id-container]";
 const REASONING_DISCLOSURE_SELECTOR = "button, summary, [role='button']";
 
@@ -45,6 +44,7 @@ export interface ChatGptScrollCollectorOptions {
   readonly extractMessages?: (root: ParentNode) => readonly ExportedMessage[] | undefined;
   readonly maxStalls?: number;
   readonly maxSteps?: number;
+  readonly minimumExpectedTurnCount?: number;
   readonly onProgress?: (progress: ConversationCaptureProgress) => void;
   readonly scrollBy?: (container: Element, pixels: number) => void;
   readonly scrollContainer?: Element;
@@ -106,7 +106,7 @@ export async function collectChatGptConversation(
     ? createBottomHydrationWait(container)
     : undefined;
   const waitForTopBoundaryHydration = usesDefaultDomWait
-    ? createTopBoundaryHydrationWait(container)
+    ? createTopBoundaryHydrationWait(container, options.minimumExpectedTurnCount)
     : undefined;
 
   reportCaptureProgress(options.onProgress, "inventory", messages, turnTrackingState, scrollSteps);
@@ -1113,7 +1113,7 @@ interface TopBoundaryHydrationOptions {
   readonly turnTrackingState: TurnTrackingState;
   readonly usesDefaultDomWait: boolean;
   readonly waitForDomSettle: (signal?: AbortSignal) => Promise<void>;
-  readonly waitForTopBoundaryHydration?: (signal?: AbortSignal) => Promise<void>;
+  readonly waitForTopBoundaryHydration?: (signal?: AbortSignal) => Promise<boolean>;
 }
 
 interface TopBoundaryHydrationResult {
@@ -1126,19 +1126,13 @@ interface TopBoundaryHydrationResult {
 async function hydrateTopBoundary(
   options: TopBoundaryHydrationOptions
 ): Promise<TopBoundaryHydrationResult> {
-  let lastStableSignature: string | undefined;
-  let lastUnresolvedSignature: string | undefined;
   let scrollSteps = 0;
-  let stablePasses = 0;
-  let returningFromTopBoundaryReentry = false;
   let unresolvedPasses = 0;
   let unresolvedHydration = false;
-  const canReenterTopBoundary =
+  const requiresColdTopConfirmation =
     options.usesDefaultDomWait &&
     getScrollHeight(options.container) > getClientHeight(options.container);
-  const requiredStablePasses =
-    options.usesDefaultDomWait && !canReenterTopBoundary ? 1 : REQUIRED_STABLE_TOP_BOUNDARY_PASSES;
-  const maximumPasses = options.maxSteps + requiredStablePasses;
+  const maximumPasses = options.maxSteps + MAX_UNRESOLVED_TOP_BOUNDARY_PASSES;
 
   for (let pass = 0; pass < maximumPasses; pass += 1) {
     if (options.signal?.aborted) {
@@ -1152,10 +1146,6 @@ async function hydrateTopBoundary(
 
     if (wasAtTop) {
       scrollToTop(options.container);
-    } else if (returningFromTopBoundaryReentry) {
-      scrollToTop(options.container);
-      returningFromTopBoundaryReentry = false;
-      scrollSteps += 1;
     } else {
       const scrollPixels = Math.max(
         1,
@@ -1179,14 +1169,16 @@ async function hydrateTopBoundary(
     }
 
     if (!isAtTop(options.container)) {
-      lastStableSignature = undefined;
-      stablePasses = 0;
       continue;
     }
 
     let hydrationInventory = getHydrationInventory(options.container);
-    if (options.waitForTopBoundaryHydration !== undefined && !hydrationInventory.suspicious) {
-      await options.waitForTopBoundaryHydration(options.signal);
+    let topBoundarySettled = true;
+    if (
+      options.waitForTopBoundaryHydration !== undefined &&
+      (requiresColdTopConfirmation || hydrationInventory.suspicious)
+    ) {
+      topBoundarySettled = await options.waitForTopBoundaryHydration(options.signal);
       refreshTurnTrackingState(options.container, options.turnTrackingState, "prepend");
       reportCaptureProgress(
         options.onProgress,
@@ -1201,80 +1193,37 @@ async function hydrateTopBoundary(
       }
 
       if (!isAtTop(options.container)) {
-        lastStableSignature = undefined;
-        stablePasses = 0;
         continue;
       }
 
       hydrationInventory = getHydrationInventory(options.container);
     }
-    const stableSignature = [
-      getScrollHeight(options.container),
-      getTurnInventorySignature(options.turnTrackingState),
-      hydrationInventory.signature
-    ].join("|");
 
-    unresolvedHydration = options.usesDefaultDomWait && hydrationInventory.suspicious;
+    unresolvedHydration =
+      options.usesDefaultDomWait && (hydrationInventory.suspicious || !topBoundarySettled);
     if (unresolvedHydration) {
-      if (stableSignature === lastUnresolvedSignature) {
-        unresolvedPasses += 1;
-      } else {
-        lastUnresolvedSignature = stableSignature;
-        unresolvedPasses = 1;
-      }
-      lastStableSignature = undefined;
-      stablePasses = 0;
+      unresolvedPasses += 1;
 
-      if (!canReenterTopBoundary || unresolvedPasses >= MAX_UNRESOLVED_TOP_BOUNDARY_PASSES) {
+      if (
+        !requiresColdTopConfirmation ||
+        unresolvedPasses >= MAX_UNRESOLVED_TOP_BOUNDARY_PASSES
+      ) {
         return {
           reachedTop: true,
           scrollSteps,
-          stabilized: canReenterTopBoundary,
+          stabilized: false,
           unresolvedHydration: true
         };
       }
-    } else {
-      lastUnresolvedSignature = undefined;
-      unresolvedPasses = 0;
-      if (stableSignature === lastStableSignature) {
-        stablePasses += 1;
-      } else {
-        lastStableSignature = stableSignature;
-        stablePasses = 1;
-      }
-
-      if (stablePasses >= requiredStablePasses) {
-        return {
-          reachedTop: true,
-          scrollSteps,
-          stabilized: true,
-          unresolvedHydration: false
-        };
-      }
+      continue;
     }
 
-    const maximumScrollTop = Math.max(
-      0,
-      getScrollHeight(options.container) - getClientHeight(options.container)
-    );
-    if (canReenterTopBoundary && maximumScrollTop > 0 && scrollSteps + 2 <= options.maxSteps) {
-      const reentryScrollTop = Math.min(
-        maximumScrollTop,
-        Math.max(1, Math.floor(getClientHeight(options.container) * TOP_BOUNDARY_REENTRY_VIEWPORTS))
-      );
-      setScrollTop(options.container, reentryScrollTop);
-      returningFromTopBoundaryReentry = true;
-      scrollSteps += 1;
-      await options.waitForDomSettle(options.signal);
-      refreshTurnTrackingState(options.container, options.turnTrackingState, "prepend");
-      reportCaptureProgress(
-        options.onProgress,
-        "inventory",
-        options.messages,
-        options.turnTrackingState,
-        scrollSteps
-      );
-    }
+    return {
+      reachedTop: true,
+      scrollSteps,
+      stabilized: true,
+      unresolvedHydration: false
+    };
   }
 
   return {
@@ -1430,10 +1379,6 @@ async function recoverMissingTurnContainers(
   }
 
   return { duplicateCount, recheckedTurnIds: [...recheckedTurnIds], scrollSteps };
-}
-
-function getTurnInventorySignature(state: TurnTrackingState): string {
-  return [...state.expectedTurnContainerIdSet].sort().join("|");
 }
 
 interface ReasoningDisclosureRecord {
@@ -1793,8 +1738,6 @@ function createDomHydrationWait(
   const Observer =
     ownerWindow?.MutationObserver ??
     (typeof globalThis.MutationObserver === "undefined" ? undefined : globalThis.MutationObserver);
-  const requestFrame = ownerWindow?.requestAnimationFrame?.bind(ownerWindow);
-  const cancelFrame = ownerWindow?.cancelAnimationFrame?.bind(ownerWindow);
 
   return (signal?: AbortSignal) => {
     if (signal?.aborted) {
@@ -1802,8 +1745,6 @@ function createDomHydrationWait(
     }
 
     return new Promise((resolve) => {
-      let animationFrame: number | undefined;
-      let fallbackFrameTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
       let finished = false;
       let observer: MutationObserver | undefined;
       let inventoryPoll: ReturnType<typeof globalThis.setInterval> | undefined;
@@ -1816,12 +1757,6 @@ function createDomHydrationWait(
 
         finished = true;
         observer?.disconnect();
-        if (animationFrame !== undefined) {
-          cancelFrame?.(animationFrame);
-        }
-        if (fallbackFrameTimer !== undefined) {
-          globalThis.clearTimeout(fallbackFrameTimer);
-        }
         if (inventoryPoll !== undefined) {
           globalThis.clearInterval(inventoryPoll);
         }
@@ -1905,10 +1840,8 @@ function createDomHydrationWait(
 
       if (signal?.aborted) {
         finish();
-      } else if (requestFrame !== undefined) {
-        animationFrame = requestFrame(beginObservation);
       } else {
-        fallbackFrameTimer = globalThis.setTimeout(beginObservation, 0);
+        beginObservation();
       }
     });
   };
@@ -1916,9 +1849,10 @@ function createDomHydrationWait(
 
 function createTopBoundaryHydrationWait(
   container: Element,
+  minimumExpectedTurnCount = 0,
   quietMs = DEFAULT_TOP_BOUNDARY_QUIET_MS,
-  maximumMs = DEFAULT_DOM_HYDRATION_MAX_MS
-): (signal?: AbortSignal) => Promise<void> {
+  maximumMs = DEFAULT_TOP_BOUNDARY_MAX_MS
+): (signal?: AbortSignal) => Promise<boolean> {
   const ownerWindow = container.ownerDocument?.defaultView;
   const Observer =
     ownerWindow?.MutationObserver ??
@@ -1926,7 +1860,7 @@ function createTopBoundaryHydrationWait(
 
   return (signal?: AbortSignal) => {
     if (signal?.aborted || !isAtTop(container)) {
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
 
     return new Promise((resolve) => {
@@ -1934,8 +1868,9 @@ function createTopBoundaryHydrationWait(
       let observer: MutationObserver | undefined;
       let signature = getTopBoundaryHydrationSignature(container);
       let lastChangeAt = Date.now();
+      const onAbort = () => finish(false);
 
-      const finish = () => {
+      const finish = (stabilized = false) => {
         if (finished) {
           return;
         }
@@ -1944,8 +1879,8 @@ function createTopBoundaryHydrationWait(
         observer?.disconnect();
         globalThis.clearInterval(inventoryPoll);
         globalThis.clearTimeout(maximumTimer);
-        signal?.removeEventListener("abort", finish);
-        resolve();
+        signal?.removeEventListener("abort", onAbort);
+        resolve(stabilized);
       };
 
       const sample = () => {
@@ -1954,7 +1889,7 @@ function createTopBoundaryHydrationWait(
         }
 
         if (!isAtTop(container)) {
-          finish();
+          finish(false);
           return;
         }
 
@@ -1964,8 +1899,11 @@ function createTopBoundaryHydrationWait(
           lastChangeAt = Date.now();
         }
 
-        if (Date.now() - lastChangeAt >= quietMs) {
-          finish();
+        if (
+          Date.now() - lastChangeAt >= quietMs &&
+          getOutermostTurnContainers(container).length >= minimumExpectedTurnCount
+        ) {
+          finish(true);
         }
       };
 
@@ -1989,8 +1927,8 @@ function createTopBoundaryHydrationWait(
       }
 
       const inventoryPoll = globalThis.setInterval(sample, DEFAULT_DOM_INVENTORY_POLL_MS);
-      const maximumTimer = globalThis.setTimeout(finish, maximumMs);
-      signal?.addEventListener("abort", finish, { once: true });
+      const maximumTimer = globalThis.setTimeout(() => finish(false), maximumMs);
+      signal?.addEventListener("abort", onAbort, { once: true });
       sample();
     });
   };

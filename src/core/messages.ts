@@ -109,6 +109,7 @@ export interface ContentExportRequest {
   readonly delivery: "anchor" | "return_files";
   readonly download?: boolean;
   readonly options: Partial<ExportOptions>;
+  readonly prepareIfNeeded?: boolean;
 }
 
 export interface ContentGetScanCacheSummaryRequest {

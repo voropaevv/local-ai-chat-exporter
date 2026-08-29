@@ -235,6 +235,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
     case "export_finished":
       return {
         ...state,
+        canCancelScan: false,
         progressLabel: action.message,
         scanStatus: state.completeness === undefined ? "idle" : "scanned"
       };

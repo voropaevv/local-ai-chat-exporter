@@ -264,6 +264,7 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
     delivery: request.returnFiles ? "return_files" : "anchor",
     download: shouldDownload,
     options: request.options ?? DEFAULT_EXPORT_OPTIONS,
+    prepareIfNeeded: true,
     type: CONTENT_EXPORT_MESSAGE
   } satisfies ContentExportRequest);
 

@@ -88,6 +88,13 @@ describe("popup state", () => {
     expect(exporting.scanStatus).toBe("exporting");
     expect(exporting.progressLabel).toBe("Creating local files...");
 
+    const backgroundExportFinished = popupReducer(scanning, {
+      message: "1 file saved",
+      type: "export_finished"
+    });
+    expect(backgroundExportFinished.canCancelScan).toBe(false);
+    expect(backgroundExportFinished.progressLabel).toBe("1 file saved");
+
     const cancelled = popupReducer(scanning, { type: "scan_cancelled" });
 
     expect(cancelled.scanStatus).toBe("idle");

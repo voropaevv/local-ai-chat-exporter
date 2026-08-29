@@ -1,8 +1,8 @@
 # Release QA — Jelluvi 0.1.0
 
-Date: 2026-08-27
+Date: 2026-08-29
 
-Last verified locally: 2026-08-27 14:11 +04
+Last verified locally: 2026-08-29 14:17 +04
 
 ## Release status
 
@@ -14,23 +14,31 @@ Last verified locally: 2026-08-27 14:11 +04
 - Store screenshots and 440×280 promo: recaptured as real UI screenshots through the
   development-only visual harness. No private conversation data is present.
 - Store ZIP: rebuilt twice from the same `dist/` and byte-for-byte deterministic.
-- Automated long-chat capture: incremental upward hydration, repeated top-sentinel re-entry,
-  monotonic capture, missing-turn recheck, content hashes and honest incomplete-state reporting are
-  covered by regression tests.
-- Live long-chat acceptance: passed two independent captures with the final fix against the same
-  141-turn ChatGPT conversation, plus comparison with the earlier full baseline. Each produced 134
-  exported messages, no missing known IDs and the same ordered ID and text/code digest.
+- Automated long-chat capture: authenticated history pagination, one upward hydration pass, one
+  monotonic downward capture, inactive-tab continuation, expected-inventory floors, missing-turn
+  recheck, content hashes and honest incomplete-state reporting are covered by regression tests.
+- Live long-chat acceptance: passed cold active-tab and cold inactive-source-tab captures against
+  the same ChatGPT conversation. Each produced the same ordered 134-message sequence with no missing
+  known IDs; the background run completed without DOM scrolling after the popup closed.
 - Chrome Web Store submission: not completed.
 
 ## Implemented release gates
 
 ### Capture reliability
 
-- Before extraction, ChatGPT is walked upward incrementally until it reaches the current top.
-- The top sentinel is moved fully out of view and re-entered repeatedly; two unchanged re-entry
-  cycles are required before the boundary is accepted.
-- Newly prepended, re-numbered virtual windows reset stabilization and continue the upward walk.
-- Only after the top inventory stabilizes does capture traverse monotonically from top to bottom.
+- ChatGPT first paginates the current authenticated conversation in batches of up to 100 and uses
+  that chronological history as the authoritative inventory and completeness floor.
+- With the source tab visible, the collector walks upward once. Reaching a quiet top requires ten
+  seconds without growth, remains bounded by a 180-second deadline and cannot settle below the
+  authenticated inventory count.
+- Newly prepended or re-numbered virtual windows reset stabilization and continue that same upward
+  pass; the collector no longer deliberately scrolls down and back up to re-enter the top.
+- Only after the top inventory stabilizes does capture traverse once from top to bottom. Progress is
+  floored by the authenticated inventory so visible counts do not jump backwards.
+- If the popup closes or the source tab becomes inactive, the page-owned export continues from the
+  authenticated history inventory without relying on `requestAnimationFrame` or an active viewport.
+- The bearer token remains ephemeral within the ChatGPT page and is never returned, logged, stored,
+  or sent to Jelluvi infrastructure.
 - Capture phases are visible as inventory, capture, recheck and verify.
 - Known missing turn IDs force `partial`; `complete` is not emitted optimistically.
 - Repeated scans expose ordered message IDs and stable content hashes for comparison.
@@ -80,7 +88,7 @@ Last verified locally: 2026-08-27 14:11 +04
 
 | Check                                                                | Result                                                                                                                                                                                         |
 | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test`                                                          | Pass — 66 test files / 357 tests.                                                                                                                                                              |
+| `pnpm test`                                                          | Pass — 67 test files / 366 tests.                                                                                                                                                              |
 | `pnpm lint`                                                          | Pass.                                                                                                                                                                                          |
 | `pnpm typecheck`                                                     | Pass.                                                                                                                                                                                          |
 | `pnpm build`                                                         | Pass; popup, options, Preview, service worker and classic content script rebuilt.                                                                                                              |
@@ -95,13 +103,14 @@ Last verified locally: 2026-08-27 14:11 +04
 | Direct PDF download through Preview                                  | Pass; browser download failure was `null`.                                                                                                                                                     |
 | Regenerated long-chat PDF inspection                                 | Pass — 290 tagged A4 pages, no JavaScript, 84 links, five embedded images, searchable text, zero replacement glyphs, zero blank pages and zero same-baseline overlapping text-line candidates. |
 | Installed Brave extension readback                                   | Pass — active unpacked `0.1.0` reloaded with the `Reloaded` receipt, stayed enabled without an Errors control, and opened its popup on the supported long ChatGPT conversation.                |
-| `pnpm package` twice                                                 | Pass; identical SHA256 `a7d71b9abc18ec5a471429572fbd9b5868bc001bafda032159a68b0c50540721`.                                                                                                     |
+| `pnpm package` twice                                                 | Pass; identical SHA256 `8b82229571073ef02dea0e3a6c9c4ee01349b8d56e4d85f20e313ac4186841d2`.                                                                                                     |
+| ZIP manifest and entry-byte comparison                              | Pass — exact 21-file `dist/` plus three license files; every archived entry matches its source bytes and no source, test, docs, map or QA path is present.                                    |
 
 ## Release package
 
 - Path: `release/jelluvi-v0.1.0.zip`
-- Size: 2,225,310 bytes
-- SHA256: `a7d71b9abc18ec5a471429572fbd9b5868bc001bafda032159a68b0c50540721`
+- Size: 2,228,638 bytes
+- SHA256: `8b82229571073ef02dea0e3a6c9c4ee01349b8d56e4d85f20e313ac4186841d2`
 - Production files: 24
 - Includes `LICENSE.txt`, `NOTO_FONT_LICENSE.txt` and `THIRD_PARTY_NOTICES.txt`.
 - Excludes source, tests, docs, Store screenshots, QA output, local archives and task files.
@@ -122,7 +131,7 @@ included in `dist/` or the Store ZIP.
 
 | Provider                     | Current acceptance status   | Required current evidence                                                                                                                                                                          |
 | ---------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ChatGPT                      | Pass                        | Two final-fix captures plus the earlier baseline: 134 messages from 141 known turns, `missingTurnIds=[]`, ID digest `8fc28e…`, text/code digest `855c16…`; five real images and long PDF verified. |
+| ChatGPT                      | Pass                        | Cold active and inactive-source-tab captures: identical ordered 134-message sequence, `missingTurnIds=[]`, ID digest `8fc28e…`; active rich DOM capture retained five real images and the long PDF was verified. |
 | Claude                       | Pass (beta/partial)         | Four visible messages; Unicode, fenced JavaScript, table, 12-item list, formula and final marker verified in copied Markdown.                                                                      |
 | Gemini                       | Pass (beta/partial)         | Two long visible messages; 20,429-byte Markdown retained lists, inline code and Python code.                                                                                                       |
 | Perplexity                   | Pass (experimental/partial) | User and assistant recovered; query timestamp and false `domain+N` chips removed; real source link retained.                                                                                       |
@@ -138,20 +147,25 @@ included in `dist/` or the Store ZIP.
 
 ## Final live acceptance on the long ChatGPT chat
 
-- Two independent final-fix scans, each starting from a lazily mounted lower window, expanded the
-  inventory through repeated top re-entry to 143 observed wrappers and reconciled it to 141 known
-  turns before producing 134 messages with `status=complete`, `reachedTop=true`,
-  `reachedBottom=true`, `missingTurnIds=[]` and no warnings.
-- Those two scans and the earlier full baseline share the ordered ID SHA256
-  `8fc28e3c8ec590462899fb05302f23d02f7a5b8410bc4449e6b6241a7d126d6a` and the semantic
-  text/Markdown/code SHA256 `855c1680093c9547747b6090e33ad013146fff0e045dbb4a37ff557421878949`.
-- One embedded-image byte hash can vary between mounts while its message ID, filename, dimensions
-  and all textual content remain identical; expiring provider image URLs are excluded from the
-  semantic digest.
+- The active run started from four mounted assistant cards, fetched the full 134-message history,
+  observed the virtualized UI grow from 134 to 143 wrappers, then made one downward capture. Popup
+  progress was monotonic: `Inventory: 134`, `Inventory: 143`, then `Capturing 56/143`, `91/143`,
+  `111/143` and `141/143`; it never returned to inventory.
+- The stronger background run started cold, triggered export, closed the popup after 120 ms and
+  immediately selected another browser tab. The source ChatGPT tab remained `Value: off`; the Save
+  dialog arrived about ten seconds later without reactivating it.
+- Active and background results both contain 134 messages (69 user, 65 assistant),
+  `status=complete`, `reachedTop=true`, `reachedBottom=true`, `missingTurnIds=[]` and share ordered ID
+  SHA256 `8fc28e3c8ec590462899fb05302f23d02f7a5b8410bc4449e6b6241a7d126d6a`.
+- The active run used 508 DOM scroll steps for rich-content enrichment. The background run used
+  `scrollSteps=0` and includes the explicit warning that provider-only transient tool UI may be less
+  detailed than an active-tab DOM capture; this does not affect conversation order or boundaries.
+- Expiring provider image URLs are not a completeness boundary. The active rich capture retained
+  the five embedded images used by the PDF acceptance artifact.
 - First and last IDs matched across all runs. The result retained tables, lists, blockquotes,
   formulas, 48 fenced code blocks, sources, attachments, reasoning summaries and five images.
-- Source-tab pinning was verified by changing the active Brave tab during capture; Preview still
-  opened the original ChatGPT result.
+- Source-tab independence was verified by completing and saving the JSON while another Brave tab
+  stayed selected and the original ChatGPT tab remained inactive.
 - The final PDF has SHA256
   `a9cc962f48df4d07687d6f789a480ffff4041713a80774a170b870f89fcfe43a`. All 290 pages were
   rendered and visually reviewed. Multi-page blockquote borders, multi-page code backgrounds,

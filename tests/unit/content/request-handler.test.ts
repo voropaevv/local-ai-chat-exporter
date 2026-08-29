@@ -182,6 +182,42 @@ describe("content request handler scan cache", () => {
     expect(renderedConversations[0].sourceUrl).toBe("https://chatgpt.com/c/cached");
   });
 
+  test("prepare-and-export remains autonomous without a preceding popup scan", async () => {
+    let resolveScan: ((conversation: ConversationExport) => void) | undefined;
+    const scanCurrentConversationExport = vi.fn(
+      () =>
+        new Promise<ConversationExport>((resolve) => {
+          resolveScan = resolve;
+        })
+    );
+    const downloadRenderedFiles = vi.fn().mockResolvedValue({ downloaded: ["chat.md"] });
+    const { handler } = createHandler({
+      downloadRenderedFiles,
+      scanCurrentConversationExport
+    });
+
+    const exportPromise = handler({
+      copyToClipboard: false,
+      delivery: "anchor",
+      download: true,
+      options: { formats: ["md"] },
+      prepareIfNeeded: true,
+      type: CONTENT_EXPORT_MESSAGE
+    });
+
+    await Promise.resolve();
+    expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
+    expect(downloadRenderedFiles).not.toHaveBeenCalled();
+
+    resolveScan?.(makeConversation());
+
+    await expect(exportPromise).resolves.toMatchObject({
+      downloaded: ["chat.md"],
+      exportedMessageCount: 2
+    });
+    expect(downloadRenderedFiles).toHaveBeenCalledTimes(1);
+  });
+
   test("export without a cached scan returns a clear error", async () => {
     const { handler, scanCurrentConversationExport } = createHandler();
 

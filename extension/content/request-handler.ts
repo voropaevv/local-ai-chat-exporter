@@ -160,7 +160,12 @@ export function createContentRequestHandler(
   async function handleContentExportRequest(
     request: ContentExportRequest
   ): Promise<ContentExportSuccess> {
-    const cached = getValidCachedConversation();
+    let cached = getValidCachedConversation();
+
+    if (cached.status !== "ready" && request.prepareIfNeeded === true) {
+      await handleContentScanRequest();
+      cached = getValidCachedConversation();
+    }
 
     if (cached.status !== "ready") {
       if (cached.reason === "stale") {

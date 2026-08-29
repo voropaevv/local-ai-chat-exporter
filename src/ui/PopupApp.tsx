@@ -189,9 +189,7 @@ export function PopupApp() {
   }
 
   async function handleDownload() {
-    if (await ensureFreshConversation()) {
-      await runExportAction(buildDownloadRequest(state));
-    }
+    await runExportAction(buildDownloadRequest(state), true);
   }
 
   async function handleCopyMarkdown() {
@@ -244,8 +242,11 @@ export function PopupApp() {
     });
   }
 
-  async function runExportAction(request: ReturnType<typeof buildDownloadRequest>) {
-    dispatch({ type: "export_started" });
+  async function runExportAction(
+    request: ReturnType<typeof buildDownloadRequest>,
+    preparesConversation = false
+  ) {
+    dispatch({ type: preparesConversation ? "scan_started" : "export_started" });
 
     const response = await sendWithStaleRetry<PopupExportSuccess>(request);
 

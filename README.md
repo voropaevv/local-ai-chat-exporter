@@ -47,6 +47,11 @@ Markdown profiles are available for default archives, Obsidian, GitHub, GitBook,
 - The popup contains only provider status, format choices, Export, Copy MD, Preview, and transient
   preparation controls. There is no manual Scan button or Options drawer.
 - Export, Copy MD, and Preview prepare or refresh the local snapshot automatically.
+- On ChatGPT, preparation first paginates the current authenticated conversation through ChatGPT's
+  same-origin history endpoint. With the source tab visible, that complete inventory also guards one
+  upward hydration pass followed by one top-to-bottom rich-content capture. If the popup closes or
+  the source tab becomes inactive, the page-owned job continues from the history inventory without
+  repeatedly moving the viewport.
 - Preview provides provider-neutral all, selected, user, assistant, and range views. The current
   prepared view can be downloaded, copied, opened as PDF, or saved to the opt-in Local Library.
 - Settings contains persistent export, content, PDF, privacy, library, and batch controls. Support
@@ -120,6 +125,9 @@ Business model:
 - No telemetry, analytics, ads, trackers, session replay, remote logging, remote rendering, or export server is used.
 - No Jelluvi account is required.
 - Conversation content is not uploaded to Jelluvi or any export server.
+- ChatGPT history requests stay on the already authenticated ChatGPT origin. The session credential
+  is used only in memory for that request and is never returned in an export, logged, or stored by
+  Jelluvi.
 - Conversation content is not stored by default.
 - Browser storage is used for versioned local export, PDF, content, theme, and redaction preferences.
 - Optional site access is requested only when the user starts batch discovery or batch export.
@@ -129,7 +137,9 @@ Business model:
 
 - ChatGPT is the primary v1 platform.
 - Secondary platform adapters are best-effort and currently scan visible loaded messages only.
-- The extension exports the current conversation only; it does not scrape account-wide history in the background.
+- The extension exports the current conversation only; it does not crawl or export account-wide
+  history. A user-started ChatGPT export may finish while that source tab or the extension popup is
+  inactive.
 - PDF output is generated locally from the normalized conversation model. If local PDF generation fails, Jelluvi falls back to local PDF-ready HTML and shows a warning.
 - PDF v1 embeds local Noto Sans, Noto Sans Mono, and monochrome Noto Emoji fonts with Latin, Greek, Cyrillic, box-drawing, and common standalone emoji support. CJK text, complex joined emoji sequences, and advanced formula layout may use fallback glyphs; formulas are preserved as plain text.
 - PNG export is a local semantic long-image renderer for moderate selected or range exports. The maximum local PNG height is 16,000 px; longer chats fall back to a local text explanation and should use selected messages, ranges, PDF, HTML, or text formats.
@@ -143,6 +153,10 @@ Business model:
   shows `Retry`. Reload Jelluvi and the chat tab if retry still fails.
 - If no messages are found, confirm the active tab is an open supported AI chat conversation.
 - If an export is marked partial, let the current chat finish loading and export again.
+- For ChatGPT, do not manually pre-scroll a long conversation: Jelluvi establishes the full current
+  conversation inventory first. Keep the ChatGPT session signed in; if its authenticated history
+  endpoint is unavailable, Jelluvi falls back to the mounted page and reports partial state rather
+  than claiming an incomplete export is complete.
 - If a download does not appear, check whether the browser blocked page-initiated downloads.
 - If a secondary platform export looks incomplete, verify the first and last messages before relying on the file.
 

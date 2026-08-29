@@ -7,7 +7,7 @@ provider has automated fixtures and a current live QA pass.
 
 | Provider   | Status       | Current scope                                                                    |
 | ---------- | ------------ | -------------------------------------------------------------------------------- |
-| ChatGPT    | Stable       | Full scan path plus advanced rich-content extraction where fixtures cover it.    |
+| ChatGPT    | Stable       | Authenticated current-thread history plus active-tab rich-content enrichment.    |
 | Claude     | Beta         | Visible loaded messages only; unloaded or collapsed turns may be missing.        |
 | Gemini     | Beta         | Visible loaded messages only; unloaded or collapsed turns may be missing.        |
 | Perplexity | Experimental | Visible answer-page extraction only; layout changes may require adapter updates. |
@@ -35,6 +35,31 @@ Run this on a non-sensitive conversation for each provider before changing publi
 8. Confirm any provider warning matches the actual limitation.
 9. Confirm no console errors are introduced by scan, preview, or export.
 10. Record the browser, date, provider URL shape, and limitations before changing Store copy.
+
+For the long ChatGPT case, start from a cold lower-mounted window. Run it once with the source tab
+active and once while closing the popup and immediately activating another tab. Compare the ordered
+message IDs, first/last messages and completeness metadata; do not treat a previously fully mounted
+page as a cold-load acceptance run.
+
+## Live QA Record — 2026-08-29
+
+Environment: authenticated Brave on macOS, active unpacked Jelluvi `0.1.0`, freshly reloaded
+production `dist/`. Support levels remain unchanged.
+
+| Provider   | URL shape                                 | Messages | Result |
+| ---------- | ----------------------------------------- | -------- | ------ |
+| ChatGPT    | `chatgpt.com/c/<conversation-id>`         | 134      | Complete from a cold long thread in both active and inactive-source-tab runs. Both had the same ordered ID SHA256 `8fc28e3c…`, first/last IDs, `missingTurnIds=[]`, and reached both boundaries. The inactive run used no DOM scroll steps. |
+| Claude     | `claude.ai/chat/<conversation-id>`        | 4        | Partial by design; both roles, Unicode, JavaScript, table, list, formula and final marker verified. |
+| Gemini     | `gemini.google.com/app/<conversation>`    | 2        | Partial by design; the long response retained lists, inline code and fenced Python. |
+| Perplexity | `perplexity.ai/search/<thread-id>`        | 2        | Partial by design; query and answer were recovered with the real source link. |
+| NotebookLM | `notebooklm.google.com/notebook/<id>`     | 4        | Partial by design; both roles, formula and final marker were retained. |
+
+The active ChatGPT pass used the authenticated 134-message history inventory as a lower bound,
+observed the virtualized UI grow from 134 to 143 wrappers, then captured once from top to bottom.
+The popup progress never regressed (`Inventory: 134` to `143`, then `Capturing 56/143` through
+`141/143`). The inactive pass completed from the same-origin history inventory with
+`scrollSteps=0`; its warning states that provider-only transient tool UI can be less detailed than
+active-tab DOM enrichment. No public Store release is implied by this local QA record.
 
 ## Live QA Record — 2026-07-18
 
