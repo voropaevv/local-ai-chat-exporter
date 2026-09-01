@@ -1,7 +1,7 @@
 const FRAME_FALLBACK_MS = 250;
 const LAYOUT_FRAME_COUNT = 2;
 
-export async function waitForVisibleScanLayout(
+export async function waitForScanLayout(
   rootDocument: Document = getCurrentDocument(),
   signal?: AbortSignal
 ): Promise<void> {
@@ -9,14 +9,10 @@ export async function waitForVisibleScanLayout(
     return;
   }
 
-  if (rootDocument.visibilityState !== "visible") {
-    await waitForVisibility(rootDocument, signal);
-  }
-
-  if (signal?.aborted) {
-    return;
-  }
-
+  // The scan is bound to its source tab, not to the popup's focus. Waiting for
+  // visibility here makes a long export pause as soon as the user switches to
+  // another tab. requestAnimationFrame can be suspended in a background tab,
+  // so each layout frame has a bounded timer fallback instead.
   for (let frame = 0; frame < LAYOUT_FRAME_COUNT; frame += 1) {
     await waitForLayoutFrame(rootDocument, signal);
 
@@ -24,32 +20,6 @@ export async function waitForVisibleScanLayout(
       return;
     }
   }
-}
-
-function waitForVisibility(rootDocument: Document, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    let finished = false;
-
-    const finish = () => {
-      if (finished) {
-        return;
-      }
-
-      finished = true;
-      rootDocument.removeEventListener("visibilitychange", sample);
-      signal?.removeEventListener("abort", finish);
-      resolve();
-    };
-    const sample = () => {
-      if (rootDocument.visibilityState === "visible" || signal?.aborted === true) {
-        finish();
-      }
-    };
-
-    rootDocument.addEventListener("visibilitychange", sample);
-    signal?.addEventListener("abort", finish, { once: true });
-    sample();
-  });
 }
 
 function waitForLayoutFrame(rootDocument: Document, signal?: AbortSignal): Promise<void> {

@@ -3,7 +3,7 @@ import { scanCurrentConversationExport } from "../../src/content/scan";
 import { observeConversationChanges } from "./conversation-change-observer";
 import { registerContentListenerOnce } from "./listener-registration";
 import { createContentRequestHandler, isContentRequest } from "./request-handler";
-import { waitForVisibleScanLayout } from "./scan-readiness";
+import { waitForScanLayout } from "./scan-readiness";
 
 const contentGlobal = globalThis as unknown as Record<string, unknown>;
 
@@ -11,7 +11,7 @@ const handleContentRequest = createContentRequestHandler({
   getCurrentUrl: () => globalThis.location.href,
   observeConversationChanges,
   scanCurrentConversationExport,
-  waitForScanReadiness: (signal) => waitForVisibleScanLayout(document, signal)
+  waitForScanReadiness: (signal) => waitForScanLayout(document, signal)
 });
 
 registerContentListenerOnce(contentGlobal, () => {

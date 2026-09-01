@@ -1,59 +1,78 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, test, vi } from "vitest";
 
-import { waitForVisibleScanLayout } from "../../../extension/content/scan-readiness";
+import { waitForScanLayout } from "../../../extension/content/scan-readiness";
 
 describe("content scan readiness", () => {
-  test("waits for a hidden source tab and two visible layout frames", async () => {
-    const dom = new JSDOM("<main></main>", { pretendToBeVisual: true });
-    const rootDocument = dom.window.document;
-    let visibilityState: DocumentVisibilityState = "hidden";
-    Object.defineProperty(rootDocument, "visibilityState", {
-      configurable: true,
-      get: () => visibilityState
-    });
-    const frameCallbacks: FrameRequestCallback[] = [];
-    const requestFrame = vi
-      .spyOn(dom.window, "requestAnimationFrame")
-      .mockImplementation((callback) => {
-        frameCallbacks.push(callback);
-        return frameCallbacks.length;
-      });
+  test("continues a hidden source tab after bounded layout fallbacks", async () => {
+    vi.useFakeTimers();
 
-    const pending = waitForVisibleScanLayout(rootDocument);
-    await Promise.resolve();
-    expect(requestFrame).not.toHaveBeenCalled();
-
-    visibilityState = "visible";
-    rootDocument.dispatchEvent(new dom.window.Event("visibilitychange"));
-    await Promise.resolve();
-    expect(requestFrame).toHaveBeenCalledTimes(1);
-
-    frameCallbacks[0]?.(16);
-    await Promise.resolve();
-    expect(requestFrame).toHaveBeenCalledTimes(2);
-    frameCallbacks[1]?.(32);
-    await pending;
-
-    expect(requestFrame).toHaveBeenCalledTimes(2);
-    dom.window.close();
-  });
-
-  test("cancels a hidden-tab readiness wait without starting layout work", async () => {
     const dom = new JSDOM("<main></main>", { pretendToBeVisual: true });
     const rootDocument = dom.window.document;
     Object.defineProperty(rootDocument, "visibilityState", {
       configurable: true,
       value: "hidden"
     });
-    const requestFrame = vi.spyOn(dom.window, "requestAnimationFrame");
+    let nextFrameId = 1;
+    const cancelFrame = vi.fn();
+    const requestFrame = vi
+      .spyOn(dom.window, "requestAnimationFrame")
+      .mockImplementation(() => {
+        const frameId = nextFrameId;
+        nextFrameId += 1;
+        return frameId;
+      });
+    Object.defineProperty(dom.window, "cancelAnimationFrame", {
+      configurable: true,
+      value: cancelFrame
+    });
+
+    try {
+      const pending = waitForScanLayout(rootDocument);
+      await Promise.resolve();
+      expect(requestFrame).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(500);
+      await pending;
+
+      expect(requestFrame).toHaveBeenCalledTimes(2);
+      expect(cancelFrame).toHaveBeenNthCalledWith(1, 1);
+      expect(cancelFrame).toHaveBeenNthCalledWith(2, 2);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
+  });
+
+  test("cancels a hidden-tab layout wait without leaking timers", async () => {
+    vi.useFakeTimers();
+
+    const dom = new JSDOM("<main></main>", { pretendToBeVisual: true });
+    const rootDocument = dom.window.document;
+    Object.defineProperty(rootDocument, "visibilityState", {
+      configurable: true,
+      value: "hidden"
+    });
+    const cancelFrame = vi.fn();
+    const requestFrame = vi.spyOn(dom.window, "requestAnimationFrame").mockReturnValue(17);
+    Object.defineProperty(dom.window, "cancelAnimationFrame", {
+      configurable: true,
+      value: cancelFrame
+    });
     const controller = new AbortController();
-    const pending = waitForVisibleScanLayout(rootDocument, controller.signal);
 
-    controller.abort();
-    await pending;
+    try {
+      const pending = waitForScanLayout(rootDocument, controller.signal);
+      controller.abort();
+      await pending;
 
-    expect(requestFrame).not.toHaveBeenCalled();
-    dom.window.close();
+      expect(requestFrame).toHaveBeenCalledTimes(1);
+      expect(cancelFrame).toHaveBeenCalledWith(17);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
   });
 });
