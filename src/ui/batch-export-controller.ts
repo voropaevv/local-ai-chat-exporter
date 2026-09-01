@@ -78,10 +78,8 @@ interface BatchRendererModules {
 }
 
 interface BatchExportControllerDependencies {
-  readonly activateTab: (tabId: number) => Promise<void>;
   readonly clearTimeout: (handle: ReturnType<typeof globalThis.setTimeout>) => void;
   readonly ensureContentScript: (tabId: number) => Promise<void>;
-  readonly getActiveTabId: (windowId: number) => Promise<number | undefined>;
   readonly loadRenderers: () => Promise<BatchRendererModules>;
   readonly now: () => string;
   readonly sendContentMessage: (
@@ -95,29 +93,8 @@ interface BatchExportControllerDependencies {
 }
 
 const defaultDependencies: BatchExportControllerDependencies = {
-  activateTab: async (tabId) => {
-    if (typeof chrome === "undefined" || chrome.tabs?.update === undefined) {
-      return;
-    }
-
-    await chrome.tabs.update(tabId, { active: true });
-  },
   clearTimeout: (handle) => globalThis.clearTimeout(handle),
   ensureContentScript,
-  getActiveTabId: async (windowId) => {
-    if (typeof chrome === "undefined" || chrome.tabs?.query === undefined) {
-      return undefined;
-    }
-
-    const tabs = await chrome.tabs.query({ active: true, windowId });
-    const activeTabId = tabs[0]?.id;
-
-    if (activeTabId === undefined) {
-      throw new Error(`Could not preserve the active tab for browser window ${windowId}.`);
-    }
-
-    return activeTabId;
-  },
   loadRenderers: async () => {
     const [exportOptions, zip] = await Promise.all([
       import("../core/export-options"),
@@ -150,44 +127,37 @@ export async function runBatchExport(
   const exportedAt = dependencies.now();
   const results: BatchZipResult[] = [];
   let cancelled = input.signal?.aborted ?? false;
-  const originalActiveTabs = await captureOriginalActiveTabs(input.tabs, dependencies);
 
-  try {
-    for (const [index, tab] of input.tabs.entries()) {
-      const progress = (phase: BatchExportProgressPhase) =>
-        input.onProgress?.({ phase, position: index + 1, total: input.tabs.length });
+  for (const [index, tab] of input.tabs.entries()) {
+    const progress = (phase: BatchExportProgressPhase) =>
+      input.onProgress?.({ phase, position: index + 1, total: input.tabs.length });
 
-      if (cancelled || input.signal?.aborted === true) {
-        cancelled = true;
-        progress("cancelled");
-        results.push(...input.tabs.slice(index).map(skippedResult));
-        break;
-      }
-
-      progress("preparing");
-      const result = await exportTabWithTimeout(
-        tab,
-        input.options,
-        input.signal,
-        timing,
-        dependencies,
-        progress
-      );
-      results.push(result);
-
-      if (result.status === "skipped") {
-        cancelled = true;
-        progress("cancelled");
-        results.push(...input.tabs.slice(index + 1).map(skippedResult));
-        break;
-      }
-
-      progress(result.status === "success" ? "complete" : "failed");
+    if (cancelled || input.signal?.aborted === true) {
+      cancelled = true;
+      progress("cancelled");
+      results.push(...input.tabs.slice(index).map(skippedResult));
+      break;
     }
-  } finally {
-    for (const activeTabId of originalActiveTabs.values()) {
-      await dependencies.activateTab(activeTabId).catch(() => undefined);
+
+    progress("preparing");
+    const result = await exportTabWithTimeout(
+      tab,
+      input.options,
+      input.signal,
+      timing,
+      dependencies,
+      progress
+    );
+    results.push(result);
+
+    if (result.status === "skipped") {
+      cancelled = true;
+      progress("cancelled");
+      results.push(...input.tabs.slice(index + 1).map(skippedResult));
+      break;
     }
+
+    progress(result.status === "success" ? "complete" : "failed");
   }
 
   const renderer = await dependencies.loadRenderers();
@@ -211,23 +181,6 @@ export async function runBatchExport(
     results: manifestResults,
     zipFile: renderer.renderBatchZip({ exportedAt, results })
   };
-}
-
-async function captureOriginalActiveTabs(
-  tabs: readonly BatchCandidateTab[],
-  dependencies: BatchExportControllerDependencies
-): Promise<ReadonlyMap<number, number>> {
-  const activeTabs = new Map<number, number>();
-
-  for (const windowId of new Set(tabs.map((tab) => tab.windowId))) {
-    const activeTabId = await dependencies.getActiveTabId(windowId);
-
-    if (activeTabId !== undefined) {
-      activeTabs.set(windowId, activeTabId);
-    }
-  }
-
-  return activeTabs;
 }
 
 async function exportTabWithTimeout(
@@ -323,10 +276,10 @@ async function exportTab(
   onProgress: (phase: BatchExportProgressPhase) => void
 ): Promise<BatchZipResult> {
   try {
-    // ChatGPT pauses its virtualized turn hydration in hidden tabs. Make the
-    // source tab active before asking the content script to traverse it; the
-    // batch runner restores the originally active Settings tab in `finally`.
-    await dependencies.activateTab(tab.id);
+    // Content scripts are addressed by their tab ID, so a batch can scan one
+    // source conversation at a time without stealing the user's focus. The
+    // content-side layout wait uses bounded timers when a background tab's
+    // requestAnimationFrame is suspended.
     throwIfCancelled(signal);
     await dependencies.ensureContentScript(tab.id);
     throwIfCancelled(signal);
