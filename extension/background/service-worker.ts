@@ -47,6 +47,8 @@ import { serializeRenderedFile } from "../../src/core/rendered-file-transport";
 import { buildPreviewPageUrl } from "../../src/ui/preview-url";
 import { ensureContentScript } from "../../src/utils/content-script";
 import { handlePopupBatchListRequest } from "./batch";
+import { startExportJob } from "./export-job";
+import { START_EXPORT_JOB } from "../../src/ui/export-job";
 import {
   readDiagnosticContext,
   readDiagnosticErrors,
@@ -59,6 +61,18 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (
+    typeof message === "object" &&
+    message !== null &&
+    "type" in message &&
+    message.type === START_EXPORT_JOB &&
+    "request" in message
+  ) {
+    startExportJob(message.request as PopupExportRequest)
+      .then((value) => sendResponse({ ok: true, value }))
+      .catch((error: unknown) => sendResponse({ ok: false, error: serializeExportError(error) }));
+    return true;
+  }
   if (!isPopupRequest(message)) {
     return false;
   }

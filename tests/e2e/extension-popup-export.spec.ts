@@ -8,7 +8,7 @@ import { readFixture } from "../helpers/fixtures";
 const projectRoot = resolve(import.meta.dirname, "../..");
 const builtExtensionPath = resolve(projectRoot, "dist");
 
-test("extension popup automatically prepares a ChatGPT fixture and downloads markdown", async () => {
+test("export survives launcher closure and a background source tab", async () => {
   await expect(readFile(resolve(builtExtensionPath, "manifest.json"), "utf8")).resolves.toContain(
     '"default_popup": "popup/index.html"'
   );
@@ -35,8 +35,14 @@ test("extension popup automatically prepares a ChatGPT fixture and downloads mar
     await expect(popup.getByText("ChatGPT", { exact: true })).toBeVisible();
     await expect(popup.getByRole("button", { name: "Scan" })).toHaveCount(0);
 
-    const downloadPromise = popup.waitForEvent("download");
+    const jobPromise = context.waitForEvent("page");
     await popup.getByRole("button", { name: "Export", exact: true }).click();
+    const job = await jobPromise;
+    const downloadPromise = job.waitForEvent("download");
+    await popup.close();
+    const otherTab = await context.newPage();
+    await otherTab.goto("about:blank");
+    await otherTab.bringToFront();
     const download = await downloadPromise;
     const downloadedPath = await download.path();
 
@@ -46,7 +52,10 @@ test("extension popup automatically prepares a ChatGPT fixture and downloads mar
     const markdown = await readFile(downloadedPath ?? "", "utf8");
     expect(markdown).toContain("Hello, can you summarize this?");
     expect(markdown).toContain("Sure. Here is a concise summary.");
-    await expect(popup.getByRole("button", { name: "Export", exact: true })).toBeEnabled();
+    await expect(job.getByRole("status")).toContainText("Download requested");
+    await job.screenshot({ path: test.info().outputPath("export-progress.png"), fullPage: true });
+    await job.reload();
+    await expect(job.getByRole("status")).toContainText("expired or already started");
   } finally {
     await context?.close();
     await rm(testRoot, { force: true, recursive: true });

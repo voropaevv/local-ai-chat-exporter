@@ -23,7 +23,6 @@ import {
   buildCopyMarkdownStatusMessage,
   buildCopyMarkdownRequest,
   buildDownloadRequest,
-  buildExportStatusMessage,
   buildGetActiveTabInfoRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPreviewRequest,
@@ -34,8 +33,8 @@ import {
 import { readStoredRedactionSettings } from "./redaction-storage";
 import { readSourceTabId } from "./source-tab";
 import { copyRenderedFileToClipboard } from "../utils/clipboard";
-import { downloadRenderedFiles } from "../utils/download";
 import { deserializeRenderedFile } from "../core/rendered-file-transport";
+import { START_EXPORT_JOB } from "./export-job";
 
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
@@ -173,9 +172,19 @@ export function PopupApp() {
   }
 
   async function handleDownload() {
-    if (await ensureFreshConversation()) {
-      await runExportAction(buildDownloadRequest(state, sourceTabId));
+    dispatch({ type: "export_started" });
+    const response = await sendRuntimeMessage({
+      type: START_EXPORT_JOB,
+      request: buildDownloadRequest(state, sourceTabId)
+    });
+    if (!response.ok) {
+      dispatch({ message: response.error.message, type: "scan_failed" });
+      return;
     }
+    dispatch({
+      type: "export_finished",
+      message: "Export is running in its own progress tab. You can switch tabs."
+    });
   }
 
   async function handleCopyMarkdown() {
@@ -228,36 +237,6 @@ export function PopupApp() {
       message: "Preview opened.",
       type: "export_finished"
     });
-  }
-
-  async function runExportAction(request: ReturnType<typeof buildDownloadRequest>) {
-    dispatch({ type: "export_started" });
-
-    const response = await sendWithStaleRetry<PopupExportSuccess>(request);
-
-    if (!response.ok) {
-      dispatch({ message: response.error.message, type: "scan_failed" });
-      return undefined;
-    }
-
-    try {
-      const downloaded = await downloadRenderedFiles(
-        response.value.files.map(deserializeRenderedFile)
-      );
-      const result = { ...response.value, downloaded: downloaded.downloaded };
-
-      dispatch({
-        message: buildExportStatusMessage(result),
-        type: "export_finished"
-      });
-      return result;
-    } catch (error) {
-      dispatch({
-        message: error instanceof Error ? error.message : "Download failed.",
-        type: "scan_failed"
-      });
-      return undefined;
-    }
   }
 
   async function sendWithStaleRetry<T>(message: unknown): Promise<RuntimeResponse<T>> {
