@@ -85,6 +85,36 @@ function createDeferred<T>() {
 }
 
 describe("content request handler scan cache", () => {
+  test("a superseded scan cannot overwrite the newer cached snapshot", async () => {
+    const oldScan = createDeferred<ConversationExport>();
+    const newScan = createDeferred<ConversationExport>();
+    const scanner = vi.fn().mockReturnValueOnce(oldScan.promise).mockReturnValueOnce(newScan.promise);
+    const { handler } = createHandler({ scanCurrentConversationExport: scanner });
+    const oldRequest = handler({ type: CONTENT_SCAN_MESSAGE });
+    const rejected = expect(oldRequest).rejects.toMatchObject({ code: "scan_cancelled" });
+    const newRequest = handler({ type: CONTENT_SCAN_MESSAGE });
+    newScan.resolve({ ...makeConversation(), title: "New snapshot" });
+    await newRequest;
+    oldScan.resolve({ ...makeConversation(), title: "Old snapshot" });
+    await rejected;
+    expect(await handler({ type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE })).toMatchObject({
+      hasConversation: true, conversation: { title: "New snapshot" }
+    });
+  });
+
+  test("cancellation during readiness never starts extraction", async () => {
+    const readiness = createDeferred<void>();
+    const { handler, scanCurrentConversationExport } = createHandler({
+      waitForScanReadiness: () => readiness.promise
+    });
+    const request = handler({ type: CONTENT_SCAN_MESSAGE });
+    const rejected = expect(request).rejects.toMatchObject({ code: "scan_cancelled" });
+    await handler({ type: CONTENT_CANCEL_SCAN_MESSAGE });
+    readiness.resolve();
+    await rejected;
+    expect(scanCurrentConversationExport).not.toHaveBeenCalled();
+  });
+
   test("scan request calls the scanner once and caches the full conversation", async () => {
     const { handler, scanCurrentConversationExport } = createHandler();
 

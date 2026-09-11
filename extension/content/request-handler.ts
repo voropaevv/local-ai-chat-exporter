@@ -12,6 +12,7 @@ import {
   type ScanSummary
 } from "../../src/core/messages";
 import type { ConversationExport } from "../../src/core/schema";
+import { ExportPipelineError } from "../../src/core/export-errors";
 
 export type ContentRequest =
   | ContentScanRequest
@@ -79,9 +80,11 @@ export function createContentRequestHandler(
       if (dependencies.waitForScanReadiness !== undefined) {
         await dependencies.waitForScanReadiness(scanController.signal);
       }
+      assertCurrentScan();
       const conversation = await dependencies.scanCurrentConversationExport({
         signal: scanController.signal
       });
+      assertCurrentScan();
       const scanId = createScanId(scanSequence);
 
       cachedConversation = conversation;
@@ -97,6 +100,12 @@ export function createContentRequestHandler(
     } finally {
       if (activeScanController === scanController) {
         activeScanController = undefined;
+      }
+    }
+
+    function assertCurrentScan(): void {
+      if (scanController.signal.aborted || activeScanController !== scanController) {
+        throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
       }
     }
   }
