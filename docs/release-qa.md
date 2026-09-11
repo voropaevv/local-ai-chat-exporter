@@ -1,9 +1,58 @@
-# Release QA — Jelluvi 0.2.0
+# Release QA — Jelluvi 0.2.11
+
+## Final local checkpoint — 2026-09-11
+
+**NO-GO for public release.** This checkpoint supersedes all older records below.
+Product source: `57a4b2e`, version `0.2.11`. No merge, push, publication or Store
+submission was performed. Unrelated edits in the original checkout were preserved.
+
+- Full `pnpm check`: passed, 78 files / 393 tests, lint, typecheck, all five provider
+  contracts, icons, brand, production build, content budget, Preview and site build.
+- `pnpm test:e2e`: 7 passed. One real Chromium extension fixture verifies a saved
+  Markdown download after launcher closure and switching tabs; six are contract checks.
+- PDF repairs integrated selectively from the preserved QA branch (`3d8a6a1`): embedded
+  glyphs, measured wrapping, code backgrounds across page breaks, lists/quotes/tables,
+  oversized-row fragmentation, code-to-heading gap and Cyrillic PDF metadata. All 8
+  synthetic rendered pages visually inspected (4 light, 4 dark). Original-chat PDFs
+  are still pending. Authenticated-history/token access code was not adopted.
+- Packaging (`a99759d`) verifies source/dist fingerprints and matching manifests before
+  creating a ZIP. Same-version stale builds are rejected. Current content script:
+  85,624 bytes. The renderer bundle has a size warning due to local embedded fonts.
+- UI copy (`57a4b2e`): Redaction, visible-only reasoning explanation, PNG/ZIP limitations,
+  local Library instructions and session-only background-job privacy disclosure.
+  Unit checks pass; updated Settings copy has not received fresh visual approval.
+- No-remote-code, manifest permissions, classic script, release Preview and output
+  hygiene checks passed. Hygiene covers one golden fixture. `pnpm audit --prod`
+  reported no known vulnerabilities. Fresh remote CI/secret-scan success is not claimed.
+- Release package: `release/jelluvi-v0.2.11.zip`, SHA256
+  `66fefeb573d570a9a23be33a82f032da070db4b69e636696578c8cff60bd8ca0`.
+  Two independent builds/packages produced identical ZIP bytes; all 36 ZIP entries
+  passed archive integrity checks.
+  Old 0.2.10 archives are retained, not current release proof.
+- Starvation and batch-progress changes are already present with subsequent repairs;
+  no broad branch merge was performed.
+
+Remaining acceptance: latest installation in clean Chrome and Brave/Edge/Vivaldi;
+three cold long ChatGPT runs comparing ordered IDs, counts, normalized content hashes,
+first/last messages and omissions; repeat in an inactive source tab; original-chat PDF
+visual review; current live Claude/Gemini/Perplexity/NotebookLM exports; permission
+denial/retry, keyboard/zoom/high-contrast/reduced-motion checks; final design approval,
+public Privacy Policy readback, Store Dashboard, release CI/tag and GitHub Release.
+
+Authenticated Brave ChatGPT and the original long-chat page were observed, but latest
+candidate export was not verified. Native Chrome control timed out, and browser tooling
+rejected extension-management navigation. Do not bypass this through another surface.
+The 10-second top quiet interval is a DOM heuristic, not server-history completeness proof.
+Keep source and export-job tabs open; discarded tabs or browser sleep are not guaranteed.
+
+Next action: install the latest candidate through an authorized available interface,
+then execute the real cold-history and five-provider matrix. The original requested
+release-reliability outcome remains incomplete until these gates are satisfied.
 
 ## Active hardening checkpoint — 2026-09-11
 
-This section supersedes the historical report below. The heading/version and package record
-below are historical, not current release proof. Publication remains **NO-GO**.
+This earlier checkpoint is retained for provenance and is superseded by the final local
+checkpoint above. Its versions, counts and pending implementation items are historical.
 
 - Working tree: `local-ai-chat-exporter-release-hardening`, branch
   `codex/jelluvi-latest-chat-export-qa`, version `0.2.10`, base `cc9e69e`.

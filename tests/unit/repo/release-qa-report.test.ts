@@ -13,8 +13,8 @@ describe("release QA report", () => {
     const report = readFileSync(reportPath, "utf8");
 
     for (const expected of [
-      "Release QA — Jelluvi 0.2.0",
-      "No known P0/P1 failures",
+      `Release QA — Jelluvi ${JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf8")).version}`,
+      "NO-GO for public release",
       "Verified checks",
       "Live provider toolbar matrix",
       "Manual release matrix",
