@@ -1,6 +1,6 @@
 {
   "name": "jelluvi",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Jelluvi is an open-source, local-first browser extension for exporting currently viewed AI chats to local files.",
   "type": "module",
   "private": true,
@@ -8,7 +8,7 @@
   "packageManager": "pnpm@10.6.2",
   "scripts": {
     "dev": "vite --mode development",
-    "build": "vite build && vite build --config vite.content.config.ts",
+    "build": "vite build && vite build --config vite.content.config.ts && node scripts/build-provenance.mjs stamp",
     "package": "node scripts/package-extension.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
