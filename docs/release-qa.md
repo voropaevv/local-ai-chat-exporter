@@ -81,7 +81,8 @@ submission was performed. Unrelated edits in the original checkout were preserve
 - `997907d`: repaired the stale screenshot capture selectors and added a pinned,
   SHA256-verified Gitleaks history gate to CI. Gitleaks 8.30.1 locally scanned the
   candidate's 141-commit history through `06cc018` and production dist with no findings.
-  Current remote CI for `1addd10` is pending; older candidate CI passed at `14ca9a0`.
+  Remote CI passed for production commit `1addd10` (run `34589158455`) and the
+  reconciled documentation checkpoint `4749067` (run `34589344571`).
 - `06cc018`: forced-colors review exposed invisible ZIP switches and indistinguishable
   selected formats. Native checkboxes and double selection borders now remain visible;
   primary actions retain boundaries and reduced-motion disables switch transitions.
