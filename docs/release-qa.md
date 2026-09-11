@@ -22,7 +22,11 @@ earlier `no_messages_found` results remain evidence of a timing-dependent cold
 start failure; successful retries do not remove that race, which is why `0.2.12`
 adds explicit first-message readiness.
 
-Latest live result (09:42 UTC): **NO-GO — installed 0.2.11 fails real ChatGPT export.**
+Earlier live failures (09:35–09:40 UTC): installed `0.2.11` twice returned
+`no_messages_found` for the real ChatGPT conversation before the three successful
+retries documented above. This is retained as intermittent-failure evidence, not
+the latest result. The installed-package status remains **NO-GO** until `0.2.12`
+is reloaded and the cold/background sequence is repeated.
 The user-selected Brave copy now shows Redaction, Batch export and Diagnostics;
 its downloaded diagnostic JSON independently reports `extensionVersion: 0.2.11`.
 Two MD/JSON export jobs ended with `no_messages_found` (09:35:58 and 09:40:40 UTC).
@@ -30,15 +34,13 @@ The first began after reloading the long chat without manual scrolling, closing
 the popup and switching to Settings. The second began with message headings
 already present in the source accessibility tree; its source was foreground
 initially, then the export tab was selected while preparation was running.
-Neither is a passed background-export test, and neither produced a transcript.
-The second failure rules out claiming that initial cold-page readiness alone is
-the established cause. DOM diagnostics currently return `Debugger unattached`;
-native accessibility still works. The diagnostic file was saved outside Git and
-verified to exclude conversation text, source URL and title. Next: distinguish
-foreground-only collection from background hydration/extraction failure before
-choosing a production repair. No production change was made from this hypothesis.
-CI for `87c75c9` passed (run `34583685986`); green fixtures do not override this
-live failure. The historical installation discrepancy below is superseded.
+Neither produced a transcript. The diagnostic file was saved outside Git and
+verified to exclude conversation text, source URL and title. A later controlled
+reload exposed a real interval in which the supported conversation shell had no
+message nodes; the previous readiness gate would finish after 500 ms regardless.
+That proves the premature-scan defect addressed in `0.2.12`, but does not claim
+unobservable internal state for both historical failures. The historical
+installation discrepancy below is superseded.
 
 Integration update: draft PR #4 is open at
 https://github.com/voropaevv/local-ai-chat-exporter/pull/4 (base `main`).
@@ -57,11 +59,11 @@ not that no other installed copy exists. The current candidate must be selected
 before repeating live QA. Only task-created chat/settings tabs were closed.
 
 **NO-GO for public release.** This checkpoint supersedes all older records below.
-Product source: `06cc018`, version `0.2.11`. The branch was pushed to draft PR #4;
+Product source: `1addd10`, version `0.2.12`. The branch was pushed to draft PR #4;
 no merge, publication or Store
 submission was performed. Unrelated edits in the original checkout were preserved.
 
-- Full `pnpm check`: passed, 78 files / 393 tests, lint, typecheck, all five provider
+- Full `pnpm check`: passed, 78 files / 396 tests, lint, typecheck, all five provider
   contracts, icons, brand, production build, content budget, Preview and site build.
 - `pnpm test:e2e`: 7 passed. One real Chromium extension fixture verifies a saved
   Markdown download after launcher closure and switching tabs; six are contract checks.
@@ -72,14 +74,14 @@ submission was performed. Unrelated edits in the original checkout were preserve
   are still pending. Authenticated-history/token access code was not adopted.
 - Packaging (`a99759d`) verifies source/dist fingerprints and matching manifests before
   creating a ZIP. Same-version stale builds are rejected. Current content script:
-  85,624 bytes. The renderer bundle has a size warning due to local embedded fonts.
+  86,639 bytes. The renderer bundle has a size warning due to local embedded fonts.
 - UI copy (`57a4b2e`): Redaction, visible-only reasoning explanation, PNG/ZIP limitations,
   local Library instructions and session-only background-job privacy disclosure.
   Unit checks pass; current Settings copy was inspected in the refreshed QA screenshots.
 - `997907d`: repaired the stale screenshot capture selectors and added a pinned,
   SHA256-verified Gitleaks history gate to CI. Gitleaks 8.30.1 locally scanned the
   candidate's 141-commit history through `06cc018` and production dist with no findings.
-  Current candidate CI passed at `87c75c9`; see the latest live failure above.
+  Current remote CI for `1addd10` is pending; older candidate CI passed at `14ca9a0`.
 - `06cc018`: forced-colors review exposed invisible ZIP switches and indistinguishable
   selected formats. Native checkboxes and double selection borders now remain visible;
   primary actions retain boundaries and reduced-motion disables switch transitions.
@@ -89,11 +91,11 @@ submission was performed. Unrelated edits in the original checkout were preserve
 - No-remote-code, manifest permissions, classic script, release Preview and output
   hygiene checks passed. Hygiene covers one golden fixture. `pnpm audit --prod`
   reported no known vulnerabilities. Fresh remote CI success is not claimed.
-- Release package: `release/jelluvi-v0.2.11.zip`, SHA256
-  `3cdf3222d8d3b154f7f71c00a8978af2a085a3d5ccb118891980065e082a7437`.
+- Release package: `release/jelluvi-v0.2.12.zip`, SHA256
+  `77b61091f4509f986b5c3cee2516d969ddefbf8e91c3699776b0929a7a845b7b`.
   Two independent builds/packages produced identical ZIP bytes; all 36 ZIP entries
   passed archive integrity checks.
-  Old 0.2.10 archives are retained, not current release proof.
+  Old 0.2.10 and 0.2.11 archives are retained, not current release proof.
 - Starvation and batch-progress changes are already present with subsequent repairs;
   no broad branch merge was performed.
 
