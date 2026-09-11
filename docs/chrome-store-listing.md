@@ -19,6 +19,14 @@ and the UI reports capture completeness and provider limitations.
 
 Jelluvi does not include telemetry, analytics, ads, trackers, remote logging, remote rendering, or external export servers. Export actions are initiated by the user and run locally in the browser extension.
 
+Export continues in a separate extension progress tab after the toolbar popup closes.
+Keep the source and progress tabs open until the browser download finishes. Browser
+sleep or tab discard can interrupt work. PNG snapshots are limited to 16,000 pixels
+in height; use a smaller selection/range when necessary. ZIP includes the selected
+formats and their local assets. Redaction is optional and does not guarantee anonymity.
+Visible reasoning includes only reasoning blocks already displayed on the page, never
+hidden model reasoning. Saving to Local Library is explicit; it does not sync devices.
+
 ## Branding
 
 - Product name: Jelluvi.

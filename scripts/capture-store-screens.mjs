@@ -62,9 +62,9 @@ async function main() {
     await capture(page, "03-preview.png");
 
     await page.goto(`${baseUrl}visual-qa.html?surface=settings&theme=light`);
-    await page.getByRole("button", { name: "Find open tabs" }).click();
+    await page.getByRole("button", { name: "More providers", exact: true }).click();
     await page.getByText("Found 3 open AI chat tabs. All selected.").waitFor();
-    await page.getByRole("heading", { name: "Batch" }).scrollIntoViewIfNeeded();
+    await page.getByRole("heading", { name: "Batch export", exact: true }).scrollIntoViewIfNeeded();
     await capture(page, "04-batch-export.png");
 
     await page.goto(`${baseUrl}visual-qa.html?surface=settings&theme=light&seedLibrary=1`);
@@ -82,10 +82,10 @@ async function main() {
 async function capturePopup(page, baseUrl, theme, expandFormats, filename) {
   await page.goto(`${baseUrl}visual-qa.html?surface=popup&theme=${theme}`);
   await page.addStyleTag({ content: popupCanvasCss });
-  await page.getByRole("region", { name: /Current page: ChatGPT/u }).waitFor();
+  await page.getByText("ChatGPT", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Export", exact: true }).waitFor();
 
   if (expandFormats) {
-    await page.getByRole("button", { name: /^More/u }).click();
     await page.getByRole("button", { name: "PDF" }).click();
   }
 
@@ -93,6 +93,12 @@ async function capturePopup(page, baseUrl, theme, expandFormats, filename) {
 }
 
 async function capture(page, filename) {
+  await page.evaluate(async () => {
+    await globalThis.document.fonts.ready;
+    await new Promise((resolve) =>
+      globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve))
+    );
+  });
   await page.screenshot({
     animations: "disabled",
     path: resolve(outputRoot, filename)
