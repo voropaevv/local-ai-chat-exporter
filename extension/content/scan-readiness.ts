@@ -1,4 +1,4 @@
-import { getChatGptMessageCandidateCount } from "../../src/adapters/chatgpt/extract-visible";
+import { hasExtractableChatGptMessage } from "../../src/adapters/chatgpt/extract-visible";
 
 const FRAME_FALLBACK_MS = 250;
 const LAYOUT_FRAME_COUNT = 2;
@@ -81,7 +81,7 @@ function waitForInitialChatGptMessage(
 }
 
 function hasInitialChatGptMessage(rootDocument: Document): boolean {
-  return getChatGptMessageCandidateCount(rootDocument) > 0;
+  return hasExtractableChatGptMessage(rootDocument);
 }
 
 function isChatGptConversation(rootDocument: Document): boolean {

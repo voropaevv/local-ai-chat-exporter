@@ -77,6 +77,15 @@ export function getChatGptMessageCandidateCount(root: ParentNode): number {
   return getChatGptMessageCandidates(root).length;
 }
 
+export function hasExtractableChatGptMessage(root: ParentNode): boolean {
+  return getChatGptMessageCandidates(root).some((candidate) => {
+    return (
+      isVisibleChatGptMessageElement(candidate.element) &&
+      extractChatGptMessageCandidate(prepareChatGptMessageCandidate(candidate), 0, {}) !== undefined
+    );
+  });
+}
+
 function getChatGptMessageCandidates(root: ParentNode): readonly ChatGptMessageCandidate[] {
   const rootElement = root.nodeType === 1 ? (root as Element) : undefined;
   const selector = `${chatGptSelectors.messageByRole}, ${chatGptSelectors.conversationTurn}`;

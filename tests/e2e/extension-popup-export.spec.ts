@@ -77,7 +77,9 @@ test("cold background export waits for a nested roleless ChatGPT turn", async ()
         body: `<!doctype html>
           <html lang="en">
             <body>
-              <main id="conversation"></main>
+              <main id="conversation">
+                <article data-message-author-role="assistant"></article>
+              </main>
               <script>
                 setTimeout(() => {
                   document.querySelector("#conversation").insertAdjacentHTML(

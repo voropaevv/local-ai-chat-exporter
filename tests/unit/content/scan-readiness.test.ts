@@ -29,6 +29,11 @@ describe("content scan readiness", () => {
       message.setAttribute("data-message-author-role", "user");
       rootDocument.querySelector("main")?.append(message);
       await vi.advanceTimersByTimeAsync(0);
+
+      expect(settled).toBe(false);
+
+      message.textContent = "Hydrated current prompt";
+      await vi.advanceTimersByTimeAsync(0);
       await pending;
 
       expect(settled).toBe(true);

@@ -14,11 +14,16 @@ first-message readiness gate and the roleless extractor required those headings 
 direct children, so readiness timed out and the subsequent scan still found zero
 candidates. `0.2.13` recognizes an exact heading anywhere inside its own turn while
 rejecting headings owned by a nested conversation turn. Readiness now delegates to the
-same candidate detector as extraction, removing the duplicated selector contract.
+same extraction contract, removing the duplicated selector contract. A follow-up strict
+cold run exposed a second readiness hole: ChatGPT can mount a structurally valid but empty
+`[data-message-author-role]` node before its substantive text. Candidate count alone let
+the scan start at that incomplete state. The final readiness predicate now requires at
+least one message that the production extractor can actually export.
 
-The two regressions fail on the unchanged `0.2.12` implementation and pass after the
-repair. A Chromium extension E2E also passes when the roleless turn hydrates after two
-seconds and the source tab has already been backgrounded.
+The nested-heading and empty-candidate regressions fail on their respective incomplete
+implementations and pass after the repair. A Chromium extension E2E also passes when an
+empty role node is present first, the substantive roleless turn hydrates after two seconds
+and the source tab has already been backgrounded.
 
 - Full `pnpm check`: passed, 78 files / 399 tests, lint, typecheck, all five provider
   contracts, icons, brand, production build, content budget, Preview and site build.
@@ -27,7 +32,7 @@ seconds and the source tab has already been backgrounded.
   golden-output hygiene and production dependency audit checks passed.
 - Deterministic package: `release/jelluvi-v0.2.13.zip`, 36 entries, archive integrity
   passed, two builds produced SHA256
-  `381017548f4349ae529cad140fbd2db7b328ed525f59af73f7c0847829f942ef`.
+  `89c96f28ca87f23848e1624fc8b297d7a0405437c0f4ef00cf1a185356cf54a9`.
 - `gitleaks` is not installed on this host; the pinned CI history scan remains required.
 - Installed-`0.2.13` live acceptance is pending the local Brave reload and repeated
   cold/background export of the authenticated long conversation.
