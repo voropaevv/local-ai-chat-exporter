@@ -240,6 +240,35 @@ describe("content request handler scan cache", () => {
     expect(scanCurrentConversationExport).toHaveBeenCalledTimes(1);
   });
 
+  test("returns an explicitly requested immutable scan after later page churn", async () => {
+    let markConversationChanged: (() => void) | undefined;
+    const { handler } = createHandler({
+      observeConversationChanges: (onChange) => {
+        markConversationChanged = onChange;
+        return vi.fn();
+      }
+    });
+
+    const scan = (await handler({ type: CONTENT_SCAN_MESSAGE })) as ScanSummary;
+    markConversationChanged?.();
+
+    await expect(
+      handler({
+        scanId: scan.scanId,
+        type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+      })
+    ).resolves.toMatchObject({
+      hasConversation: true,
+      scanId: scan.scanId
+    });
+    await expect(
+      handler({
+        scanId: "scan-that-never-existed",
+        type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
+      })
+    ).resolves.toEqual({ hasConversation: false });
+  });
+
   test("replaces the conversation observer after a rescan", async () => {
     const stopFirstObserver = vi.fn();
     const stopSecondObserver = vi.fn();

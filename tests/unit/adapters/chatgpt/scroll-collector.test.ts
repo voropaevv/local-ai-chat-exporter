@@ -992,9 +992,12 @@ describe("collectChatGptConversation", () => {
         }
 
         bottomMounts += 1;
-        container
-          .querySelector("[data-turn-id-container='logical-turn-2']")
-          ?.insertAdjacentHTML("beforeend", `<span aria-label="mounted-${bottomMounts}"></span>`);
+        const message = container.querySelector(
+          "[data-turn-id-container='logical-turn-2'] [data-message-author-role]"
+        );
+        if (message !== null) {
+          message.innerHTML = `<p>Second revision ${bottomMounts}</p>`;
+        }
       },
       scrollHeight: 200,
       scrollTop: 0
@@ -1006,8 +1009,9 @@ describe("collectChatGptConversation", () => {
       waitForDomSettle: () => Promise.resolve()
     });
 
-    expect(bottomMounts).toBe(2);
+    expect(bottomMounts).toBe(1);
     expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.messages[1]?.text).toBe("Second revision 1");
     expect(result.completeness.status).toBe("complete");
     expect(result.warnings).not.toContain(
       "ChatGPT changed extracted turns before the final quiet pass completed."
@@ -1399,6 +1403,63 @@ describe("collectChatGptConversation", () => {
     }
   });
 
+  test("accepts ChatGPT's zero-based complete top turn window", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+    renderMessages(container, [
+      "0|user|First user message",
+      "1|assistant|First assistant message",
+      "2|user|Second user message",
+      "3|assistant|Second assistant message",
+      "4|user|Final user message"
+    ]);
+
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["0", "1", "2", "3", "4"]);
+    expect(result.reachedTop).toBe(true);
+    expect(result.completeness.status).toBe("complete");
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("accepts a hydrated sparse top window when hidden branch nodes create number gaps", async () => {
+    const document = createDocument(`<main id="chat-scroll"></main>`);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 100, scrollHeight: 500, scrollTop: 0 });
+    renderMessages(container, [
+      "0|user|First user message",
+      "2|assistant|Visible assistant branch",
+      "3|user|Second user message",
+      "5|assistant|Final visible branch"
+    ]);
+
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => Promise.resolve()
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["0", "2", "3", "5"]);
+    expect(result.reachedTop).toBe(true);
+    expect(result.completeness.status).toBe("complete");
+    expect(result.warnings).toEqual([]);
+  });
+
   test("bounds a virtualized hydration wait when missing turns never mount", async () => {
     vi.useFakeTimers();
 
@@ -1750,6 +1811,267 @@ describe("collectChatGptConversation", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("keeps the initial stable-turn snapshot when backgrounding unmounts the live DOM", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>Loaded before the tab was backgrounded.</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 500, scrollHeight: 500, scrollTop: 0 });
+    let firstWait = true;
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        if (firstWait) {
+          firstWait = false;
+          container.replaceChildren();
+        }
+
+        return Promise.resolve();
+      }
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1"]);
+    expect(result.messages[0]?.text).toContain("Loaded before the tab was backgrounded.");
+  });
+
+  test("restarts stable traversal when ChatGPT replaces its scroll container", async () => {
+    const document = createDocument(`
+      <main id="initial-scroll" style="overflow-y: auto">
+        <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>Initial prompt</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const initialContainer = document.getElementById("initial-scroll");
+
+    if (!initialContainer) {
+      throw new Error("fixture missing initial-scroll");
+    }
+
+    setScrollMetrics(initialContainer, { clientHeight: 100, scrollHeight: 500, scrollTop: 400 });
+    let replaced = false;
+    const result = await collectChatGptConversation({
+      document,
+      waitForDomSettle: () => {
+        if (replaced) {
+          return Promise.resolve();
+        }
+
+        replaced = true;
+        const replacement = document.createElement("main");
+        replacement.id = "replacement-scroll";
+        replacement.style.overflowY = "auto";
+        replacement.innerHTML = `
+          <div data-turn-id-container="logical-turn-1" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-1">
+              <div data-message-author-role="user" data-message-id="m1">
+                <div class="markdown"><p>Initial prompt</p></div>
+              </div>
+            </article>
+          </div>
+          <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+            <article data-testid="conversation-turn-2">
+              <div data-message-author-role="assistant" data-message-id="m2">
+                <div class="markdown"><p>Hydrated answer</p></div>
+              </div>
+            </article>
+          </div>
+        `;
+        setScrollMetrics(replacement, {
+          clientHeight: 100,
+          scrollHeight: 500,
+          scrollTop: 400
+        });
+        initialContainer.replaceWith(replacement);
+
+        return new Promise<void>((resolve) => setTimeout(resolve, 100));
+      }
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.completeness.status).toBe("complete");
+  });
+
+  test("keeps one stable message when ChatGPT changes its turn-container key", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="placeholder-turn" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>Initial text</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">
+              <div class="markdown"><p>Final answer</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 200, scrollHeight: 200, scrollTop: 0 });
+    let changed = false;
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        if (!changed) {
+          changed = true;
+          const turn = container.querySelector("[data-turn-id-container='placeholder-turn']");
+          const message = turn?.querySelector("[data-message-id='m1'] .markdown");
+          turn?.setAttribute("data-turn-id-container", "hydrated-turn-1");
+          if (message !== null && message !== undefined) {
+            message.innerHTML = "<p>Hydrated text</p>";
+          }
+        }
+
+        return Promise.resolve();
+      }
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.messages[0]?.text).toBe("Hydrated text");
+    expect(result.completeness.status).toBe("complete");
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("coalesces a remounted turn by stable message id", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="initial-turn" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1">
+            <div data-message-author-role="user" data-message-id="m1">
+              <div class="markdown"><p>Initial text</p></div>
+            </div>
+          </article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">
+              <div class="markdown"><p>Final answer</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 200, scrollHeight: 200, scrollTop: 0 });
+    let replaced = false;
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        if (!replaced) {
+          replaced = true;
+          const turn = container.querySelector("[data-turn-id-container='initial-turn']");
+          turn?.insertAdjacentHTML(
+            "afterend",
+            `<div data-turn-id-container="remounted-turn" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-1">
+                <div data-message-author-role="user" data-message-id="m1">
+                  <div class="markdown"><p>Hydrated text</p></div>
+                </div>
+              </article>
+            </div>`
+          );
+          turn?.remove();
+        }
+
+        return Promise.resolve();
+      }
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.messages[0]?.text).toBe("Hydrated text");
+    expect(result.completeness.status).toBe("complete");
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("retires a disconnected placeholder when its numbered turn remounts hydrated", async () => {
+    const document = createDocument(`
+      <main id="chat-scroll">
+        <div data-turn-id-container="placeholder-turn" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-1"></article>
+        </div>
+        <div data-turn-id-container="logical-turn-2" style="--last-known-height: 100px">
+          <article data-testid="conversation-turn-2">
+            <div data-message-author-role="assistant" data-message-id="m2">
+              <div class="markdown"><p>Final answer</p></div>
+            </div>
+          </article>
+        </div>
+      </main>
+    `);
+    const container = document.getElementById("chat-scroll");
+
+    if (!container) {
+      throw new Error("fixture missing chat-scroll");
+    }
+
+    setScrollMetrics(container, { clientHeight: 200, scrollHeight: 200, scrollTop: 0 });
+    let replaced = false;
+    const result = await collectChatGptConversation({
+      document,
+      scrollContainer: container,
+      waitForDomSettle: () => {
+        if (!replaced) {
+          replaced = true;
+          const placeholder = container.querySelector(
+            "[data-turn-id-container='placeholder-turn']"
+          );
+          placeholder?.insertAdjacentHTML(
+            "afterend",
+            `<div data-turn-id-container="hydrated-turn" style="--last-known-height: 100px">
+              <article data-testid="conversation-turn-1">
+                <div data-message-author-role="user" data-message-id="m1">
+                  <div class="markdown"><p>Hydrated prompt</p></div>
+                </div>
+              </article>
+            </div>`
+          );
+          placeholder?.remove();
+        }
+
+        return Promise.resolve();
+      }
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(["m1", "m2"]);
+    expect(result.completeness.status).toBe("complete");
+    expect(result.warnings).toEqual([]);
   });
 
   test("cancels before a suspended requestAnimationFrame without leaking timers", async () => {

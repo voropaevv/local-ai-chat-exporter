@@ -55,6 +55,7 @@ import {
   recordDiagnosticError,
   rememberDiagnosticContext
 } from "./diagnostic-session";
+import { readChatGptConversationDataFromPage } from "./chatgpt-conversation-data";
 
 chrome.runtime.onInstalled.addListener(() => {
   // Reserved for local-only extension setup in later tasks.
@@ -68,7 +69,14 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     message.type === START_EXPORT_JOB &&
     "request" in message
   ) {
-    startExportJob(message.request as PopupExportRequest)
+    const request = message.request as PopupExportRequest;
+    prepareExportScan(request)
+      .then((scan) =>
+        startExportJob({
+          ...request,
+          ...(scan.scanId !== undefined ? { scanId: scan.scanId } : {})
+        })
+      )
       .then((value) => sendResponse({ ok: true, value }))
       .catch((error: unknown) => sendResponse({ ok: false, error: serializeExportError(error) }));
     return true;
@@ -93,6 +101,13 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
   return true;
 });
+
+async function prepareExportScan(request: PopupExportRequest): Promise<ScanSummary> {
+  return handlePopupScanRequest({
+    sourceTabId: request.sourceTabId,
+    type: POPUP_SCAN_MESSAGE
+  });
+}
 
 async function handlePopupRequest(
   request:
@@ -220,10 +235,24 @@ async function handleSettingsGetDiagnosticsRequest(): Promise<DiagnosticReport> 
 async function handlePopupScanRequest(request: PopupScanRequest): Promise<ScanSummary> {
   const tab = await getActiveTab(request.sourceTabId);
   const tabId = requireTabId(tab);
+  const supportedPage =
+    typeof tab.url === "string" ? getSupportedChatPageInfo(tab.url) : undefined;
+  const chatGptConversationRead =
+    supportedPage?.platform === "chatgpt" && typeof tab.url === "string"
+      ? await readChatGptConversationDataFromPage(tabId, tab.url)
+      : {};
 
   await ensureContentScript(tabId);
 
   const response = await sendContentMessage<ScanSummary>(tabId, {
+    ...(chatGptConversationRead.data !== undefined
+      ? { chatGptConversationData: chatGptConversationRead.data }
+      : {}),
+    ...(chatGptConversationRead.diagnostic !== undefined
+      ? {
+          chatGptConversationDataWarning: `ChatGPT complete-data path unavailable (${chatGptConversationRead.diagnostic}).`
+        }
+      : {}),
     type: CONTENT_SCAN_MESSAGE
   } satisfies ContentScanRequest);
 
@@ -334,6 +363,7 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
   await ensureContentScript(tabId);
 
   const contentResponse = await sendContentMessage<CachedConversationResult>(tabId, {
+    ...(request.scanId !== undefined ? { scanId: request.scanId } : {}),
     type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
   } satisfies ContentGetCachedConversationRequest);
 

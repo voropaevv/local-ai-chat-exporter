@@ -34,6 +34,8 @@ describe("content scan readiness", () => {
 
       message.textContent = "Hydrated current prompt";
       await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
       await pending;
 
       expect(settled).toBe(true);
@@ -75,8 +77,47 @@ describe("content scan readiness", () => {
       );
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(settled).toBe(true);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
       await pending;
+      expect(settled).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
+  });
+
+  test("restarts the stability gate when ChatGPT replaces its scroll container", async () => {
+    vi.useFakeTimers();
+
+    const dom = new JSDOM(
+      `<main id="initial">
+        <article data-message-author-role="assistant">Initial rendered answer</article>
+      </main>`,
+      {
+        pretendToBeVisual: true,
+        url: "https://chatgpt.com/c/replaced-container"
+      }
+    );
+    const rootDocument = dom.window.document;
+    let settled = false;
+
+    try {
+      const pending = waitForScanLayout(rootDocument).then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(700);
+      rootDocument.body.innerHTML = `<main id="hydrated">
+        <article data-message-author-role="assistant">Hydrated replacement answer</article>
+      </main>`;
+      await vi.advanceTimersByTimeAsync(999);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(settled).toBe(true);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();

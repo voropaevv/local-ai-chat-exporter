@@ -99,6 +99,7 @@ test("cold background export waits for a nested roleless ChatGPT turn", async ()
     const popup = await openExtensionPopup(context, fixturePage);
     await expect(popup.getByText("ChatGPT", { exact: true })).toBeVisible();
 
+    const startedAt = Date.now();
     const jobPromise = context.waitForEvent("page");
     await popup.getByRole("button", { name: "Export", exact: true }).click();
     const job = await jobPromise;
@@ -108,10 +109,13 @@ test("cold background export waits for a nested roleless ChatGPT turn", async ()
     await otherTab.goto("about:blank");
     await otherTab.bringToFront();
 
-    await expect(job.getByRole("status")).toContainText("Preparing full conversation");
+    await expect(job.getByRole("status")).toContainText(
+      /Preparing full conversation|Download requested/
+    );
     const download = await downloadPromise;
     const downloadedPath = await download.path();
 
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(1_500);
     expect(downloadedPath).not.toBeNull();
     const markdown = await readFile(downloadedPath ?? "", "utf8");
     expect(markdown).toContain("Hydrated while the source tab is in the background.");

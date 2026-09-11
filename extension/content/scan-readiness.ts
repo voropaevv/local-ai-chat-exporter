@@ -1,8 +1,17 @@
-import { hasExtractableChatGptMessage } from "../../src/adapters/chatgpt/extract-visible";
+import {
+  getChatGptMessageCandidateCount,
+  hasExtractableChatGptMessage
+} from "../../src/adapters/chatgpt/extract-visible";
+import {
+  findChatGptScrollContainer,
+  getScrollTop,
+  scrollToTop
+} from "../../src/adapters/chatgpt/scroll-container";
 
 const FRAME_FALLBACK_MS = 250;
 const LAYOUT_FRAME_COUNT = 2;
 const CHATGPT_INITIAL_MESSAGE_TIMEOUT_MS = 30_000;
+const CHATGPT_INITIAL_LAYOUT_STABLE_MS = 1_000;
 
 export async function waitForScanLayout(
   rootDocument: Document = getCurrentDocument(),
@@ -33,8 +42,7 @@ function waitForInitialChatGptMessage(
 ): Promise<void> {
   if (
     signal?.aborted ||
-    !isChatGptConversation(rootDocument) ||
-    hasInitialChatGptMessage(rootDocument)
+    !isChatGptConversation(rootDocument)
   ) {
     return Promise.resolve();
   }
@@ -48,22 +56,55 @@ function waitForInitialChatGptMessage(
 
   return new Promise((resolve) => {
     let finished = false;
+    let layoutStableId: number | undefined;
+    let previousSnapshot: ChatGptReadinessSnapshot | undefined;
+    const clearLayoutStableTimer = () => {
+      if (layoutStableId !== undefined) {
+        ownerWindow.clearTimeout(layoutStableId);
+        layoutStableId = undefined;
+      }
+    };
     const finish = () => {
       if (finished) {
         return;
       }
 
       finished = true;
+      clearLayoutStableTimer();
       observer.disconnect();
       ownerWindow.clearTimeout(timeoutId);
       signal?.removeEventListener("abort", finish);
+      rootDocument.removeEventListener("visibilitychange", handleVisibilityChange);
       resolve();
     };
-    const observer = new ownerWindow.MutationObserver(() => {
-      if (hasInitialChatGptMessage(rootDocument)) {
-        finish();
+    const evaluateReadiness = () => {
+      const snapshot = getChatGptReadinessSnapshot(rootDocument);
+      const changed = !sameReadinessSnapshot(previousSnapshot, snapshot);
+
+      if (changed) {
+        previousSnapshot = snapshot;
+        clearLayoutStableTimer();
       }
-    });
+
+      if (snapshot.hasExtractableMessage && getScrollTop(snapshot.container) > 2) {
+        scrollToTop(snapshot.container);
+        previousSnapshot = undefined;
+        clearLayoutStableTimer();
+        return;
+      }
+
+      if (!snapshot.hasExtractableMessage || layoutStableId !== undefined) {
+        return;
+      }
+
+      layoutStableId = ownerWindow.setTimeout(finish, CHATGPT_INITIAL_LAYOUT_STABLE_MS);
+    };
+    const handleVisibilityChange = () => {
+      previousSnapshot = undefined;
+      clearLayoutStableTimer();
+      evaluateReadiness();
+    };
+    const observer = new ownerWindow.MutationObserver(evaluateReadiness);
     const timeoutId = ownerWindow.setTimeout(finish, CHATGPT_INITIAL_MESSAGE_TIMEOUT_MS);
 
     observer.observe(observationRoot, {
@@ -73,15 +114,45 @@ function waitForInitialChatGptMessage(
       subtree: true
     });
     signal?.addEventListener("abort", finish, { once: true });
+    rootDocument.addEventListener("visibilitychange", handleVisibilityChange);
 
-    if (signal?.aborted || hasInitialChatGptMessage(rootDocument)) {
+    if (signal?.aborted) {
       finish();
+    } else {
+      evaluateReadiness();
     }
   });
 }
 
-function hasInitialChatGptMessage(rootDocument: Document): boolean {
-  return hasExtractableChatGptMessage(rootDocument);
+interface ChatGptReadinessSnapshot {
+  readonly candidateCount: number;
+  readonly container: Element;
+  readonly hasExtractableMessage: boolean;
+  readonly textLength: number;
+}
+
+function getChatGptReadinessSnapshot(rootDocument: Document): ChatGptReadinessSnapshot {
+  const container = findChatGptScrollContainer(rootDocument);
+
+  return {
+    candidateCount: getChatGptMessageCandidateCount(container),
+    container,
+    hasExtractableMessage: hasExtractableChatGptMessage(container),
+    textLength: (container.textContent ?? "").trim().length
+  };
+}
+
+function sameReadinessSnapshot(
+  previous: ChatGptReadinessSnapshot | undefined,
+  current: ChatGptReadinessSnapshot
+): boolean {
+  return (
+    previous !== undefined &&
+    previous.candidateCount === current.candidateCount &&
+    previous.container === current.container &&
+    previous.hasExtractableMessage === current.hasExtractableMessage &&
+    previous.textLength === current.textLength
+  );
 }
 
 function isChatGptConversation(rootDocument: Document): boolean {

@@ -2,16 +2,25 @@ import {
   collectChatGptConversation,
   type ChatGptScrollCollectorOptions
 } from "../adapters/chatgpt/scroll-collector";
+import {
+  loadChatGptConversationData,
+  mergeChatGptConversationMessages
+} from "../adapters/chatgpt/conversation-data";
+import { extractVisibleChatGptMessages } from "../adapters/chatgpt/extract-visible";
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
 import type { PlatformAdapter } from "../adapters/types";
 import { buildCompletenessReport } from "../core/completeness";
 import { ExportPipelineError } from "../core/export-errors";
 import { normalizeMessagesWithStats } from "../core/normalize";
 import type { ConversationExport } from "../core/schema";
+import type { ChatGptConversationData } from "../adapters/chatgpt/conversation-data";
 
 export interface ConversationScanOptions extends Omit<ChatGptScrollCollectorOptions, "document"> {
   readonly document?: Document;
   readonly exportedAt?: string;
+  readonly fetcher?: typeof fetch;
+  readonly chatGptConversationData?: ChatGptConversationData;
+  readonly chatGptConversationDataWarning?: string;
   readonly hostname?: string;
   readonly href?: string;
   readonly title?: string;
@@ -51,8 +60,46 @@ export async function scanCurrentConversationExport(
     });
   }
 
+  const conversationData =
+    options.chatGptConversationData ??
+    (await loadChatGptConversationData(href, {
+      fetcher: options.fetcher
+    }).catch(() => undefined));
+
+  if (conversationData !== undefined) {
+    const visibleMessages = normalizeMessagesWithStats(
+      extractVisibleChatGptMessages(rootDocument)
+    ).messages;
+    const messages = mergeChatGptConversationMessages(
+      conversationData.messages,
+      visibleMessages
+    );
+    const completeness = buildCompletenessReport({
+      duplicateCount: 0,
+      messages,
+      platformWarnings: [],
+      reachedBottom: true,
+      reachedTop: true,
+      scrollSteps: 0,
+      virtualized: false
+    });
+
+    return {
+      schemaVersion: "1.0",
+      platform: adapter.id,
+      platformLabel: adapter.label,
+      sourceUrl: href,
+      title: conversationData.title ?? title,
+      conversationId: getConversationId(href),
+      exportedAt: options.exportedAt ?? new Date().toISOString(),
+      messageCount: messages.length,
+      completeness,
+      messages
+    };
+  }
+
   const result = await collectChatGptConversation({
-    ...options,
+    ...withoutFetchOption(options),
     document: rootDocument
   });
 
@@ -73,9 +120,31 @@ export async function scanCurrentConversationExport(
     conversationId: getConversationId(href),
     exportedAt: options.exportedAt ?? new Date().toISOString(),
     messageCount: result.messages.length,
-    completeness: result.completeness,
+    completeness:
+      options.chatGptConversationDataWarning === undefined
+        ? result.completeness
+        : {
+            ...result.completeness,
+            platformWarnings: [
+              ...result.completeness.platformWarnings,
+              options.chatGptConversationDataWarning
+            ]
+          },
     messages: result.messages
   };
+}
+
+function withoutFetchOption(
+  options: ConversationScanOptions
+): Omit<
+  ConversationScanOptions,
+  "fetcher" | "chatGptConversationData" | "chatGptConversationDataWarning"
+> {
+  const collectorOptions = { ...options };
+  delete collectorOptions.fetcher;
+  delete collectorOptions.chatGptConversationData;
+  delete collectorOptions.chatGptConversationDataWarning;
+  return collectorOptions;
 }
 
 function scanVisibleAdapterConversation(

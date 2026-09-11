@@ -3,8 +3,11 @@ import {
   getScrollHeight,
   getScrollTop,
   isAtTop,
+  setScrollTop,
   scrollToTop
 } from "./scroll-container";
+
+const TOP_HYDRATION_RETRY_MS = 2_000;
 
 /** A quiet DOM is not proof that a lazy history request has completed. */
 export async function hydrateTopBoundary(options: {
@@ -17,6 +20,7 @@ export async function hydrateTopBoundary(options: {
   const { container, signal, inventory } = options;
   const quietMs = options.quietMs ?? 10_000;
   let lastChangeAt = Date.now();
+  let lastHydrationRetryAt = Date.now();
   let previousSignature: string | undefined;
 
   while (!signal.aborted) {
@@ -30,6 +34,19 @@ export async function hydrateTopBoundary(options: {
       lastChangeAt = Date.now();
       previousSignature = signature;
       options.recordProgress?.();
+    }
+    if (
+      isAtTop(container) &&
+      current.suspicious &&
+      Date.now() - lastHydrationRetryAt >= TOP_HYDRATION_RETRY_MS &&
+      getScrollHeight(container) > getClientHeight(container) + 2
+    ) {
+      // Hidden Chromium tabs can miss the first lazy-history scroll event.
+      // A one-pixel retry re-triggers the top sentinel without visible page
+      // jumping or abandoning the top-first traversal order.
+      setScrollTop(container, 1);
+      scrollToTop(container);
+      lastHydrationRetryAt = Date.now();
     }
     if (isAtTop(container) && !current.suspicious && Date.now() - lastChangeAt >= quietMs) {
       return true;

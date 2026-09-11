@@ -8,37 +8,40 @@ the launcher was closed and an unrelated tab was brought to the foreground. The 
 remained on `Preparing full conversation...` for approximately 30 seconds and then
 failed with `No messages were found on this page.` No transcript was downloaded.
 
-The current ChatGPT DOM exposes exact accessible `You said:` / `ChatGPT said:` role
-headings below layout wrappers inside `[data-testid^='conversation-turn-']`. Both the
-first-message readiness gate and the roleless extractor required those headings to be
-direct children, so readiness timed out and the subsequent scan still found zero
-candidates. `0.2.13` recognizes an exact heading anywhere inside its own turn while
-rejecting headings owned by a nested conversation turn. Readiness now delegates to the
-same extraction contract, removing the duplicated selector contract. A follow-up strict
-cold run exposed a second readiness hole: ChatGPT can mount a structurally valid but empty
-`[data-message-author-role]` node before its substantive text. Candidate count alone let
-the scan start at that incomplete state. The final readiness predicate now requires at
-least one message that the production extractor can actually export.
+The root cause was broader than DOM readiness. ChatGPT virtualizes long conversations,
+so the mounted page can contain only a recent subset even after its visible shell is
+ready. The current authenticated conversation endpoint is paginated and returns earlier
+turns through backward cursors. `0.2.13` now retrieves every page inside the ChatGPT tab,
+keeps the short-lived session token inside that page context, returns only user turns and
+final assistant responses, rejects repeated or missing cursors and deduplicates stable
+message IDs. A complete API order is authoritative; mounted DOM content may replace an
+exact matching message but cannot append a partial virtualized-window tail.
 
-The nested-heading and empty-candidate regressions fail on their respective incomplete
-implementations and pass after the repair. A Chromium extension E2E also passes when an
-empty role node is present first, the substantive roleless turn hydrates after two seconds
-and the source tab has already been backgrounded.
+The export no longer moves or activates the source tab. This removes the repeated
+top/bottom tab motion and allows preparation to continue while another native tab remains
+active. DOM traversal remains the fallback for unavailable conversation data and includes
+the earlier nested-heading, substantive-content, stable-key and top-boundary repairs.
 
-- Full `pnpm check`: passed, 78 files / 399 tests, lint, typecheck, all five provider
+Two installed-`0.2.13` live exports were then run in Brave from fresh reloads of the same
+authenticated long conversation. The second export was started cold, its launcher was
+closed, and an unrelated tab stayed active through the save dialog. The source DOM still
+showed only a partial virtualized window, yet both ZIPs contained the same ordered 133
+messages (69 user, 64 assistant), reported `complete`, `reachedTop: true`,
+`reachedBottom: true`, zero scroll steps, zero duplicates and zero warnings. Their
+canonical role/id/content hash was identical:
+`fb901cc7e521a319ade39114567df8d0b35a405c0117d230a6fab0f5eca5e08c`.
+
+- Full `pnpm check`: passed, 80 files / 421 tests, lint, typecheck, all five provider
   contracts, icons, brand, production build, content budget, Preview and site build.
 - `pnpm test:e2e`: 8 passed, including the delayed cold/background extension flow.
 - Required no-remote-code, manifest-permission, classic-script, release Preview,
   golden-output hygiene and production dependency audit checks passed.
-- Deterministic package: `release/jelluvi-v0.2.13.zip`, 36 entries, archive integrity
-  passed, two builds produced SHA256
-  `89c96f28ca87f23848e1624fc8b297d7a0405437c0f4ef00cf1a185356cf54a9`.
+- Package: `release/jelluvi-v0.2.13.zip`, 36 entries; archive integrity passed; SHA256
+  `28a110ca4470c84eaa9b6e9d808f081b83c3ce48135156361edb19b015b9b329`.
 - `gitleaks` is not installed on this host; the pinned CI history scan remains required.
-- Installed-`0.2.13` live acceptance is pending the local Brave reload and repeated
-  cold/background export of the authenticated long conversation.
 
-**NO-GO for public release** until the full gates and repeated installed-package live
-export below pass. No Store submission, tag, GitHub Release or merge was performed.
+The cold, complete and background long-ChatGPT acceptance gate is **PASS**. No Store
+submission, public tag, GitHub Release or merge was performed in this checkpoint.
 
 ## Previous local checkpoint — 2026-09-11
 

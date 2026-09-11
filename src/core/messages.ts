@@ -2,7 +2,12 @@ import type { SerializedExportError } from "./export-errors";
 import type { ExportOptions } from "./export-options";
 import type { DiagnosticReport } from "./diagnostics";
 import type { BatchCandidateTab } from "./batch";
-import type { CompletenessReport, ConversationExport, ExportFormat } from "./schema";
+import type {
+  CompletenessReport,
+  ConversationExport,
+  ExportedMessage,
+  ExportFormat
+} from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
 export const POPUP_SCAN_MESSAGE = "jelluvi/scan-current-tab";
@@ -46,6 +51,7 @@ export interface PopupExportRequest {
   readonly download?: boolean;
   readonly options?: Partial<ExportOptions>;
   readonly returnFiles?: boolean;
+  readonly scanId?: string;
   readonly sourceTabId?: number;
 }
 
@@ -89,6 +95,11 @@ export interface PreviewReturnToSourceRequest {
 }
 
 export interface ContentScanRequest {
+  readonly chatGptConversationData?: {
+    readonly messages: readonly ExportedMessage[];
+    readonly title?: string;
+  };
+  readonly chatGptConversationDataWarning?: string;
   readonly type: typeof CONTENT_SCAN_MESSAGE;
 }
 

@@ -33,6 +33,8 @@ export interface ContentRequestHandlerDependencies {
     baselineMessages: ConversationExport["messages"]
   ) => () => void;
   readonly scanCurrentConversationExport: (options?: {
+    readonly chatGptConversationData?: ContentScanRequest["chatGptConversationData"];
+    readonly chatGptConversationDataWarning?: string;
     readonly signal?: AbortSignal;
   }) => Promise<ConversationExport>;
   readonly waitForScanReadiness?: (signal?: AbortSignal) => Promise<void>;
@@ -48,7 +50,7 @@ export function createContentRequestHandler(
   let cachedConversationDirty = false;
   let stopObservingConversationChanges: (() => void) | undefined;
   let scanSequence = 0;
-  function getValidCachedConversation(): CachedConversationState {
+  function getValidCachedConversation(requestedScanId?: string): CachedConversationState {
     if (
       cachedConversation === undefined ||
       cachedSourceUrl === undefined ||
@@ -57,7 +59,21 @@ export function createContentRequestHandler(
       return { reason: "missing", status: "missing" };
     }
 
-    if (cachedConversationDirty || cachedSourceUrl !== dependencies.getCurrentUrl()) {
+    if (cachedSourceUrl !== dependencies.getCurrentUrl()) {
+      return { reason: "stale", status: "missing" };
+    }
+
+    if (requestedScanId !== undefined) {
+      return requestedScanId === cachedScanId
+        ? {
+            conversation: cachedConversation,
+            scanId: cachedScanId,
+            status: "ready"
+          }
+        : { reason: "missing", status: "missing" };
+    }
+
+    if (cachedConversationDirty) {
       return { reason: "stale", status: "missing" };
     }
 
@@ -68,7 +84,7 @@ export function createContentRequestHandler(
     };
   }
 
-  async function handleContentScanRequest(): Promise<ScanSummary> {
+  async function handleContentScanRequest(request: ContentScanRequest): Promise<ScanSummary> {
     activeScanController?.abort();
     stopObservingConversationChanges?.();
     stopObservingConversationChanges = undefined;
@@ -82,6 +98,12 @@ export function createContentRequestHandler(
       }
       assertCurrentScan();
       const conversation = await dependencies.scanCurrentConversationExport({
+        ...(request.chatGptConversationData !== undefined
+          ? { chatGptConversationData: request.chatGptConversationData }
+          : {}),
+        ...(request.chatGptConversationDataWarning !== undefined
+          ? { chatGptConversationDataWarning: request.chatGptConversationDataWarning }
+          : {}),
         signal: scanController.signal
       });
       assertCurrentScan();
@@ -127,16 +149,12 @@ export function createContentRequestHandler(
   function handleGetCachedConversationRequest(
     request: ContentGetCachedConversationRequest
   ): CachedConversationResult {
-    const cached = getValidCachedConversation();
+    const cached = getValidCachedConversation(request.scanId);
 
     if (cached.status !== "ready") {
       return cached.reason === "stale"
         ? { hasConversation: false, reason: "stale" }
         : { hasConversation: false };
-    }
-
-    if (request.scanId !== undefined && request.scanId !== cached.scanId) {
-      return { hasConversation: false };
     }
 
     return {
@@ -150,7 +168,7 @@ export function createContentRequestHandler(
     request: ContentRequest
   ): Promise<ContentRequestResult> {
     if (request.type === CONTENT_SCAN_MESSAGE) {
-      return handleContentScanRequest();
+      return handleContentScanRequest(request);
     }
 
     if (request.type === CONTENT_CANCEL_SCAN_MESSAGE) {
