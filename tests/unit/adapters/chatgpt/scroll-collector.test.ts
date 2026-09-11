@@ -611,6 +611,8 @@ describe("collectChatGptConversation", () => {
     expect(result.completeness.lastMessagePreview).toBe("Fourth");
   });
 
+  // These full-size JSDOM fixtures assert traversal work/counts, not host CPU speed.
+  // Keep the 332-turn inventory and all ordering/completeness assertions on slower CI.
   test("directly hydrates 323 placeholders when 332 turns use ancestor identities", async () => {
     const turnCount = 332;
     const turnHeight = 72;
@@ -723,7 +725,7 @@ describe("collectChatGptConversation", () => {
       containerQuerySpy.mockRestore();
       documentQuerySpy.mockRestore();
     }
-  });
+  }, 60_000);
 
   test("hydrates a roleless gap on its third targeted visit before dirty extracted turns", async () => {
     const turnCount = 332;
@@ -907,7 +909,7 @@ describe("collectChatGptConversation", () => {
         value: originalMutationObserver
       });
     }
-  }, 15_000);
+  }, 60_000);
 
   test("extracts exact accessible-label roleless turns without leaving them missing", async () => {
     const document = createDocument(`
