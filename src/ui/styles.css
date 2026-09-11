@@ -1366,6 +1366,10 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .switch-track::after {
+    transition: none;
+  }
+
   .progress-bar--active span {
     animation: none;
     transform: translateX(0);
@@ -1373,5 +1377,27 @@ h3 {
 
   .status-spinner {
     animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  button[aria-pressed="true"] {
+    border: 3px double Highlight;
+  }
+
+  .primary-action {
+    border: 1px solid ButtonText;
+  }
+
+  .zip-toggle input,
+  .settings-zip-toggle input {
+    position: static;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .zip-toggle .switch-track,
+  .settings-zip-toggle .switch-track {
+    display: none;
   }
 }

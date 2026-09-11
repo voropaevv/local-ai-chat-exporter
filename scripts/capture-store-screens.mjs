@@ -71,12 +71,54 @@ async function main() {
     await page.getByText("Jelluvi launch checklist", { exact: true }).waitFor();
     await page.getByRole("heading", { name: "Library" }).scrollIntoViewIfNeeded();
     await capture(page, "05-local-library.png");
+
+    // QA-only artifacts: these are not promoted to the Store listing.
+    if (!promote) {
+      await page.setViewportSize({ height: 800, width: 640 });
+      await page.goto(`${baseUrl}visual-qa.html?surface=settings&theme=light`);
+      await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+      await page.keyboard.press("Tab");
+      const focused = await page.evaluate(() => {
+        const element = globalThis.document.activeElement;
+        return (
+          element !== null &&
+          element !== globalThis.document.body &&
+          element.matches(":focus-visible")
+        );
+      });
+      if (!focused) throw new Error("Settings keyboard focus is not visibly indicated.");
+      await capture(page, "06-settings-narrow-keyboard.png");
+      const overflows = await page.evaluate(
+        () => globalThis.document.documentElement.scrollWidth > globalThis.innerWidth + 1
+      );
+      if (overflows) throw new Error("Settings overflows the 640px reflow viewport.");
+
+      await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+      await capture(page, "07-settings-forced-colors.png");
+      await page.setViewportSize(viewport);
+      await page.goto(`${baseUrl}visual-qa.html?surface=popup&theme=light`);
+      await page.getByRole("button", { name: "Export", exact: true }).waitFor();
+      await capture(page, "08-popup-forced-colors.png");
+      const contrastState = await page.evaluate(() => {
+        const checkbox = globalThis.document.querySelector(".zip-toggle input");
+        const selected = globalThis.document.querySelector('button[aria-pressed="true"]');
+        return (
+          checkbox !== null &&
+          selected !== null &&
+          globalThis.getComputedStyle(checkbox).opacity === "1" &&
+          globalThis.getComputedStyle(selected).borderTopStyle === "double"
+        );
+      });
+      if (!contrastState) throw new Error("Forced colors hide the ZIP control or selected format.");
+    }
   } finally {
     await browser.close();
     await server.close();
   }
 
-  console.log(`${promote ? "Promoted" : "Captured"} five current UI screenshots in ${outputRoot}.`);
+  console.log(
+    `${promote ? "Promoted five" : "Captured eight"} current UI screenshots in ${outputRoot}.`
+  );
 }
 
 async function capturePopup(page, baseUrl, theme, expandFormats, filename) {
