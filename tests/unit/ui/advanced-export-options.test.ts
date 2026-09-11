@@ -14,7 +14,8 @@ describe("settings export controls source", () => {
     for (const expected of [
       "Metadata",
       "Citations &amp; Canvas",
-      "Visible reasoning",
+      "Include visible reasoning blocks",
+      "Hidden model reasoning is never accessed.",
       "MarkdownProfileSelector",
       "Page size",
       "Orientation",

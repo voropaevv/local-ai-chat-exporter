@@ -1,6 +1,6 @@
 # Jelluvi Privacy Policy
 
-Last updated: July 11, 2026
+Last updated: September 11, 2026
 
 Jelluvi is a local-first browser extension for exporting AI chat threads to files you choose.
 
@@ -29,13 +29,19 @@ brokers.
 Jelluvi uses extension storage for local preferences such as filename settings and redaction
 settings. These settings do not contain conversation transcript content by design. Local Library
 records are separate, opt-in browser IndexedDB records that can be deleted or exported as a backup.
+An export action opens a separate, inactive extension tab so closing the toolbar popup does not
+stop the operation. Its one-time request contains the source tab ID and chosen export/redaction
+settings in session-only extension storage, not the transcript. The request is removed when the
+export tab consumes it, and session storage is cleared when the browser session ends. Keep the
+source and export-progress tabs open until the browser download finishes. Sleeping or discarded
+tabs cannot be guaranteed to execute in the background.
 
 ## Permissions
 
 Jelluvi uses minimal Manifest V3 permissions:
 
 - `activeTab` and `scripting` to scan the current supported chat page after user action.
-- `storage` for local preferences.
+- `storage` for local preferences, session-only export requests and privacy-safe diagnostics.
 - Optional host permissions for supported AI chat sites only when the user starts batch discovery
   or batch export. Jelluvi does not request browsing-history (`tabs`) permission.
 

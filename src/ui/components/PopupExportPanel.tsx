@@ -45,7 +45,10 @@ export function PopupExportPanel({
         ))}
       </div>
       <div className="bundle-format-row">
-        <label className="zip-toggle">
+        <label
+          className="zip-toggle"
+          title="Packages the selected formats and their local assets into one ZIP file."
+        >
           <span className="format-button__icon" aria-hidden="true">
             <FileArchive size={16} strokeWidth={2.2} />
           </span>
@@ -107,6 +110,11 @@ function FormatButton({ active, format, onClick }: FormatButtonProps) {
       aria-pressed={active}
       className={active ? "format-button format-button--active" : "format-button"}
       onClick={onClick}
+      title={
+        format === "png"
+          ? "Creates a local image from the chosen messages. Limited to 16,000 pixels tall; use Preview to select a smaller range for long chats."
+          : undefined
+      }
       type="button"
     >
       <span className="format-button__icon" aria-hidden="true">

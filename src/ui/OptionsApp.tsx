@@ -507,7 +507,7 @@ export function OptionsApp() {
         />
       </SettingsCard>
 
-      <SettingsCard icon={ShieldCheck} title="Privacy">
+      <SettingsCard icon={ShieldCheck} title="Redaction">
         <label className="field-row settings-select-row">
           <span className="sr-only">Redaction preset</span>
           <select
@@ -519,8 +519,8 @@ export function OptionsApp() {
             }
             value={redaction.preset}
           >
-            <option value="off">Off</option>
-            <option value="basic">Default</option>
+            <option value="off">None</option>
+            <option value="basic">Basic</option>
             <option value="strict">Strict</option>
             <option value="custom">Custom</option>
           </select>

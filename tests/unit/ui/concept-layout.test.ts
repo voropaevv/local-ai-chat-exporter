@@ -57,7 +57,7 @@ describe("concept-inspired popup and settings layout", () => {
     expect(optionsSource).toContain("Filename pattern");
     expect(optionsSource).toContain('title="Content"');
     expect(optionsSource).toContain('title="PDF"');
-    expect(optionsSource).toContain('title="Privacy"');
+    expect(optionsSource).toContain('title="Redaction"');
     expect(optionsSource).toContain('title="Library"');
     expect(optionsSource).toContain('title="Batch export"');
     expect(optionsSource).not.toContain("Support");
