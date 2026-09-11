@@ -159,6 +159,83 @@ describe("findChatGptScrollContainer", () => {
 });
 
 describe("collectChatGptConversation", () => {
+  test.each([false, true])(
+    "does not traverse down a cold chat while delayed history is still prepending (stable containers: %s)",
+    async (stableContainers) => {
+      vi.useFakeTimers();
+      try {
+        const document = createDocument('<main id="chat-scroll"></main>');
+        const container = document.getElementById("chat-scroll")!;
+        const metrics = { clientHeight: 100, scrollHeight: 500, scrollTop: 400 };
+        setScrollMetrics(container, metrics);
+        const render = (messages: readonly string[]) => {
+          renderMessages(container, messages);
+          if (stableContainers) {
+            for (const article of Array.from(container.querySelectorAll("article"))) {
+              article.setAttribute(
+                "data-turn-id-container",
+                article.querySelector("[data-message-id]")!.getAttribute("data-message-id")!
+              );
+            }
+          }
+        };
+        render(["40|user|Tail", "41|assistant|Tail answer"]);
+        const scrollBy = vi.fn((element: Element, pixels: number) => {
+          element.scrollTop += pixels;
+        });
+        const resultPromise = collectChatGptConversation({
+          document,
+          scrollContainer: container,
+          scrollBy
+        });
+        await vi.advanceTimersByTimeAsync(4_000);
+        expect(scrollBy).not.toHaveBeenCalled();
+        render([
+          "20|user|Earlier",
+          "21|assistant|Earlier answer",
+          "40|user|Tail",
+          "41|assistant|Tail answer"
+        ]);
+        metrics.scrollHeight = 700;
+        container.scrollTop = 200;
+        await vi.advanceTimersByTimeAsync(4_000);
+        expect(container.scrollTop).toBe(0);
+        expect(scrollBy).not.toHaveBeenCalled();
+        render([
+          "1|user|Start",
+          "2|assistant|Start answer",
+          "3|user|Next",
+          "4|assistant|Next answer",
+          "20|user|Earlier",
+          "21|assistant|Earlier answer",
+          "40|user|Tail",
+          "41|assistant|Tail answer"
+        ]);
+        metrics.scrollHeight = 900;
+        container.scrollTop = 200;
+        await vi.advanceTimersByTimeAsync(9_000);
+        expect(scrollBy).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(10_000);
+        const result = await resultPromise;
+        expect(result.reachedTop).toBe(true);
+        expect(result.messages.map((message) => message.id)).toEqual([
+          "1",
+          "2",
+          "3",
+          "4",
+          "20",
+          "21",
+          "40",
+          "41"
+        ]);
+        expect(container.scrollTop).toBe(400);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
+
   test("scrolls from top to bottom, dedupes messages, and reports completeness", async () => {
     const document = createDocument(`<main id="chat-scroll"></main>`);
     const container = document.getElementById("chat-scroll");

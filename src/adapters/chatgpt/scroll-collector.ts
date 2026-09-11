@@ -20,6 +20,7 @@ import {
   scrollToTop
 } from "./scroll-container";
 import { chatGptSelectors } from "./selectors";
+import { hydrateTopBoundary } from "./top-boundary";
 
 const DEFAULT_MAX_STEPS = 1500;
 const DEFAULT_MAX_STALLS = 8;
@@ -155,11 +156,18 @@ export async function collectChatGptConversation(
     : undefined;
 
   try {
+    const needsTopPreparation = usesDefaultDomWait && needsColdTopPreparation(container);
     scrollToTop(container);
-    await waitForDomSettle(mainScanBudget.signal);
-    const reachedTop = isAtTop(container);
+    const topStabilized = needsTopPreparation
+      ? await hydrateTopBoundary({
+          container,
+          signal: mainScanBudget.signal,
+          inventory: () => getHydrationInventory(container)
+        })
+      : (await waitForDomSettle(mainScanBudget.signal), isAtTop(container));
+    const reachedTop = topStabilized && isAtTop(container);
     unresolvedTopHydration =
-      usesDefaultDomWait && reachedTop && getHydrationInventory(container).suspicious;
+      usesDefaultDomWait && (!topStabilized || getHydrationInventory(container).suspicious);
 
     if (unresolvedTopHydration) {
       warnings.push("ChatGPT's early turn window did not finish loading before the scan timeout.");
@@ -621,9 +629,19 @@ async function collectStableTurnContainerConversation(
   let unresolvedBottomHydration = false;
 
   try {
+    const needsTopPreparation = usesDefaultDomWait && needsColdTopPreparation(options.container);
     scrollToTop(options.container);
-    await waitForDomSettle(budget.signal);
-    reachedTop = isAtTop(options.container);
+    reachedTop = needsTopPreparation
+      ? await hydrateTopBoundary({
+          container: options.container,
+          signal: budget.signal,
+          inventory: () => getHydrationInventory(options.container),
+          recordProgress: () => budget.recordProgress()
+        })
+      : (await waitForDomSettle(budget.signal), isAtTop(options.container));
+    if (!reachedTop) {
+      warnings.push("ChatGPT's early turn window did not finish loading before the scan timeout.");
+    }
     const topInventory = reconcileTurnTrackingState(options.container, options.turnTrackingState);
     inventoryAmbiguous ||= topInventory.ambiguous;
 
@@ -2177,6 +2195,13 @@ function getTurnContainerHydrationSignature(
 interface HydrationInventory {
   readonly signature: string;
   readonly suspicious: boolean;
+}
+
+function needsColdTopPreparation(container: Element): boolean {
+  return (
+    getScrollHeight(container) > getClientHeight(container) + 2 &&
+    (!isAtTop(container) || getHydrationInventory(container).suspicious)
+  );
 }
 
 function getHydrationInventory(container: Element): HydrationInventory {
