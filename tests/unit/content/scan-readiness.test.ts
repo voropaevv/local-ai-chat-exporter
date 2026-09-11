@@ -4,6 +4,83 @@ import { describe, expect, test, vi } from "vitest";
 import { waitForScanLayout } from "../../../extension/content/scan-readiness";
 
 describe("content scan readiness", () => {
+  test("waits for the first ChatGPT message instead of scanning a cold conversation shell", async () => {
+    vi.useFakeTimers();
+
+    const dom = new JSDOM(
+      "<main><article data-testid='conversation-turn-loading'></article></main>",
+      {
+        pretendToBeVisual: true,
+        url: "https://chatgpt.com/c/cold-conversation"
+      }
+    );
+    const rootDocument = dom.window.document;
+    let settled = false;
+
+    try {
+      const pending = waitForScanLayout(rootDocument).then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(settled).toBe(false);
+
+      const message = rootDocument.createElement("article");
+      message.setAttribute("data-message-author-role", "user");
+      rootDocument.querySelector("main")?.append(message);
+      await vi.advanceTimersByTimeAsync(0);
+      await pending;
+
+      expect(settled).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
+  });
+
+  test("bounds a ChatGPT initial-message wait and releases its observer", async () => {
+    vi.useFakeTimers();
+
+    const dom = new JSDOM("<main></main>", {
+      pretendToBeVisual: true,
+      url: "https://chatgpt.com/g/project/c/empty-conversation"
+    });
+
+    try {
+      const pending = waitForScanLayout(dom.window.document);
+      await vi.advanceTimersByTimeAsync(30_500);
+      await pending;
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
+  });
+
+  test("cancels while waiting for ChatGPT's first message without leaking resources", async () => {
+    vi.useFakeTimers();
+
+    const dom = new JSDOM("<main></main>", {
+      pretendToBeVisual: true,
+      url: "https://chatgpt.com/c/cancelled-conversation"
+    });
+    const controller = new AbortController();
+
+    try {
+      const pending = waitForScanLayout(dom.window.document, controller.signal);
+      await vi.advanceTimersByTimeAsync(500);
+      controller.abort();
+      await pending;
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
+  });
+
   test("continues a hidden source tab after bounded layout fallbacks", async () => {
     vi.useFakeTimers();
 

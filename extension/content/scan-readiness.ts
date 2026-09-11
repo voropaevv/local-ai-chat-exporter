@@ -1,5 +1,8 @@
 const FRAME_FALLBACK_MS = 250;
 const LAYOUT_FRAME_COUNT = 2;
+const CHATGPT_INITIAL_MESSAGE_TIMEOUT_MS = 30_000;
+const CHATGPT_MESSAGE_SELECTOR = "[data-message-author-role]";
+const CHATGPT_TURN_SELECTOR = "[data-testid^='conversation-turn-']";
 
 export async function waitForScanLayout(
   rootDocument: Document = getCurrentDocument(),
@@ -20,6 +23,85 @@ export async function waitForScanLayout(
       return;
     }
   }
+
+  await waitForInitialChatGptMessage(rootDocument, signal);
+}
+
+function waitForInitialChatGptMessage(
+  rootDocument: Document,
+  signal?: AbortSignal
+): Promise<void> {
+  if (
+    signal?.aborted ||
+    !isChatGptConversation(rootDocument) ||
+    hasInitialChatGptMessage(rootDocument)
+  ) {
+    return Promise.resolve();
+  }
+
+  const ownerWindow = rootDocument.defaultView;
+  const observationRoot = rootDocument.documentElement;
+
+  if (ownerWindow === null || observationRoot === null) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = () => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      observer.disconnect();
+      ownerWindow.clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", finish);
+      resolve();
+    };
+    const observer = new ownerWindow.MutationObserver(() => {
+      if (hasInitialChatGptMessage(rootDocument)) {
+        finish();
+      }
+    });
+    const timeoutId = ownerWindow.setTimeout(finish, CHATGPT_INITIAL_MESSAGE_TIMEOUT_MS);
+
+    observer.observe(observationRoot, {
+      attributeFilter: ["data-message-author-role", "data-testid"],
+      attributes: true,
+      childList: true,
+      subtree: true
+    });
+    signal?.addEventListener("abort", finish, { once: true });
+
+    if (signal?.aborted || hasInitialChatGptMessage(rootDocument)) {
+      finish();
+    }
+  });
+}
+
+function hasInitialChatGptMessage(rootDocument: Document): boolean {
+  if (rootDocument.querySelector(CHATGPT_MESSAGE_SELECTOR) !== null) {
+    return true;
+  }
+
+  return Array.from(rootDocument.querySelectorAll(CHATGPT_TURN_SELECTOR)).some((turn) => {
+    return Array.from(turn.children).some((child) => {
+      if (child.tagName.toLowerCase() !== "h4") {
+        return false;
+      }
+
+      const label = child.textContent?.replace(/\s+/gu, " ").trim();
+      return label === "You said:" || label === "ChatGPT said:";
+    });
+  });
+}
+
+function isChatGptConversation(rootDocument: Document): boolean {
+  const { hostname, pathname } = rootDocument.location;
+  const isChatGptHost = hostname === "chatgpt.com" || hostname === "chat.openai.com";
+
+  return isChatGptHost && pathname.split("/").includes("c");
 }
 
 function waitForLayoutFrame(rootDocument: Document, signal?: AbortSignal): Promise<void> {

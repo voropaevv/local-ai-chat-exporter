@@ -1,6 +1,26 @@
-# Release QA — Jelluvi 0.2.11
+# Release QA — Jelluvi 0.2.12
 
 ## Final local checkpoint — 2026-09-11
+
+Current source update: `0.2.12` waits up to 30 seconds for the first real ChatGPT
+message when a conversation shell is still empty. The wait is driven by DOM
+mutations, works in a hidden source tab, ignores empty loading turn wrappers and
+releases its observer/timer on readiness, timeout or cancellation. Its regression
+failed against the previous two-frame readiness gate and passes with the repair;
+the affected content/ChatGPT suite passes 110 tests. Installed-package live
+acceptance is pending a reload of the newly built `dist`.
+
+Three subsequent installed-`0.2.11` exports of the same ChatGPT conversation
+completed: one active, one warm background and one cold background run launched
+before message headings appeared. Each produced the same ordered 20 non-empty
+messages, no duplicate IDs, `reachedTop: true`, `reachedBottom: true` and no
+warnings. The background runs completed while an unrelated tab remained active.
+The earlier inference that 35 `[data-turn-id-container]` elements meant missing
+messages was incorrect: the current DOM contained nested duplicate wrappers for
+20 logical conversation keys plus one `client-created-root` scaffold. The two
+earlier `no_messages_found` results remain evidence of a timing-dependent cold
+start failure; successful retries do not remove that race, which is why `0.2.12`
+adds explicit first-message readiness.
 
 Latest live result (09:42 UTC): **NO-GO — installed 0.2.11 fails real ChatGPT export.**
 The user-selected Brave copy now shows Redaction, Batch export and Diagnostics;
