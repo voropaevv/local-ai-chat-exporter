@@ -1,10 +1,12 @@
 import { unzlibSync } from "fflate";
 
+import notoEmojiRegularDataUrl from "./fonts/NotoEmoji-Regular.ttf.zlib?inline";
 import notoSansBoldDataUrl from "./fonts/NotoSans-Bold.ttf.zlib?inline";
 import notoSansRegularDataUrl from "./fonts/NotoSans-Regular.ttf.zlib?inline";
 import notoSansMonoRegularDataUrl from "./fonts/NotoSansMono-Regular.ttf.zlib?inline";
+import notoSansSymbolsRegularDataUrl from "./fonts/NotoSansSymbols-Regular.ttf.zlib?inline";
 
-export type PdfFont = "regular" | "bold" | "mono";
+export type PdfFont = "regular" | "bold" | "emoji" | "mono" | "symbols";
 
 export interface PdfFontGlyph {
   readonly glyphId: number;
@@ -30,14 +32,10 @@ export interface PdfEncodedTextRun {
   readonly width: number;
 }
 
-const HORIZONTAL_BOX_DRAWING_CODE_POINTS = new Set([
-  0x2500, 0x2501, 0x2504, 0x2505, 0x2508, 0x2509, 0x254c, 0x254d, 0x2550, 0x2574,
-  0x2576, 0x2578, 0x257a, 0x257c, 0x257e
-]);
-const VERTICAL_BOX_DRAWING_CODE_POINTS = new Set([
-  0x2502, 0x2503, 0x2506, 0x2507, 0x250a, 0x250b, 0x254e, 0x254f, 0x2551, 0x2575,
-  0x2577, 0x2579, 0x257b, 0x257d, 0x257f
-]);
+export interface PdfFontMetrics {
+  readonly capHeight: number;
+  readonly descent: number;
+}
 
 interface FontTable {
   readonly length: number;
@@ -52,8 +50,10 @@ interface CmapOffsets {
 export class PdfFontRegistry {
   private readonly usedGlyphs = {
     bold: new Map<number, number>(),
+    emoji: new Map<number, number>(),
     mono: new Map<number, number>(),
-    regular: new Map<number, number>()
+    regular: new Map<number, number>(),
+    symbols: new Map<number, number>()
   };
 
   encodeTextRuns(font: PdfFont, value: string): readonly PdfEncodedTextRun[] {
@@ -101,6 +101,15 @@ export class PdfFontRegistry {
     return this.usedGlyphs[font].size > 0;
   }
 
+  metrics(font: PdfFont): PdfFontMetrics {
+    const program = getFontProgram(font);
+
+    return {
+      capHeight: program.capHeight,
+      descent: program.descent
+    };
+  }
+
   snapshot(font: PdfFont): PdfEmbeddedFont {
     const program = getFontProgram(font);
     const glyphs = [...this.usedGlyphs[font].entries()]
@@ -129,12 +138,6 @@ export function normalizePdfText(value: string): string {
   return [...value.replace(/\t/gu, "    ").replace(/\r\n?/gu, "\n")]
     .map((character) => {
       const codePoint = character.codePointAt(0) ?? 0;
-      const boxDrawingFallback = getBoxDrawingFallback(codePoint);
-
-      if (boxDrawingFallback !== undefined) {
-        return boxDrawingFallback;
-      }
-
       const controlCharacter =
         codePoint <= 0x08 ||
         codePoint === 0x0b ||
@@ -145,34 +148,6 @@ export function normalizePdfText(value: string): string {
       return controlCharacter ? " " : character;
     })
     .join("");
-}
-
-function getBoxDrawingFallback(codePoint: number): string | undefined {
-  if (codePoint < 0x2500 || codePoint > 0x257f) {
-    return undefined;
-  }
-
-  if (HORIZONTAL_BOX_DRAWING_CODE_POINTS.has(codePoint)) {
-    return "-";
-  }
-
-  if (VERTICAL_BOX_DRAWING_CODE_POINTS.has(codePoint)) {
-    return "|";
-  }
-
-  if (codePoint === 0x2571) {
-    return "/";
-  }
-
-  if (codePoint === 0x2572) {
-    return "\\";
-  }
-
-  if (codePoint === 0x2573) {
-    return "x";
-  }
-
-  return "+";
 }
 
 class TrueTypeFontProgram {
@@ -288,8 +263,22 @@ function resolveFontForCodePoint(font: PdfFont, codePoint: number): PdfFont {
     return font;
   }
 
+  // Common arrows in Noto Sans Mono sit unusually close to the baseline. Use the
+  // proportional Noto symbols face for prose so arrows align with digits and text;
+  // actual code blocks continue to use the monospaced glyphs requested by `mono`.
+  if (
+    (font === "regular" || font === "bold") &&
+    getFontProgram("symbols").hasGlyph(codePoint)
+  ) {
+    return "symbols";
+  }
+
   if (font !== "mono" && getFontProgram("mono").hasGlyph(codePoint)) {
     return "mono";
+  }
+
+  if (font !== "emoji" && getFontProgram("emoji").hasGlyph(codePoint)) {
+    return "emoji";
   }
 
   return font;
@@ -297,7 +286,9 @@ function resolveFontForCodePoint(font: PdfFont, codePoint: number): PdfFont {
 
 let regularFont: TrueTypeFontProgram | undefined;
 let boldFont: TrueTypeFontProgram | undefined;
+let emojiFont: TrueTypeFontProgram | undefined;
 let monoFont: TrueTypeFontProgram | undefined;
+let symbolsFont: TrueTypeFontProgram | undefined;
 
 function getFontProgram(font: PdfFont): TrueTypeFontProgram {
   if (font === "bold") {
@@ -311,6 +302,22 @@ function getFontProgram(font: PdfFont): TrueTypeFontProgram {
       decodeInlineFont(notoSansMonoRegularDataUrl)
     );
     return monoFont;
+  }
+
+  if (font === "emoji") {
+    emojiFont ??= new TrueTypeFontProgram(
+      "NotoEmoji-Regular",
+      decodeInlineFont(notoEmojiRegularDataUrl)
+    );
+    return emojiFont;
+  }
+
+  if (font === "symbols") {
+    symbolsFont ??= new TrueTypeFontProgram(
+      "NotoSansSymbols-Regular",
+      decodeInlineFont(notoSansSymbolsRegularDataUrl)
+    );
+    return symbolsFont;
   }
 
   regularFont ??= new TrueTypeFontProgram(
