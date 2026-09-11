@@ -2,6 +2,22 @@
 
 ## Final local checkpoint — 2026-09-11
 
+Integration update: draft PR #4 is open at
+https://github.com/voropaevv/local-ai-chat-exporter/pull/4 (base `main`).
+The first candidate CI run passed secret scanning but two full-size 332-turn JSDOM
+fixtures exceeded their 5/15-second test-runner watchdogs. `1609aec` gives those two
+fixtures 60 seconds; inventory size, ordering, completeness, query-count assertions
+and production scan timeouts are unchanged. All 42 collector tests and lint passed
+locally. Remote acceptance must be read from the latest PR check, not the first run.
+
+Live installation discrepancy: after user confirmation, the Brave toolbar opened
+an older UI with `Privacy`, `Visible reasoning`, `Find open tabs`, and no separate
+export job tab. The cold-chat attempt displayed `Inventory: 134 turns` and was
+explicitly cancelled; no completed file or latest-candidate acceptance is claimed.
+This establishes that the selected toolbar copy was not the current candidate UI,
+not that no other installed copy exists. The current candidate must be selected
+before repeating live QA. Only task-created chat/settings tabs were closed.
+
 **NO-GO for public release.** This checkpoint supersedes all older records below.
 Product source: `06cc018`, version `0.2.11`. No merge, push, publication or Store
 submission was performed. Unrelated edits in the original checkout were preserved.
