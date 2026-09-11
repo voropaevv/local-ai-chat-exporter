@@ -22,6 +22,13 @@ earlier `no_messages_found` results remain evidence of a timing-dependent cold
 start failure; successful retries do not remove that race, which is why `0.2.12`
 adds explicit first-message readiness.
 
+Live provider preflight found current message candidates in Claude (4), Gemini
+(2) and NotebookLM (4). Perplexity loaded a complete answer page but its previous
+selectors found no message wrapper. The live DOM uses `group/user-bubble` and
+`group/final-text`; `801ebea` adds those selectors plus a sanitized executable
+fixture. Both selectors match one corresponding message group on the observed
+page. Installed-`0.2.12` export readback for all four providers is still pending.
+
 Earlier live failures (09:35–09:40 UTC): installed `0.2.11` twice returned
 `no_messages_found` for the real ChatGPT conversation before the three successful
 retries documented above. This is retained as intermittent-failure evidence, not
@@ -59,11 +66,11 @@ not that no other installed copy exists. The current candidate must be selected
 before repeating live QA. Only task-created chat/settings tabs were closed.
 
 **NO-GO for public release.** This checkpoint supersedes all older records below.
-Product source: `1addd10`, version `0.2.12`. The branch was pushed to draft PR #4;
+Product source: `801ebea`, version `0.2.12`. The branch was pushed to draft PR #4;
 no merge, publication or Store
 submission was performed. Unrelated edits in the original checkout were preserved.
 
-- Full `pnpm check`: passed, 78 files / 396 tests, lint, typecheck, all five provider
+- Full `pnpm check`: passed, 78 files / 397 tests, lint, typecheck, all five provider
   contracts, icons, brand, production build, content budget, Preview and site build.
 - `pnpm test:e2e`: 7 passed. One real Chromium extension fixture verifies a saved
   Markdown download after launcher closure and switching tabs; six are contract checks.
@@ -74,7 +81,7 @@ submission was performed. Unrelated edits in the original checkout were preserve
   are still pending. Authenticated-history/token access code was not adopted.
 - Packaging (`a99759d`) verifies source/dist fingerprints and matching manifests before
   creating a ZIP. Same-version stale builds are rejected. Current content script:
-  86,639 bytes. The renderer bundle has a size warning due to local embedded fonts.
+  86,757 bytes. The renderer bundle has a size warning due to local embedded fonts.
 - UI copy (`57a4b2e`): Redaction, visible-only reasoning explanation, PNG/ZIP limitations,
   local Library instructions and session-only background-job privacy disclosure.
   Unit checks pass; current Settings copy was inspected in the refreshed QA screenshots.
@@ -93,7 +100,7 @@ submission was performed. Unrelated edits in the original checkout were preserve
   hygiene checks passed. Hygiene covers one golden fixture. `pnpm audit --prod`
   reported no known vulnerabilities. Fresh remote CI success is not claimed.
 - Release package: `release/jelluvi-v0.2.12.zip`, SHA256
-  `77b61091f4509f986b5c3cee2516d969ddefbf8e91c3699776b0929a7a845b7b`.
+  `1d1375b35fd05e51f06740dec85aa9cb611a6a0cbc74c19a3808514bc4b64a8f`.
   Two independent builds/packages produced identical ZIP bytes; all 36 ZIP entries
   passed archive integrity checks.
   Old 0.2.10 and 0.2.11 archives are retained, not current release proof.
