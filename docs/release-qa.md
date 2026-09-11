@@ -3,7 +3,7 @@
 ## Final local checkpoint — 2026-09-11
 
 **NO-GO for public release.** This checkpoint supersedes all older records below.
-Product source: `57a4b2e`, version `0.2.11`. No merge, push, publication or Store
+Product source: `06cc018`, version `0.2.11`. No merge, push, publication or Store
 submission was performed. Unrelated edits in the original checkout were preserved.
 
 - Full `pnpm check`: passed, 78 files / 393 tests, lint, typecheck, all five provider
@@ -20,12 +20,22 @@ submission was performed. Unrelated edits in the original checkout were preserve
   85,624 bytes. The renderer bundle has a size warning due to local embedded fonts.
 - UI copy (`57a4b2e`): Redaction, visible-only reasoning explanation, PNG/ZIP limitations,
   local Library instructions and session-only background-job privacy disclosure.
-  Unit checks pass; updated Settings copy has not received fresh visual approval.
+  Unit checks pass; current Settings copy was inspected in the refreshed QA screenshots.
+- `997907d`: repaired the stale screenshot capture selectors and added a pinned,
+  SHA256-verified Gitleaks history gate to CI. Gitleaks 8.30.1 locally scanned the
+  candidate's 141-commit history through `06cc018` and production dist with no findings.
+  Public CI only covers older `d756119`, not this candidate.
+- `06cc018`: forced-colors review exposed invisible ZIP switches and indistinguishable
+  selected formats. Native checkboxes and double selection borders now remain visible;
+  primary actions retain boundaries and reduced-motion disables switch transitions.
+  Eight current QA screenshots captured and inspected. Automated visible keyboard focus,
+  640px Settings reflow (no horizontal page overflow) and forced-colors control checks pass.
+  This is not a full keyboard journey, screen-reader audit or actual browser 200% zoom test.
 - No-remote-code, manifest permissions, classic script, release Preview and output
   hygiene checks passed. Hygiene covers one golden fixture. `pnpm audit --prod`
-  reported no known vulnerabilities. Fresh remote CI/secret-scan success is not claimed.
+  reported no known vulnerabilities. Fresh remote CI success is not claimed.
 - Release package: `release/jelluvi-v0.2.11.zip`, SHA256
-  `66fefeb573d570a9a23be33a82f032da070db4b69e636696578c8cff60bd8ca0`.
+  `3cdf3222d8d3b154f7f71c00a8978af2a085a3d5ccb118891980065e082a7437`.
   Two independent builds/packages produced identical ZIP bytes; all 36 ZIP entries
   passed archive integrity checks.
   Old 0.2.10 archives are retained, not current release proof.
