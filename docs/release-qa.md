@@ -1,5 +1,52 @@
 # Release QA — Jelluvi 0.2.0
 
+## Active hardening checkpoint — 2026-09-11
+
+This section supersedes the historical report below. The heading/version and package record
+below are historical, not current release proof. Publication remains **NO-GO**.
+
+- Working tree: `local-ai-chat-exporter-release-hardening`, branch
+  `codex/jelluvi-latest-chat-export-qa`, version `0.2.10`, base `cc9e69e`.
+- Scope: release reliability, all shipped providers, cold long ChatGPT conversations,
+  inactive-tab export, cancellation/cache races, screenshot-reported PDF geometry/glyph defects,
+  unique branch reconciliation, deterministic package and honest manual acceptance matrix.
+- Preserve unrelated site edits in the original checkout. No merge, push, Store submission,
+  public tag, account changes or broad branch import has been performed.
+- `be5e5d4`: cancelled/superseded scans cannot replace a newer snapshot or start extraction
+  after cancelled readiness. Both regressions failed against the parent and pass after repair.
+- `a96d168`: initial cold scrollable history waits for a hydrated top inventory plus a 10-second
+  quiet boundary; repeated prepend/scroll anchoring returns to the new top. Both legacy and
+  stable-container regressions pass. A quiet interval is a heuristic, not a server history proof;
+  current live cold-history acceptance remains required.
+- `d34d0b3`: Export creates an inactive extension job tab that owns scan/render/download.
+  The one-time settings request is session-only and removed on consumption; transcripts are
+  not stored by this handoff. Reload does not duplicate downloads. Keep source and job tabs open.
+  Browser discard/sleep is not guaranteed to run JavaScript.
+- Current checks: full `pnpm check` passed (372 tests at that run); two additional job-launch
+  unit cases passed afterwards, plus typecheck/lint/build. Seven E2E checks passed, including
+  a real extension fixture download after launcher closure and switching to another tab.
+  Six other E2E cases are source/contract checks, not six additional live-browser scenarios.
+- Export progress page was rendered and visually inspected. PDF screenshot acceptance is pending.
+- Current `dist/content/main.js`: 85,624 bytes. Existing `0.2.10` ZIP is **stale** and must be
+  repackaged only after remaining source work. No old ZIP hash proves this source.
+- Brave has a currently authenticated ChatGPT session. A task-owned tab was opened using the
+  original long-conversation URL from the supplied transcript. No new chat messages sent.
+- Clean Chrome native control timed out. Browser tooling explicitly rejected extension-management
+  navigation; do not bypass that restriction using another surface. Updated user-profile install
+  and Chrome/Edge/Vivaldi live acceptance are not established by fixture Chromium E2E.
+- Supplied audit (801 lines) reviewed: commit/build/ZIP alignment, five-provider live matrix,
+  explicit Redaction/visible-only reasoning copy, source pinning, permission denial/retry,
+  accessibility and public Store gates remain part of acceptance. Historical percentages and
+  release-readiness claims are not accepted as measurements.
+- Unique `codex/jelluvi-macstudio-qa` includes unintegrated PDF layout/font improvements and
+  an authenticated-history API implementation. Review selectively; do not adopt token access
+  or its historical QA claims as a substitute for current DOM/export testing.
+
+Next action: reconcile and visually validate PDF geometry/glyph fixes, then run the complete
+checks and deterministic packaging again; finish available live QA and record exact blocked gates.
+
+## Historical report — 2026-07-18 (not current acceptance)
+
 Date: 2026-07-18
 
 Last verified: 2026-07-18 13:06 +04
