@@ -2,6 +2,24 @@
 
 ## Final local checkpoint — 2026-09-11
 
+Latest live result (09:42 UTC): **NO-GO — installed 0.2.11 fails real ChatGPT export.**
+The user-selected Brave copy now shows Redaction, Batch export and Diagnostics;
+its downloaded diagnostic JSON independently reports `extensionVersion: 0.2.11`.
+Two MD/JSON export jobs ended with `no_messages_found` (09:35:58 and 09:40:40 UTC).
+The first began after reloading the long chat without manual scrolling, closing
+the popup and switching to Settings. The second began with message headings
+already present in the source accessibility tree; its source was foreground
+initially, then the export tab was selected while preparation was running.
+Neither is a passed background-export test, and neither produced a transcript.
+The second failure rules out claiming that initial cold-page readiness alone is
+the established cause. DOM diagnostics currently return `Debugger unattached`;
+native accessibility still works. The diagnostic file was saved outside Git and
+verified to exclude conversation text, source URL and title. Next: distinguish
+foreground-only collection from background hydration/extraction failure before
+choosing a production repair. No production change was made from this hypothesis.
+CI for `87c75c9` passed (run `34583685986`); green fixtures do not override this
+live failure. The historical installation discrepancy below is superseded.
+
 Integration update: draft PR #4 is open at
 https://github.com/voropaevv/local-ai-chat-exporter/pull/4 (base `main`).
 The first candidate CI run passed secret scanning but two full-size 332-turn JSDOM
@@ -19,7 +37,8 @@ not that no other installed copy exists. The current candidate must be selected
 before repeating live QA. Only task-created chat/settings tabs were closed.
 
 **NO-GO for public release.** This checkpoint supersedes all older records below.
-Product source: `06cc018`, version `0.2.11`. No merge, push, publication or Store
+Product source: `06cc018`, version `0.2.11`. The branch was pushed to draft PR #4;
+no merge, publication or Store
 submission was performed. Unrelated edits in the original checkout were preserved.
 
 - Full `pnpm check`: passed, 78 files / 393 tests, lint, typecheck, all five provider
@@ -40,7 +59,7 @@ submission was performed. Unrelated edits in the original checkout were preserve
 - `997907d`: repaired the stale screenshot capture selectors and added a pinned,
   SHA256-verified Gitleaks history gate to CI. Gitleaks 8.30.1 locally scanned the
   candidate's 141-commit history through `06cc018` and production dist with no findings.
-  Public CI only covers older `d756119`, not this candidate.
+  Current candidate CI passed at `87c75c9`; see the latest live failure above.
 - `06cc018`: forced-colors review exposed invisible ZIP switches and indistinguishable
   selected formats. Native checkboxes and double selection borders now remain visible;
   primary actions retain boundaries and reduced-motion disables switch transitions.
