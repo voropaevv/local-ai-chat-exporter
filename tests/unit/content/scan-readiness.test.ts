@@ -39,6 +39,46 @@ describe("content scan readiness", () => {
     }
   });
 
+  test("settles when a cold ChatGPT turn hydrates with a nested accessible role heading", async () => {
+    vi.useFakeTimers();
+
+    const dom = new JSDOM("<main></main>", {
+      pretendToBeVisual: true,
+      url: "https://chatgpt.com/c/nested-heading-hydration"
+    });
+    const rootDocument = dom.window.document;
+    let settled = false;
+
+    try {
+      const pending = waitForScanLayout(rootDocument).then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(settled).toBe(false);
+
+      rootDocument.querySelector("main")?.insertAdjacentHTML(
+        "beforeend",
+        `<article data-testid="conversation-turn-current">
+          <div class="turn-layout-wrapper">
+            <div class="turn-content-wrapper">
+              <h4 class="sr-only">You said:</h4>
+              <div class="whitespace-pre-wrap">Nested current prompt</div>
+            </div>
+          </div>
+        </article>`
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(settled).toBe(true);
+      await pending;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
+  });
+
   test("bounds a ChatGPT initial-message wait and releases its observer", async () => {
     vi.useFakeTimers();
 

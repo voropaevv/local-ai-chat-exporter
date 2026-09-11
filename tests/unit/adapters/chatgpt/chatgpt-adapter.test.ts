@@ -115,6 +115,32 @@ describe("extractVisibleChatGptMessages", () => {
     ]);
   });
 
+  test("extracts an exact-label roleless turn when ChatGPT nests its heading", () => {
+    const document = new JSDOM(
+      `<main>
+        <section data-testid="conversation-turn-current">
+          <div class="turn-layout-wrapper">
+            <div class="turn-content-wrapper">
+              <h4 class="sr-only">ChatGPT said:</h4>
+              <div class="markdown"><p>Nested current answer</p></div>
+            </div>
+          </div>
+        </section>
+      </main>`,
+      { url: "https://chatgpt.com/c/nested-heading" }
+    ).window.document;
+
+    expect(
+      extractVisibleChatGptMessages(document).map(({ id, role, text }) => ({ id, role, text }))
+    ).toEqual([
+      {
+        id: "conversation-turn-current",
+        role: "assistant",
+        text: "Nested current answer"
+      }
+    ]);
+  });
+
   test("extracts nested exact-label turns separately without absorbing the inner turn", () => {
     const document = new JSDOM(
       `<main>

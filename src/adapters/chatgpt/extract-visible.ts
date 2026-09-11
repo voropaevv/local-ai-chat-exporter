@@ -114,7 +114,7 @@ function prepareChatGptMessageCandidate(candidate: ChatGptMessageCandidate): Ele
   }
 
   syntheticMessage.setAttribute("data-message-author-role", candidate.rolelessRole);
-  getDirectRolelessTurnHeading(syntheticMessage)?.remove();
+  getOwnRolelessTurnHeading(syntheticMessage)?.remove();
   return syntheticMessage;
 }
 
@@ -204,18 +204,18 @@ export function getRolelessChatGptTurnRole(turn: Element): ChatRole | undefined 
     return undefined;
   }
 
-  const label = getDirectRolelessTurnHeading(turn)?.textContent?.replace(/\s+/gu, " ").trim();
+  const label = getOwnRolelessTurnHeading(turn)?.textContent?.replace(/\s+/gu, " ").trim();
 
   return label === undefined ? undefined : ROLELESS_TURN_LABELS[label];
 }
 
-function getDirectRolelessTurnHeading(turn: Element): Element | undefined {
-  return Array.from(turn.children).find((child) => {
-    if (child.tagName.toLowerCase() !== "h4") {
+function getOwnRolelessTurnHeading(turn: Element): Element | undefined {
+  return Array.from(turn.querySelectorAll("h4")).find((heading) => {
+    if (heading.closest(chatGptSelectors.conversationTurn) !== turn) {
       return false;
     }
 
-    const label = child.textContent?.replace(/\s+/gu, " ").trim();
+    const label = heading.textContent?.replace(/\s+/gu, " ").trim();
     return label !== undefined && ROLELESS_TURN_LABELS[label] !== undefined;
   });
 }

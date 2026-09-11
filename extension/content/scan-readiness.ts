@@ -1,8 +1,8 @@
+import { getChatGptMessageCandidateCount } from "../../src/adapters/chatgpt/extract-visible";
+
 const FRAME_FALLBACK_MS = 250;
 const LAYOUT_FRAME_COUNT = 2;
 const CHATGPT_INITIAL_MESSAGE_TIMEOUT_MS = 30_000;
-const CHATGPT_MESSAGE_SELECTOR = "[data-message-author-role]";
-const CHATGPT_TURN_SELECTOR = "[data-testid^='conversation-turn-']";
 
 export async function waitForScanLayout(
   rootDocument: Document = getCurrentDocument(),
@@ -81,20 +81,7 @@ function waitForInitialChatGptMessage(
 }
 
 function hasInitialChatGptMessage(rootDocument: Document): boolean {
-  if (rootDocument.querySelector(CHATGPT_MESSAGE_SELECTOR) !== null) {
-    return true;
-  }
-
-  return Array.from(rootDocument.querySelectorAll(CHATGPT_TURN_SELECTOR)).some((turn) => {
-    return Array.from(turn.children).some((child) => {
-      if (child.tagName.toLowerCase() !== "h4") {
-        return false;
-      }
-
-      const label = child.textContent?.replace(/\s+/gu, " ").trim();
-      return label === "You said:" || label === "ChatGPT said:";
-    });
-  });
+  return getChatGptMessageCandidateCount(rootDocument) > 0;
 }
 
 function isChatGptConversation(rootDocument: Document): boolean {

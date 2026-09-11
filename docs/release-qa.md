@@ -1,6 +1,41 @@
-# Release QA — Jelluvi 0.2.12
+# Release QA — Jelluvi 0.2.13
 
-## Final local checkpoint — 2026-09-11
+## Current candidate checkpoint — 2026-09-11
+
+Installed `0.2.12` reproduced a cold-background failure on the authenticated long
+ChatGPT conversation: after a fresh page reload, Export was launched immediately,
+the launcher was closed and an unrelated tab was brought to the foreground. The job
+remained on `Preparing full conversation...` for approximately 30 seconds and then
+failed with `No messages were found on this page.` No transcript was downloaded.
+
+The current ChatGPT DOM exposes exact accessible `You said:` / `ChatGPT said:` role
+headings below layout wrappers inside `[data-testid^='conversation-turn-']`. Both the
+first-message readiness gate and the roleless extractor required those headings to be
+direct children, so readiness timed out and the subsequent scan still found zero
+candidates. `0.2.13` recognizes an exact heading anywhere inside its own turn while
+rejecting headings owned by a nested conversation turn. Readiness now delegates to the
+same candidate detector as extraction, removing the duplicated selector contract.
+
+The two regressions fail on the unchanged `0.2.12` implementation and pass after the
+repair. A Chromium extension E2E also passes when the roleless turn hydrates after two
+seconds and the source tab has already been backgrounded.
+
+- Full `pnpm check`: passed, 78 files / 399 tests, lint, typecheck, all five provider
+  contracts, icons, brand, production build, content budget, Preview and site build.
+- `pnpm test:e2e`: 8 passed, including the delayed cold/background extension flow.
+- Required no-remote-code, manifest-permission, classic-script, release Preview,
+  golden-output hygiene and production dependency audit checks passed.
+- Deterministic package: `release/jelluvi-v0.2.13.zip`, 36 entries, archive integrity
+  passed, two builds produced SHA256
+  `381017548f4349ae529cad140fbd2db7b328ed525f59af73f7c0847829f942ef`.
+- `gitleaks` is not installed on this host; the pinned CI history scan remains required.
+- Installed-`0.2.13` live acceptance is pending the local Brave reload and repeated
+  cold/background export of the authenticated long conversation.
+
+**NO-GO for public release** until the full gates and repeated installed-package live
+export below pass. No Store submission, tag, GitHub Release or merge was performed.
+
+## Previous local checkpoint — 2026-09-11
 
 Current source update: `0.2.12` waits up to 30 seconds for the first real ChatGPT
 message when a conversation shell is still empty. The wait is driven by DOM
