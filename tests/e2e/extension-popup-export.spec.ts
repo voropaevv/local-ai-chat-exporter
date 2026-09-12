@@ -8,12 +8,16 @@ import {
   type Worker
 } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import { readFixture } from "../helpers/fixtures";
+import {
+  getFixtureChromiumPlatformArgs,
+  spawnFixtureChromium
+} from "../helpers/fixture-chromium-launcher";
 
 const projectRoot = resolve(import.meta.dirname, "../..");
 const builtExtensionPath = resolve(projectRoot, "dist");
@@ -33,6 +37,10 @@ const fixtureBrowsers = new WeakMap<
   }
 >();
 
+// These headed browsers share the desktop's foreground window. Keep their
+// visibility tests sequential even when unrelated E2E files run in parallel.
+// Unlike serial mode, default mode still runs later tests after a failure.
+test.describe.configure({ mode: "default" });
 test.setTimeout(90_000);
 
 test("export survives launcher closure and a background source tab", async () => {
@@ -260,6 +268,7 @@ test("history export loads metadata only on request and exports only selected ch
     ).toBeVisible();
     expect(api.historyRequests).toHaveLength(0);
     await workspace.getByRole("button", { name: "Load ChatGPT history", exact: true }).click();
+    await waitForHistoryListResult(workspace);
     const candidates = workspace.getByRole("list", { name: "Loaded ChatGPT conversations" });
     await expect(candidates.getByRole("checkbox")).toHaveCount(3);
     expect(api.historyRequests).toHaveLength(1);
@@ -372,6 +381,7 @@ for (const action of ["cancel", "close workspace"] as const) {
     await withHistoryFixture(async ({ context, source, workspace, worker, api }) => {
       await workspace.getByRole("button", { name: "ChatGPT history", exact: true }).click();
       await workspace.getByRole("button", { name: "Load ChatGPT history", exact: true }).click();
+      await waitForHistoryListResult(workspace);
       const candidates = workspace.getByRole("list", { name: "Loaded ChatGPT conversations" });
       await expect(candidates.getByRole("checkbox")).toHaveCount(3);
       await candidates.getByRole("checkbox").nth(0).check();
@@ -435,6 +445,17 @@ async function expectNoHistoryLeases(worker: Worker): Promise<void> {
     .toEqual([]);
 }
 
+async function waitForHistoryListResult(workspace: Page): Promise<void> {
+  // The production metadata reader has a 30-second deadline. Wait for its
+  // visible success/error state before checking the exact three fixture items;
+  // an empty, still-loading list is not yet a completed result.
+  const error = workspace.getByRole("alert");
+  await expect(
+    workspace.getByRole("button", { name: "Reload history list", exact: true }).or(error).first()
+  ).toBeVisible({ timeout: 35_000 });
+  await expect(error).toHaveCount(0);
+}
+
 async function withHistoryFixture(
   run: (fixture: {
     context: BrowserContext;
@@ -447,6 +468,7 @@ async function withHistoryFixture(
   const testRoot = await mkdtemp(resolve(tmpdir(), "jelluvi-history-e2e-"));
   let context: BrowserContext | undefined;
   let api: Awaited<ReturnType<typeof installHistoryApi>> | undefined;
+  let workspace: Page | undefined;
   try {
     const extensionPath = resolve(testRoot, "extension");
     // Fixture permission is pre-granted for both supported ChatGPT origins. This
@@ -459,7 +481,7 @@ async function withHistoryFixture(
     api = await installHistoryApi(context);
     const source = await context.newPage();
     await source.goto("https://chatgpt.com/c/history-source");
-    const workspace = await openExtensionPopup(context, source);
+    workspace = await openExtensionPopup(context, source);
     const extensionId = new URL(workspace.url()).host;
     await workspace.goto(`chrome-extension://${extensionId}/options/index.html?view=batch`);
     await workspace.bringToFront();
@@ -490,6 +512,30 @@ async function withHistoryFixture(
       });
     });
     await run({ context, source, workspace, worker, api });
+  } catch (error) {
+    // These are isolated synthetic fixtures. Preserve the visible terminal or
+    // loading state and request progress before cleanup removes the browser.
+    await test.info().attach("history-failure-state", {
+      body: JSON.stringify({
+        historyRequests: api?.historyRequests,
+        messageRequests: api?.messageRequests,
+        workspaceUrl: workspace?.url(),
+        bodyText:
+          workspace === undefined || workspace.isClosed()
+            ? "Workspace unavailable or already closed"
+            : await workspace
+                .locator("body")
+                .innerText({ timeout: 2_000 })
+                .catch((readError: unknown) => String(readError))
+      }),
+      contentType: "application/json"
+    });
+    if (workspace !== undefined && !workspace.isClosed()) {
+      await workspace
+        .screenshot({ path: test.info().outputPath("history-failure.png"), timeout: 2_000 })
+        .catch(() => undefined);
+    }
+    throw error;
   } finally {
     api?.firstMessageResponse.release();
     await closeExtensionContext(context);
@@ -621,13 +667,43 @@ async function withApiFixture(
   const extensionPath = resolve(testRoot, "extension");
   let context: BrowserContext | undefined;
   let api: Awaited<ReturnType<typeof installHeldApi>> | undefined;
+  const pageErrors: string[] = [];
   try {
     await prepareExtensionForFixture(extensionPath);
     context = await launchExtensionContext(resolve(testRoot, "profile"), extensionPath);
+    context.on("page", (page) => {
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+    });
     const source = await context.newPage();
     api = await installHeldApi(source);
     await source.goto("https://chatgpt.com/c/jelluvi-api-A");
     await run({ context, source, api });
+  } catch (error) {
+    const extensionPages =
+      context?.pages().filter((page) => page.url().startsWith("chrome-extension://")) ?? [];
+    await test.info().attach("api-failure-state", {
+      body: JSON.stringify({
+        requests: api?.requests,
+        pageErrors,
+        downloads: context === undefined ? [] : fixtureBrowsers.get(context)?.downloads,
+        pages: await Promise.all(
+          extensionPages.map(async (page) => ({
+            url: page.url(),
+            bodyText: await page
+              .locator("body")
+              .innerText({ timeout: 2_000 })
+              .catch((readError: unknown) => String(readError))
+          }))
+        )
+      }),
+      contentType: "application/json"
+    });
+    for (const [index, page] of extensionPages.entries()) {
+      await page
+        .screenshot({ path: test.info().outputPath(`api-failure-${index}.png`), timeout: 2_000 })
+        .catch(() => undefined);
+    }
+    throw error;
   } finally {
     api?.firstResponse.release();
     api?.previousResponse.release();
@@ -741,40 +817,27 @@ async function launchExtensionContext(
 ): Promise<BrowserContext> {
   // launchPersistentContext enables focus emulation on every page. A noDefaults CDP
   // connection preserves actual hidden-tab lifecycle and ordinary background throttling.
-  const browserProcess = spawn(
-    chromium.executablePath(),
-    [
-      `--user-data-dir=${userDataDir}`,
-      "--remote-debugging-port=0",
-      "--remote-debugging-address=127.0.0.1",
-      "--no-first-run",
-      "--no-default-browser-check",
-      "--disable-background-networking",
-      "--disable-component-update",
-      "--disable-component-extensions-with-background-pages",
-      "--password-store=basic",
-      "--use-mock-keychain",
-      "--window-size=1280,720",
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-      "about:blank"
-    ],
-    { stdio: "ignore" }
-  );
+  const launched = spawnFixtureChromium(chromium.executablePath(), [
+    `--user-data-dir=${userDataDir}`,
+    "--remote-debugging-port=0",
+    "--remote-debugging-address=127.0.0.1",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--disable-component-extensions-with-background-pages",
+    "--password-store=basic",
+    "--use-mock-keychain",
+    "--window-size=1280,720",
+    ...getFixtureChromiumPlatformArgs(),
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
+    "about:blank"
+  ]);
+  const browserProcess = launched.process;
   let session: CDPSession | undefined;
   try {
-    let port = "";
-    await expect
-      .poll(
-        async () => {
-          port = (
-            await readFile(resolve(userDataDir, "DevToolsActivePort"), "utf8").catch(() => "")
-          ).split("\n")[0];
-          return port;
-        },
-        { timeout: 10_000 }
-      )
-      .toMatch(/^\d+$/);
+    const port = await launched.waitForDevToolsPort(userDataDir);
     const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`, {
       noDefaults: true,
       isLocal: true
@@ -844,7 +907,12 @@ async function closeExtensionContext(context: BrowserContext | undefined): Promi
 }
 
 async function stopFixtureBrowser(browserProcess: ChildProcess): Promise<void> {
-  if (browserProcess.exitCode !== null || browserProcess.signalCode !== null) return;
+  if (
+    browserProcess.pid === undefined ||
+    browserProcess.exitCode !== null ||
+    browserProcess.signalCode !== null
+  )
+    return;
   const exited = new Promise<void>((resolve) => browserProcess.once("exit", () => resolve()));
   browserProcess.kill("SIGTERM");
   await exited;

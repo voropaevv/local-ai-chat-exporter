@@ -31,12 +31,13 @@ preserves completed files. Preview adds ordered Shift-click range selection.
 Actual Chromium testing exposed that `tabs.get` omits the extension workspace URL without broad
 `tabs` permission. Ownership validation now uses the actual extension document returned by
 [`runtime.getContexts`](https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getContexts),
-plus sender identity and tab existence. No extra permission was added. This history-workspace
-capability needs Chromium 114 or newer; existing open-chat export remains available otherwise.
+plus sender identity and tab existence. No extra permission was added. The manifest already
+requires Chromium 114 or newer. If workspace ownership cannot be verified, history export fails
+closed; the existing open-chat export path does not depend on this workspace-context lookup.
 
 Current verification checkpoint:
 
-- Final full `pnpm check` passed: 86 files / 602 tests, lint, typecheck, five provider contracts,
+- Final full `pnpm check` passed: 87 files / 606 tests, lint, typecheck, five provider contracts,
   icons, brand, production build, classic content-script budget, Preview and site build.
 - Final E2E: 14/14 passed (8 actual Chromium extension flows, 6 source contracts). Actual flows
   cover cold DOM hydration, hidden paginated history, cancellation, source navigation and selected
@@ -59,7 +60,26 @@ Current verification checkpoint:
   MacBook is outside this task; no remote display or installation is used.
 - Release guards passed: no remote code, minimal manifest permissions, release Preview and golden
   output hygiene (one fixture). `pnpm audit --prod` found no known vulnerabilities. Gitleaks is not
-  installed locally; fresh CI history scanning remains a separate gate.
+  installed locally. CI run `34680028823` at `54799cf` passed its pinned Gitleaks history scan
+  (154 commits), full check and Store assets, but failed all eight actual E2E flows before a
+  Chromium debugging port appeared. The six source contracts passed. Browser stderr was discarded
+  by the launcher, so this run proves a Linux test-browser startup failure, not its exact cause
+  or an export failure. The test-only launcher repair captures bounded startup diagnostics and
+  restores the usual Playwright sandbox setting only inside Linux CI; a fresh CI run is required.
+  The launcher has four focused process/argument regressions. A subsequent parallel local run
+  passed 12/14 but two history-list assertions expired before metadata arrived; its traces showed
+  roughly 30-second browser tab queries and teardown while native fixture browsers overlapped.
+  History assertions now wait for the operation's bounded terminal state before checking exact
+  row counts, with failure-state capture. Native-browser scenarios run sequentially because they
+  share foreground-window state; source-only checks can still run in parallel. This is not
+  acceptance of a production timing defect.
+  A first sequential run passed 13/14: one paginated-API test did not observe a download within
+  60 seconds after both synthetic responses completed. Its isolated diagnostic rerun passed;
+  the cause is unresolved, so a passing rerun is not called a production repair. API failures now
+  retain the export-page status, page errors and download events before cleanup. The next full
+  sequential run passed 14/14. Five additional consecutive paginated-API runs passed; the first
+  took 54.0 seconds and the next four took 1.4–2.3 seconds, so the unexplained latency remains a
+  release risk even though it stayed inside the existing 60-second download watchdog.
 - Runtime: Node 22.22.3, pnpm 10.6.2. Content script: 94,367 bytes. The local embedded-font renderer
   retains its existing bundle-size warning; no claim of removing that cost is made.
 - Candidate archive: `release/jelluvi-v0.2.14.zip`, 1,268,597 bytes, 37 entries. Two independent
