@@ -4,13 +4,12 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { zipSync } from "fflate";
 import { verifyBuildProvenance } from "./build-provenance.mjs";
+import { createDeterministicZip } from "./deterministic-zip.mjs";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const distDir = resolve(projectRoot, "dist");
 const releaseDir = resolve(projectRoot, "release");
-const zipEntryDate = new Date("1980-01-01T00:00:00.000Z");
 
 async function collectFiles(directory) {
   const entries = await readdir(directory);
@@ -34,7 +33,7 @@ async function collectFiles(directory) {
     }
   }
 
-  return files.sort((left, right) => left.localeCompare(right));
+  return files.sort();
 }
 
 async function readPackageVersion() {
@@ -58,12 +57,7 @@ async function main() {
 
   for (const file of files) {
     const archivePath = relative(distDir, file).split("\\").join("/");
-    zipEntries[archivePath] = [
-      new Uint8Array(await readFile(file)),
-      {
-        mtime: zipEntryDate
-      }
-    ];
+    zipEntries[archivePath] = new Uint8Array(await readFile(file));
   }
 
   for (const [archivePath, sourcePath] of [
@@ -71,17 +65,12 @@ async function main() {
     ["NOTO_FONT_LICENSE.txt", resolve(projectRoot, "src/renderers/fonts/OFL.txt")],
     ["THIRD_PARTY_NOTICES.txt", resolve(projectRoot, "THIRD_PARTY_NOTICES.md")]
   ]) {
-    zipEntries[archivePath] = [
-      new Uint8Array(await readFile(sourcePath)),
-      {
-        mtime: zipEntryDate
-      }
-    ];
+    zipEntries[archivePath] = new Uint8Array(await readFile(sourcePath));
   }
 
   await mkdir(releaseDir, { recursive: true });
 
-  const zipBytes = zipSync(zipEntries, { level: 9 });
+  const zipBytes = createDeterministicZip(zipEntries);
   const zipBuffer = Buffer.from(zipBytes);
   const zipPath = resolve(releaseDir, zipName);
   const checksum = createHash("sha256").update(zipBuffer).digest("hex");

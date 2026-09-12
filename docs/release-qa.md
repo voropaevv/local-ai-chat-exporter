@@ -37,7 +37,7 @@ closed; the existing open-chat export path does not depend on this workspace-con
 
 Current verification checkpoint:
 
-- Final full `pnpm check` passed: 87 files / 606 tests, lint, typecheck, five provider contracts,
+- Final full `pnpm check` passed: 88 files / 607 tests, lint, typecheck, five provider contracts,
   icons, brand, production build, classic content-script budget, Preview and site build.
 - Final E2E: 14/14 passed (8 actual Chromium extension flows, 6 source contracts). Actual flows
   cover cold DOM hydration, hidden paginated history, cancellation, source navigation and selected
@@ -82,10 +82,11 @@ Current verification checkpoint:
   release risk even though it stayed inside the existing 60-second download watchdog.
 - Runtime: Node 22.22.3, pnpm 10.6.2. Content script: 94,367 bytes. The local embedded-font renderer
   retains its existing bundle-size warning; no claim of removing that cost is made.
-- Candidate archive: `release/jelluvi-v0.2.14.zip`, 1,268,597 bytes, 37 entries. Two independent
-  builds/packages produced identical SHA256 `3e08880997754a1421644dbbf106641f894ec3bcabe69f286df961e189551faa`.
+- Candidate archive: `release/jelluvi-v0.2.14.zip`, 1,268,598 bytes, 37 entries. Packaging under
+  both `TZ=UTC` and `TZ=Asia/Dubai` produced byte-identical SHA256
+  `669926ef510831c4c3044e99552c7c490e64423c72587e49a07f7bd7ce007b94`.
   Archive integrity, checksum readback and source/dist/ZIP manifest equality passed. Build input
-  fingerprint: `6f34fe979147e1ee2f70cbbaeff3d8f10c820b5cd18cc88a3493e50bbb18283c`.
+  fingerprint: `397ee8e63d2e9c15d32d1a2494622e822ecfb13a3f2811c1dab771e70160d02b`.
   No merge, release tag, GitHub Release, Store submission or website deployment is part of this checkpoint.
 
 ## Competitive feature scope — 2026-09-12
