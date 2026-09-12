@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useState } from "preact/hooks";
+import { Files } from "lucide-preact";
 
 import type {
   ActiveTabInfoResult,
@@ -283,6 +284,19 @@ export function PopupApp() {
         onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
         options={state.options}
       />
+      <a
+        className="popup-batch-link"
+        href={
+          typeof chrome !== "undefined" && chrome.runtime?.getURL !== undefined
+            ? chrome.runtime.getURL("options/index.html?view=batch")
+            : "/options/index.html?view=batch"
+        }
+        rel="noreferrer"
+        target="_blank"
+      >
+        <Files aria-hidden="true" size={16} strokeWidth={2.2} />
+        <span>Export multiple chats</span>
+      </a>
       <ScanControls
         canCancelScan={state.canCancelScan}
         onCancelScan={handleCancelScan}

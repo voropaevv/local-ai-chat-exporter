@@ -43,7 +43,18 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchSource).not.toContain("chrome.history");
   expect(batchSource).not.toContain("CONTENT_SCAN_MESSAGE");
   expect(controllerSource).toContain("DEFAULT_BATCH_TAB_TIMEOUT_MS = 240_000");
-  expect(controllerSource).toContain("CONTENT_CANCEL_SCAN_MESSAGE");
+  expect(controllerSource).toContain("POPUP_SCAN_MESSAGE");
+  expect(controllerSource).toContain("POPUP_EXPORT_MESSAGE");
+  expect(controllerSource).toContain("POPUP_CANCEL_SCAN_MESSAGE");
+  expect(controllerSource).toContain("chrome.runtime.sendMessage(request)");
+  expect(controllerSource).toContain("expectedSourceUrl: tab.url");
+  expect(controllerSource).toContain("operationId");
+  expect(controllerSource).toContain("deserializeRenderedFile");
+  expect(controllerSource).not.toContain("CONTENT_SCAN_MESSAGE");
+  expect(controllerSource).not.toContain("CONTENT_GET_CACHED_CONVERSATION_MESSAGE");
+  expect(controllerSource).not.toContain("chrome.tabs.sendMessage");
+  expect(controllerSource).not.toContain("ensureContentScript");
+  expect(controllerSource).not.toContain("renderConversationFiles");
   expect(controllerSource).toContain("signal?: AbortSignal");
   expect(controllerSource).toContain("for (const [index, tab] of input.tabs.entries())");
   expect(popupSource).not.toContain("requestBatchDiscoveryPermission");
@@ -55,13 +66,22 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(optionsSource).toContain("abortController.abort()");
   expect(batchUiSource).toContain("Find ChatGPT tabs");
   expect(batchUiSource).toContain("More providers");
-  expect(batchUiSource).toContain("Chats stay local");
-  expect(batchUiSource).toContain('className="primary-action compact-action"');
+  expect(batchUiSource).toContain("exports stay local");
+  expect(batchUiSource).toContain('className="secondary-action compact-action"');
+  expect(batchUiSource).toContain('className="primary-action"');
   expect(batchUiSource).toContain("progress-bar progress-bar--active");
   expect(batchUiSource).toContain("statusTone");
-  expect(batchUiSource).toContain("Select all");
+  expect(batchUiSource).toContain("Select all shown");
   expect(batchUiSource).toContain("Clear selection");
-  expect(batchUiSource).toContain("Export selected to ZIP");
+  expect(batchUiSource).toContain("Export {selectedTabIds.length}");
+  expect(batchUiSource).toContain('selectedTabIds.length === 1 ? "chat" : "chats"');
+  expect(batchUiSource).toContain("Retry failed");
+  expect(batchUiSource).toContain('type="search"');
+  expect(batchUiSource).toContain('aria-label="Filter by provider"');
+  expect(optionsSource).toContain('href="?view=batch"');
+  expect(optionsSource).toContain("if (isBatchView)");
+  expect(optionsSource).toContain("Export multiple chats");
+  expect(popupSource).toContain("options/index.html?view=batch");
   expect(batchUiSource).toContain("Cancel batch export");
   expect(batchUiSource).toContain("formatBatchTabSummary");
   expect(batchUiSource).toContain("formatBatchTabContext");
@@ -70,13 +90,13 @@ test("batch export is explicit, permission-scoped, and avoids broad hosts", asyn
   expect(batchUiSource).not.toContain("Full URL");
   expect(batchUiSource).not.toContain("Tab ID");
   expect(batchUiSource).not.toContain("<details");
-  expect(optionsSource).toContain("Checking selected open tabs");
-  expect(optionsSource).toContain("Waiting for Brave to approve ChatGPT site access");
+  expect(optionsSource).toContain("Checking selected chats");
+  expect(optionsSource).toContain("Waiting for the browser to approve ChatGPT site access");
   expect(optionsSource).toContain("formatBatchExportSummary");
   expect(optionsSource.indexOf('title="Batch export"')).toBeLessThan(
     optionsSource.indexOf('title="Content"')
   );
   expect(optionsSource.indexOf("requestBatchHostPermissions(selectedTabs)")).toBeLessThan(
-    optionsSource.indexOf("await preflightBatchTabs(batchSelectedTabIds)")
+    optionsSource.indexOf("await preflightBatchTabs(requestedTabIds)")
   );
 });

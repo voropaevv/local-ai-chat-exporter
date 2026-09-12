@@ -13,27 +13,32 @@ test("pins the original source and finishes after its launcher disappears", asyn
   const result = { files: [], exportedMessageCount: 2 } as unknown as PopupExportSuccess;
   const send = async <T>(request: unknown): Promise<RuntimeResponse<T>> => {
     calls.push(request);
-    const value =
-      calls.length === 1
-        ? { hasCache: false }
-        : calls.length === 2
-          ? ({ scanId: "scan-cold-1" } as ScanSummary)
-          : result;
+    const value = calls.length === 1 ? ({ scanId: "scan-cold-1" } as ScanSummary) : result;
     return { ok: true, value: value as T };
   };
   const download = vi.fn(async () => undefined);
   await expect(
     runExportJob({
-      request: { type: POPUP_EXPORT_MESSAGE, sourceTabId: 17 },
+      request: {
+        type: POPUP_EXPORT_MESSAGE,
+        sourceTabId: 17,
+        expectedSourceUrl: "https://chatgpt.com/c/original",
+        operationId: "job-one"
+      },
       send,
       download,
       signal: new AbortController().signal,
       onProgress: vi.fn()
     })
   ).resolves.toBe(result);
-  expect(calls).toHaveLength(3);
-  expect(calls[1]).toEqual({ type: POPUP_SCAN_MESSAGE, sourceTabId: 17 });
-  expect(calls[2]).toMatchObject({
+  expect(calls).toHaveLength(2);
+  expect(calls[0]).toEqual({
+    type: POPUP_SCAN_MESSAGE,
+    sourceTabId: 17,
+    expectedSourceUrl: "https://chatgpt.com/c/original",
+    operationId: "job-one"
+  });
+  expect(calls[1]).toMatchObject({
     scanId: "scan-cold-1",
     sourceTabId: 17,
     type: POPUP_EXPORT_MESSAGE
@@ -46,10 +51,10 @@ test("never downloads a late scan result after cancellation", async () => {
   const download = vi.fn(async () => undefined);
   let calls = 0;
   const send = async <T>(): Promise<RuntimeResponse<T>> => {
-    if (++calls === 2) controller.abort();
+    if (++calls === 1) controller.abort();
     return {
       ok: true,
-      value: (calls === 2 ? { scanId: "scan-cancelled" } : { hasCache: false }) as T
+      value: { scanId: "scan-cancelled" } as T
     };
   };
   await expect(
@@ -62,7 +67,7 @@ test("never downloads a late scan result after cancellation", async () => {
     })
   ).rejects.toThrow("Export cancelled");
   expect(download).not.toHaveBeenCalled();
-  expect(calls).toBe(2);
+  expect(calls).toBe(1);
 });
 
 test("renders a snapshot prepared synchronously by the export click", async () => {

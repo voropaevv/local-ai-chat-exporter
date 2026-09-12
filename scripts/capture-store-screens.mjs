@@ -8,10 +8,14 @@ import { createServer } from "vite";
 
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const promote = process.argv.includes("--promote");
+const outputOverride = process.argv
+  .find((argument) => argument.startsWith("--output="))
+  ?.slice("--output=".length);
 const outputRoot = resolve(
   projectRoot,
-  promote ? "site/store-assets/store-screens" : "qa-artifacts/store-candidate"
+  promote ? "site/store-assets/store-screens" : outputOverride || "qa-artifacts/store-candidate"
 );
+let captureCount = 0;
 const braveExecutable =
   process.env.BRAVE_EXECUTABLE_PATH ??
   "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser";
@@ -61,11 +65,18 @@ async function main() {
     await page.getByRole("heading", { name: "Jelluvi launch checklist" }).first().waitFor();
     await capture(page, "03-preview.png");
 
-    await page.goto(`${baseUrl}visual-qa.html?surface=settings&theme=light`);
+    await page.goto(`${baseUrl}visual-qa.html?surface=settings&theme=light&view=batch`);
     await page.getByRole("button", { name: "More providers", exact: true }).click();
-    await page.getByText("Found 3 open AI chat tabs. All selected.").waitFor();
-    await page.getByRole("heading", { name: "Batch export", exact: true }).scrollIntoViewIfNeeded();
-    await capture(page, "04-batch-export.png");
+    await page.getByText("Found 3 open AI chat tabs. Choose the chats to export.").waitFor();
+    await page.getByRole("button", { name: "Select all shown", exact: true }).click();
+    const sourceColumns = await page
+      .locator('[aria-label="Conversation source"]')
+      .evaluate(
+        (element) =>
+          globalThis.getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
+      );
+    if (sourceColumns !== 2) throw new Error("The two-source picker has an unused grid column.");
+    await capture(page, "04-batch-export.png", !promote);
 
     await page.goto(`${baseUrl}visual-qa.html?surface=settings&theme=light&seedLibrary=1`);
     await page.getByText("Jelluvi launch checklist", { exact: true }).waitFor();
@@ -110,6 +121,51 @@ async function main() {
         );
       });
       if (!contrastState) throw new Error("Forced colors hide the ZIP control or selected format.");
+
+      await page.emulateMedia({ forcedColors: "none", reducedMotion: "reduce" });
+      await page.goto(`${baseUrl}visual-qa.html?surface=settings&theme=light&view=batch`);
+      await page.getByRole("button", { name: "ChatGPT history", exact: true }).click();
+      await capture(page, "09-history-explicit-empty.png", true);
+      await page.getByRole("button", { name: "Load ChatGPT history", exact: true }).click();
+      await page.getByText("2 chats loaded of 3", { exact: false }).waitFor();
+      await page.getByRole("button", { name: "Select all shown", exact: true }).click();
+      await page.getByRole("button", { name: "Load more", exact: true }).click();
+      await page.getByText("3 chats loaded of 3", { exact: false }).waitFor();
+      if ((await page.locator(".batch-tab-list input:checked").count()) !== 2) {
+        throw new Error("Loading more history changed the explicit selection.");
+      }
+      await capture(page, "10-history-selection-desktop.png", true);
+
+      await page.setViewportSize({ height: 844, width: 390 });
+      await page.getByRole("searchbox", { name: "Search loaded chats" }).focus();
+      await page.keyboard.press("Tab");
+      const batchFocus = await page.evaluate(() =>
+        globalThis.document.activeElement?.matches(":focus-visible")
+      );
+      if (!batchFocus) throw new Error("Batch keyboard focus is not visible.");
+      await assertNoHorizontalOverflow(page, "Batch history");
+      await capture(page, "11-history-narrow-keyboard.png", true);
+
+      await page.getByRole("button", { name: "Open tabs", exact: true }).click();
+      await page.getByRole("button", { name: "More providers", exact: true }).click();
+      await page.getByRole("searchbox", { name: "Search chats" }).fill("Launch");
+      await page.getByRole("button", { name: "Select all shown", exact: true }).click();
+      await assertNoHorizontalOverflow(page, "Open tabs");
+      await capture(page, "12-open-tabs-narrow.png", true);
+
+      await page.setViewportSize(viewport);
+      await page.goto(
+        `${baseUrl}visual-qa.html?surface=preview&theme=light&sourceTabId=101&scanId=visual-qa-scan`
+      );
+      await page.getByRole("combobox", { name: "Messages", exact: true }).selectOption("selected");
+      const messageCheckboxes = page.locator(".preview-message-selector input[type=checkbox]");
+      await messageCheckboxes.nth(0).focus();
+      await page.keyboard.press("Space");
+      await messageCheckboxes.nth(2).click({ modifiers: ["Shift"] });
+      if ((await page.locator(".preview-message-selector input:checked").count()) !== 3) {
+        throw new Error("Preview Space/Shift-click selection did not include the expected range.");
+      }
+      await capture(page, "13-preview-keyboard-range.png", true);
     }
   } finally {
     await browser.close();
@@ -117,7 +173,7 @@ async function main() {
   }
 
   console.log(
-    `${promote ? "Promoted five" : "Captured eight"} current UI screenshots in ${outputRoot}.`
+    `${promote ? "Promoted" : "Captured"} ${captureCount} current UI screenshots in ${outputRoot}.`
   );
 }
 
@@ -134,7 +190,7 @@ async function capturePopup(page, baseUrl, theme, expandFormats, filename) {
   await capture(page, filename);
 }
 
-async function capture(page, filename) {
+async function capture(page, filename, fullPage = false) {
   await page.evaluate(async () => {
     await globalThis.document.fonts.ready;
     await new Promise((resolve) =>
@@ -143,8 +199,17 @@ async function capture(page, filename) {
   });
   await page.screenshot({
     animations: "disabled",
+    fullPage,
     path: resolve(outputRoot, filename)
   });
+  captureCount += 1;
+}
+
+async function assertNoHorizontalOverflow(page, label) {
+  const overflows = await page.evaluate(
+    () => globalThis.document.documentElement.scrollWidth > globalThis.innerWidth + 1
+  );
+  if (overflows) throw new Error(`${label} overflows the narrow viewport.`);
 }
 
 main().catch((error) => {

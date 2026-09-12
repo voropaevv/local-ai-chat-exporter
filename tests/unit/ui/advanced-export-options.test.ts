@@ -15,7 +15,7 @@ describe("settings export controls source", () => {
       "Metadata",
       "Citations &amp; Canvas",
       "Include visible reasoning blocks",
-      "Hidden model reasoning is never accessed.",
+      "Hidden model reasoning is never included in exports.",
       "MarkdownProfileSelector",
       "Page size",
       "Orientation",

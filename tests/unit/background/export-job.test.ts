@@ -16,7 +16,9 @@ test("creates an inactive job tab with a one-time session-only request", async (
   });
   const request = { type: POPUP_EXPORT_MESSAGE, sourceTabId: 17 } as const;
   await expect(startExportJob(request)).resolves.toEqual({ tabId: 23 });
-  expect(Object.values(set.mock.calls[0][0])).toEqual([request]);
+  expect(Object.values(set.mock.calls[0][0])).toEqual([
+    { ...request, operationId: expect.stringMatching(/^[a-f0-9-]{36}$/u) }
+  ]);
   expect(create).toHaveBeenCalledWith({
     active: false,
     url: expect.stringMatching(/\/export\/index.html\?jobId=/u)

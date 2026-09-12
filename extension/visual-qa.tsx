@@ -1,6 +1,8 @@
 import { render } from "preact";
 
 import type { ConversationExport } from "../src/core/schema";
+import type { BatchCandidateTab } from "../src/core/batch";
+import { CHATGPT_HISTORY_LIST_MESSAGE } from "../src/core/chatgpt-history";
 import { createLocalLibraryRecord, saveLocalLibraryRecord } from "../src/library/local-library";
 import { OptionsApp } from "../src/ui/OptionsApp";
 import { PopupApp } from "../src/ui/PopupApp";
@@ -133,6 +135,7 @@ if (qaTheme === "light" || qaTheme === "dark") {
 const batchTabs = [
   {
     id: 101,
+    windowId: 1,
     platform: "chatgpt",
     platformLabel: "ChatGPT",
     title: "Launch checklist",
@@ -140,6 +143,7 @@ const batchTabs = [
   },
   {
     id: 102,
+    windowId: 1,
     platform: "claude",
     platformLabel: "Claude",
     title: "Provider comparison",
@@ -147,17 +151,49 @@ const batchTabs = [
   },
   {
     id: 103,
+    windowId: 1,
     platform: "gemini",
     platformLabel: "Gemini",
     title: "Export notes",
     url: "https://gemini.google.com/app/jelluvi-visual-qa"
   }
-] as const;
+] as const satisfies readonly BatchCandidateTab[];
+
+// Synthetic metadata for the visual QA entry only. No account/session/history request is made.
+const historyTabs: readonly BatchCandidateTab[] = [
+  "Sample: Release planning",
+  "Sample: Research notes",
+  "Sample: Writing review"
+].map((title, index) => ({
+  id: -(index + 1),
+  windowId: 1,
+  platform: "chatgpt",
+  platformLabel: "ChatGPT",
+  title,
+  url: `https://chatgpt.com/c/synthetic-history-${index + 1}`,
+  history: {
+    conversationId: `synthetic-history-${index + 1}`,
+    sourceTabId: 101,
+    sourceUrl: conversation.sourceUrl
+  }
+}));
 
 Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
   runtime: {
     getURL: (path: string) => (path === "brand/jelluvi.png" ? "/icons/icon-128.png" : `/${path}`),
-    sendMessage: async (message: { readonly type?: string }) => {
+    sendMessage: async (message: { readonly type?: string; readonly offset?: number }) => {
+      if (message.type === CHATGPT_HISTORY_LIST_MESSAGE) {
+        return {
+          ok: true,
+          value: {
+            tabs: message.offset === undefined ? historyTabs.slice(0, 2) : historyTabs.slice(2),
+            sourceTabId: 101,
+            sourceUrl: conversation.sourceUrl,
+            total: historyTabs.length,
+            ...(message.offset === undefined ? { nextOffset: 2 } : {})
+          }
+        };
+      }
       if (message.type === "jelluvi/get-active-tab-info") {
         if (qaStatus === "failed") {
           return {

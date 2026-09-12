@@ -22,10 +22,10 @@ export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/preview-get-cach
 export const PREVIEW_RETURN_TO_SOURCE_MESSAGE = "jelluvi/preview-return-to-source";
 // Keep content requests versioned so a listener left in an already-open tab
 // cannot race the freshly injected listener after an extension update.
-export const CONTENT_SCAN_MESSAGE = "jelluvi/v7/content-scan";
-export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/v7/content-cancel-scan";
-export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/v7/content-get-scan-cache-summary";
-export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/v7/content-get-cached-conversation";
+export const CONTENT_SCAN_MESSAGE = "jelluvi/v8/content-scan";
+export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/v8/content-cancel-scan";
+export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/v8/content-get-scan-cache-summary";
+export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/v8/content-get-cached-conversation";
 
 export interface ScanSummary {
   readonly completeness: CompletenessReport;
@@ -36,16 +36,21 @@ export interface ScanSummary {
 }
 
 export interface PopupScanRequest {
+  readonly expectedSourceUrl?: string;
+  readonly operationId?: string;
   readonly sourceTabId?: number;
   readonly type: typeof POPUP_SCAN_MESSAGE;
 }
 
 export interface PopupCancelScanRequest {
+  readonly operationId?: string;
   readonly sourceTabId?: number;
   readonly type: typeof POPUP_CANCEL_SCAN_MESSAGE;
 }
 
 export interface PopupExportRequest {
+  readonly expectedSourceUrl?: string;
+  readonly operationId?: string;
   readonly type: typeof POPUP_EXPORT_MESSAGE;
   readonly copyToClipboard?: boolean;
   readonly download?: boolean;
@@ -95,15 +100,19 @@ export interface PreviewReturnToSourceRequest {
 }
 
 export interface ContentScanRequest {
+  readonly expectedSourceUrl?: string;
+  readonly operationId?: string;
   readonly chatGptConversationData?: {
     readonly messages: readonly ExportedMessage[];
     readonly title?: string;
+    readonly warnings?: readonly string[];
   };
   readonly chatGptConversationDataWarning?: string;
   readonly type: typeof CONTENT_SCAN_MESSAGE;
 }
 
 export interface ContentCancelScanRequest {
+  readonly operationId?: string;
   readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE;
 }
 
@@ -117,6 +126,7 @@ export interface ContentGetCachedConversationRequest {
 }
 
 export interface PopupExportSuccess {
+  readonly completenessStatus?: CompletenessReport["status"];
   readonly downloaded: readonly string[];
   readonly exportedMessageCount: number;
   readonly files: readonly SerializedRenderedFile[];

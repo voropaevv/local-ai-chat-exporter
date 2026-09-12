@@ -54,6 +54,28 @@ export function togglePreviewMessageSelection(
     : [...selectedMessageIds, messageId];
 }
 
+export function updatePreviewMessageSelection(
+  selectedMessageIds: readonly string[],
+  orderedMessageIds: readonly string[],
+  messageId: string,
+  checked: boolean,
+  anchorId?: string
+): readonly string[] {
+  const orderedIds = [...new Set(orderedMessageIds)];
+  const selectedIds = new Set(selectedMessageIds);
+  const targetIndex = orderedIds.indexOf(messageId);
+  const anchorIndex = anchorId === undefined ? -1 : orderedIds.indexOf(anchorId);
+  if (targetIndex !== -1) {
+    const start = anchorIndex === -1 ? targetIndex : Math.min(anchorIndex, targetIndex);
+    const end = anchorIndex === -1 ? targetIndex : Math.max(anchorIndex, targetIndex);
+    for (const id of orderedIds.slice(start, end + 1)) {
+      if (checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+    }
+  }
+  return orderedIds.filter((id) => selectedIds.has(id));
+}
+
 export function createPreviewMessageSummary(message: ExportedMessage): string {
   const attachments = getMessageAttachments(message);
   const attachmentLabels = new Set(

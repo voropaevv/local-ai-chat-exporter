@@ -62,7 +62,8 @@ function ExportJobPage() {
     if (request.current?.sourceTabId !== undefined) {
       await chrome.runtime.sendMessage({
         type: POPUP_CANCEL_SCAN_MESSAGE,
-        sourceTabId: request.current.sourceTabId
+        sourceTabId: request.current.sourceTabId,
+        operationId: request.current.operationId
       });
     }
   }

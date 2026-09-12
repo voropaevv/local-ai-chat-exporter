@@ -18,6 +18,12 @@ export interface BatchTabLike {
 type BatchPlatform = ProviderId;
 
 export interface BatchCandidateTab {
+  /** Metadata-only history choice; a source tab is leased only after selection. */
+  readonly history?: {
+    readonly conversationId: string;
+    readonly sourceTabId: number;
+    readonly sourceUrl: string;
+  };
   readonly id: number;
   readonly platform: BatchPlatform;
   readonly platformLabel: string;

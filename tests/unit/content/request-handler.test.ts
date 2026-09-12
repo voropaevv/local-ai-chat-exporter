@@ -85,10 +85,150 @@ function createDeferred<T>() {
 }
 
 describe("content request handler scan cache", () => {
+  test("rejects a source mismatch before readiness or extraction begins", async () => {
+    const waitForScanReadiness = vi.fn().mockResolvedValue(undefined);
+    const { handler, scanCurrentConversationExport } = createHandler({ waitForScanReadiness });
+
+    await expect(
+      handler({
+        type: CONTENT_SCAN_MESSAGE,
+        expectedSourceUrl: "https://chatgpt.com/c/other"
+      })
+    ).rejects.toMatchObject({ code: "scan_stale" });
+
+    expect(waitForScanReadiness).not.toHaveBeenCalled();
+    expect(scanCurrentConversationExport).not.toHaveBeenCalled();
+    await expect(handler({ type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE })).resolves.toEqual({
+      hasConversation: false
+    });
+  });
+
+  test("rejects source navigation during readiness without starting extraction", async () => {
+    const readiness = createDeferred<void>();
+    const expectedSourceUrl = "https://chatgpt.com/c/cached";
+    let currentUrl = expectedSourceUrl;
+    const { handler, scanCurrentConversationExport } = createHandler({
+      getCurrentUrl: () => currentUrl,
+      waitForScanReadiness: () => readiness.promise
+    });
+    const request = handler({ type: CONTENT_SCAN_MESSAGE, expectedSourceUrl });
+    const rejected = expect(request).rejects.toMatchObject({ code: "scan_stale" });
+
+    currentUrl = "https://chatgpt.com/c/changed";
+    readiness.resolve();
+    await rejected;
+
+    expect(scanCurrentConversationExport).not.toHaveBeenCalled();
+    await expect(handler({ type: CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE })).resolves.toEqual({
+      hasCache: false
+    });
+  });
+
+  test("rejects source navigation during extraction and never caches the result", async () => {
+    const scan = createDeferred<ConversationExport>();
+    const expectedSourceUrl = "https://chatgpt.com/c/cached";
+    let currentUrl = expectedSourceUrl;
+    const { handler } = createHandler({
+      getCurrentUrl: () => currentUrl,
+      scanCurrentConversationExport: () => scan.promise
+    });
+    const request = handler({ type: CONTENT_SCAN_MESSAGE, expectedSourceUrl });
+    const rejected = expect(request).rejects.toMatchObject({ code: "scan_stale" });
+
+    currentUrl = "https://chatgpt.com/c/changed";
+    scan.resolve(makeConversation(expectedSourceUrl));
+    await rejected;
+
+    await expect(handler({ type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE })).resolves.toEqual({
+      hasConversation: false
+    });
+  });
+
+  test("rejects a scanner result belonging to a different source even if the page URL stayed stable", async () => {
+    const { handler } = createHandler({
+      scanCurrentConversationExport: async () => makeConversation("https://chatgpt.com/c/other")
+    });
+
+    await expect(
+      handler({
+        type: CONTENT_SCAN_MESSAGE,
+        expectedSourceUrl: "https://chatgpt.com/c/cached"
+      })
+    ).rejects.toMatchObject({ code: "scan_stale" });
+    await expect(handler({ type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE })).resolves.toEqual({
+      hasConversation: false
+    });
+  });
+
+  test("complete preloaded ChatGPT data bypasses DOM readiness and reaches extraction intact", async () => {
+    const chatGptConversationData = {
+      messages: makeConversation().messages,
+      title: "Full history"
+    };
+    const waitForScanReadiness = vi.fn().mockResolvedValue(undefined);
+    const { handler, scanCurrentConversationExport } = createHandler({ waitForScanReadiness });
+
+    await expect(
+      handler({
+        type: CONTENT_SCAN_MESSAGE,
+        expectedSourceUrl: "https://chatgpt.com/c/cached",
+        chatGptConversationData
+      })
+    ).resolves.toMatchObject({ messageCount: 2 });
+
+    expect(waitForScanReadiness).not.toHaveBeenCalled();
+    expect(scanCurrentConversationExport).toHaveBeenCalledWith({
+      chatGptConversationData,
+      signal: expect.any(AbortSignal)
+    });
+  });
+
+  test("operation-specific cancellation cannot abort a different running generation", async () => {
+    const firstScan = createDeferred<ConversationExport>();
+    const secondScan = createDeferred<ConversationExport>();
+    const signals: AbortSignal[] = [];
+    const scanner = vi
+      .fn()
+      .mockImplementationOnce(({ signal }: { signal: AbortSignal }) => {
+        signals.push(signal);
+        return firstScan.promise;
+      })
+      .mockImplementationOnce(({ signal }: { signal: AbortSignal }) => {
+        signals.push(signal);
+        return secondScan.promise;
+      });
+    const { handler } = createHandler({ scanCurrentConversationExport: scanner });
+    const firstRequest = handler({ type: CONTENT_SCAN_MESSAGE, operationId: "first" });
+    const firstRejected = expect(firstRequest).rejects.toMatchObject({ code: "scan_cancelled" });
+    const secondRequest = handler({ type: CONTENT_SCAN_MESSAGE, operationId: "second" });
+    const secondRejected = expect(secondRequest).rejects.toMatchObject({ code: "scan_cancelled" });
+
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+    await handler({ type: CONTENT_CANCEL_SCAN_MESSAGE, operationId: "first" });
+    expect(signals[1].aborted).toBe(false);
+
+    firstScan.resolve(makeConversation());
+    await firstRejected;
+    await handler({ type: CONTENT_CANCEL_SCAN_MESSAGE, operationId: "first" });
+    expect(signals[1].aborted).toBe(false);
+    await handler({ type: CONTENT_CANCEL_SCAN_MESSAGE, operationId: "second" });
+    expect(signals[1].aborted).toBe(true);
+    secondScan.resolve(makeConversation());
+    await secondRejected;
+
+    await expect(handler({ type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE })).resolves.toEqual({
+      hasConversation: false
+    });
+  });
+
   test("a superseded scan cannot overwrite the newer cached snapshot", async () => {
     const oldScan = createDeferred<ConversationExport>();
     const newScan = createDeferred<ConversationExport>();
-    const scanner = vi.fn().mockReturnValueOnce(oldScan.promise).mockReturnValueOnce(newScan.promise);
+    const scanner = vi
+      .fn()
+      .mockReturnValueOnce(oldScan.promise)
+      .mockReturnValueOnce(newScan.promise);
     const { handler } = createHandler({ scanCurrentConversationExport: scanner });
     const oldRequest = handler({ type: CONTENT_SCAN_MESSAGE });
     const rejected = expect(oldRequest).rejects.toMatchObject({ code: "scan_cancelled" });
@@ -98,7 +238,8 @@ describe("content request handler scan cache", () => {
     oldScan.resolve({ ...makeConversation(), title: "Old snapshot" });
     await rejected;
     expect(await handler({ type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE })).toMatchObject({
-      hasConversation: true, conversation: { title: "New snapshot" }
+      hasConversation: true,
+      conversation: { title: "New snapshot" }
     });
   });
 

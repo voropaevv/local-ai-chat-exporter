@@ -44,6 +44,7 @@ export function createContentRequestHandler(
   dependencies: ContentRequestHandlerDependencies
 ): (request: ContentRequest) => Promise<ContentRequestResult> {
   let activeScanController: AbortController | undefined;
+  let activeOperationId: string | undefined;
   let cachedConversation: ConversationExport | undefined;
   let cachedSourceUrl: string | undefined;
   let cachedScanId: string | undefined;
@@ -85,15 +86,26 @@ export function createContentRequestHandler(
   }
 
   async function handleContentScanRequest(request: ContentScanRequest): Promise<ScanSummary> {
+    const expectedSourceUrl = request.expectedSourceUrl ?? dependencies.getCurrentUrl();
+    if (expectedSourceUrl !== dependencies.getCurrentUrl()) {
+      throw new ExportPipelineError(
+        "scan_stale",
+        "The source conversation changed. Start a new export."
+      );
+    }
     activeScanController?.abort();
     stopObservingConversationChanges?.();
     stopObservingConversationChanges = undefined;
     cachedConversationDirty = true;
     const scanController = new AbortController();
     activeScanController = scanController;
+    activeOperationId = request.operationId;
 
     try {
-      if (dependencies.waitForScanReadiness !== undefined) {
+      if (
+        request.chatGptConversationData === undefined &&
+        dependencies.waitForScanReadiness !== undefined
+      ) {
         await dependencies.waitForScanReadiness(scanController.signal);
       }
       assertCurrentScan();
@@ -107,6 +119,12 @@ export function createContentRequestHandler(
         signal: scanController.signal
       });
       assertCurrentScan();
+      if (conversation.sourceUrl !== expectedSourceUrl) {
+        throw new ExportPipelineError(
+          "scan_stale",
+          "The source conversation changed. Start a new export."
+        );
+      }
       const scanId = createScanId(scanSequence);
 
       cachedConversation = conversation;
@@ -122,12 +140,19 @@ export function createContentRequestHandler(
     } finally {
       if (activeScanController === scanController) {
         activeScanController = undefined;
+        activeOperationId = undefined;
       }
     }
 
     function assertCurrentScan(): void {
       if (scanController.signal.aborted || activeScanController !== scanController) {
         throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+      }
+      if (dependencies.getCurrentUrl() !== expectedSourceUrl) {
+        throw new ExportPipelineError(
+          "scan_stale",
+          "The source conversation changed. Start a new export."
+        );
       }
     }
   }
@@ -172,7 +197,9 @@ export function createContentRequestHandler(
     }
 
     if (request.type === CONTENT_CANCEL_SCAN_MESSAGE) {
-      activeScanController?.abort();
+      if (request.operationId === undefined || request.operationId === activeOperationId) {
+        activeScanController?.abort();
+      }
       return { cancelled: true };
     }
 
@@ -185,7 +212,7 @@ export function createContentRequestHandler(
 }
 
 function createScanId(sequence: number): string {
-  return `scan-${Date.now().toString(36)}-${sequence.toString(36)}`;
+  return `scan-${sequence.toString(36)}-${crypto.randomUUID()}`;
 }
 
 type CachedConversationState =

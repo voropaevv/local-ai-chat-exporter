@@ -19,6 +19,19 @@ and the UI reports capture completeness and provider limitations.
 
 Jelluvi does not include telemetry, analytics, ads, trackers, remote logging, remote rendering, or external export servers. Export actions are initiated by the user and run locally in the browser extension.
 
+For ChatGPT, Jelluvi can retrieve earlier messages of the current conversation through the
+existing signed-in session using same-origin requests. The temporary session token is never
+stored, logged, exported, or sent to Jelluvi or third parties. History retrieval needs network
+access; rendering and file creation remain local. If retrieval is unavailable, page-based
+collection reports its limitations. Complete message history does not guarantee embedding
+original uploads or generated media; available text and attachment references are preserved.
+
+Export multiple chats from a dedicated workspace: select open chat tabs or explicitly load a page
+of ChatGPT history titles, choose formats, and download one organized ZIP. No conversations are
+preselected. History listing reads metadata only; export reads only checked chats using temporary
+inactive tabs. Search applies to the loaded list, with Load more for further history. Retry failed
+chats without re-exporting successes, or cancel and keep the files already completed.
+
 Export continues in a separate extension progress tab after the toolbar popup closes.
 Keep the source and progress tabs open until the browser download finishes. Browser
 sleep or tab discard can interrupt work. PNG snapshots are limited to 16,000 pixels
@@ -43,11 +56,11 @@ hidden model reasoning. Saving to Local Library is explicit; it does not sync de
 - No telemetry or analytics.
 - No account required.
 - Minimal Manifest V3 permissions.
-- No browsing-history (`tabs`) or downloads permission.
+- No `tabs`, `history`, or `downloads` permission.
 - Chrome Web Store Limited Use statement in `PRIVACY.md`.
 
 ## Do Not Claim
 
-- Do not claim account-wide history export.
+- Do not claim automatic account-wide backups or complete archived/project/workspace enumeration.
 - Do not claim full secondary-provider support until live QA passes.
 - Do not claim medical, legal, financial, or compliance-grade archival guarantees.

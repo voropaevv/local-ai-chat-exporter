@@ -25,6 +25,7 @@ import {
   type ContentGetCachedConversationRequest,
   type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
+  type ContentCancelScanRequest,
   type BatchListSuccess,
   type PopupBatchListRequest,
   type PopupCancelScanRequest,
@@ -56,12 +57,34 @@ import {
   rememberDiagnosticContext
 } from "./diagnostic-session";
 import { readChatGptConversationDataFromPage } from "./chatgpt-conversation-data";
+import { isChatGptHistoryRequest, makeChatGptHistoryRuntime } from "./history-runtime";
+
+const activeScans = new Map<number, { controller: AbortController; operationId: string }>();
+const historyRuntime = makeChatGptHistoryRuntime((sourceTabId, operationId) =>
+  handlePopupCancelScanRequest({ type: POPUP_CANCEL_SCAN_MESSAGE, sourceTabId, operationId })
+);
+void historyRuntime.reconcileClosedOwners().catch(() => undefined);
+chrome.tabs.onRemoved?.addListener((tabId) => {
+  void historyRuntime.ownerClosed(tabId).catch(() => undefined);
+});
+chrome.tabs.onUpdated?.addListener((tabId, change) => {
+  if (change.url !== undefined || change.status === "loading") {
+    void historyRuntime.ownerClosed(tabId).catch(() => undefined);
+  }
+});
 
 chrome.runtime.onInstalled.addListener(() => {
   // Reserved for local-only extension setup in later tasks.
 });
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (isChatGptHistoryRequest(message)) {
+    historyRuntime
+      .handle(message, sender)
+      .then((value) => sendResponse({ ok: true, value }))
+      .catch((error: unknown) => sendResponse({ ok: false, error: serializeExportError(error) }));
+    return true;
+  }
   if (
     typeof message === "object" &&
     message !== null &&
@@ -70,13 +93,21 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     "request" in message
   ) {
     const request = message.request as PopupExportRequest;
-    prepareExportScan(request)
-      .then((scan) =>
-        startExportJob({
+    getActiveTab(request.sourceTabId)
+      .then((tab) => {
+        if (typeof tab.url !== "string" || getSupportedChatPageInfo(tab.url) === undefined) {
+          throw new ExportPipelineError(
+            "unsupported_platform",
+            "Open a supported conversation first."
+          );
+        }
+        return startExportJob({
           ...request,
-          ...(scan.scanId !== undefined ? { scanId: scan.scanId } : {})
-        })
-      )
+          scanId: undefined,
+          sourceTabId: requireTabId(tab),
+          expectedSourceUrl: tab.url
+        });
+      })
       .then((value) => sendResponse({ ok: true, value }))
       .catch((error: unknown) => sendResponse({ ok: false, error: serializeExportError(error) }));
     return true;
@@ -101,13 +132,6 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
   return true;
 });
-
-async function prepareExportScan(request: PopupExportRequest): Promise<ScanSummary> {
-  return handlePopupScanRequest({
-    sourceTabId: request.sourceTabId,
-    type: POPUP_SCAN_MESSAGE
-  });
-}
 
 async function handlePopupRequest(
   request:
@@ -233,34 +257,114 @@ async function handleSettingsGetDiagnosticsRequest(): Promise<DiagnosticReport> 
 }
 
 async function handlePopupScanRequest(request: PopupScanRequest): Promise<ScanSummary> {
-  const tab = await getActiveTab(request.sourceTabId);
-  const tabId = requireTabId(tab);
-  const supportedPage =
-    typeof tab.url === "string" ? getSupportedChatPageInfo(tab.url) : undefined;
-  const chatGptConversationRead =
-    supportedPage?.platform === "chatgpt" && typeof tab.url === "string"
-      ? await readChatGptConversationDataFromPage(tabId, tab.url)
-      : {};
+  // Job requests already pin the tab. Register before the first asynchronous
+  // lookup so an immediate Cancel cannot miss a scan that is about to start.
+  const tabId = request.sourceTabId ?? requireTabId(await getActiveTab());
+  let expectedSourceUrl = request.expectedSourceUrl;
+  activeScans.get(tabId)?.controller.abort();
+  const operation = {
+    controller: new AbortController(),
+    operationId: request.operationId ?? crypto.randomUUID()
+  };
+  activeScans.set(tabId, operation);
+  let sourceChanged = false;
+  const onUpdated = (updatedId: number, change: { readonly url?: string }) => {
+    if (updatedId === tabId && change.url !== undefined && change.url !== expectedSourceUrl) {
+      sourceChanged = true;
+      operation.controller.abort();
+    }
+  };
+  const onRemoved = (removedId: number) => {
+    if (removedId === tabId) operation.controller.abort();
+  };
+  const cancelContent = () => {
+    void sendContentMessage(tabId, {
+      type: CONTENT_CANCEL_SCAN_MESSAGE,
+      operationId: operation.operationId
+    }).catch(() => undefined);
+  };
+  operation.controller.signal.addEventListener("abort", cancelContent, { once: true });
+  const assertActive = () => {
+    if (sourceChanged) {
+      throw new ExportPipelineError(
+        "scan_stale",
+        "The source conversation changed. Start a new export."
+      );
+    }
+    if (operation.controller.signal.aborted || activeScans.get(tabId) !== operation) {
+      throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+    }
+  };
+  const validateSource = async () => {
+    assertActive();
+    assertSourceUrl(await getActiveTab(tabId), expectedSourceUrl);
+    assertActive();
+  };
+  chrome.tabs.onUpdated?.addListener(onUpdated);
+  chrome.tabs.onRemoved?.addListener(onRemoved);
+  try {
+    const tab = await getActiveTab(tabId);
+    assertActive();
+    expectedSourceUrl ??= tab.url;
+    assertSourceUrl(tab, expectedSourceUrl);
+    const supportedPage =
+      typeof tab.url === "string" ? getSupportedChatPageInfo(tab.url) : undefined;
+    const chatGptConversationRead =
+      supportedPage?.platform === "chatgpt" && typeof tab.url === "string"
+        ? await readChatGptConversationDataFromPage(tabId, tab.url, undefined, {
+            signal: operation.controller.signal
+          })
+        : {};
+    await validateSource();
+    if (chatGptConversationRead.diagnostic === "conversation_changed") {
+      throw new ExportPipelineError(
+        "scan_stale",
+        "The source conversation changed. Start a new export."
+      );
+    }
+    await ensureContentScript(tabId);
+    await validateSource();
 
-  await ensureContentScript(tabId);
-
-  const response = await sendContentMessage<ScanSummary>(tabId, {
-    ...(chatGptConversationRead.data !== undefined
-      ? { chatGptConversationData: chatGptConversationRead.data }
-      : {}),
-    ...(chatGptConversationRead.diagnostic !== undefined
-      ? {
-          chatGptConversationDataWarning: `ChatGPT complete-data path unavailable (${chatGptConversationRead.diagnostic}).`
-        }
-      : {}),
-    type: CONTENT_SCAN_MESSAGE
-  } satisfies ContentScanRequest);
-
-  if (!response.ok) {
-    throw new ExportPipelineError(response.error.code, response.error.message);
+    const response = await sendContentMessage<ScanSummary>(tabId, {
+      expectedSourceUrl,
+      operationId: operation.operationId,
+      ...(chatGptConversationRead.data !== undefined
+        ? { chatGptConversationData: chatGptConversationRead.data }
+        : {}),
+      ...(chatGptConversationRead.diagnostic !== undefined
+        ? {
+            chatGptConversationDataWarning:
+              "The full saved history could not be confirmed. This export uses loaded page content; review its first and last messages."
+          }
+        : {}),
+      type: CONTENT_SCAN_MESSAGE
+    } satisfies ContentScanRequest);
+    await validateSource();
+    if (!response.ok) {
+      throw new ExportPipelineError(response.error.code, response.error.message);
+    }
+    if (response.value.sourceUrl !== expectedSourceUrl) {
+      throw new ExportPipelineError(
+        "scan_stale",
+        "The source conversation changed. Start a new export."
+      );
+    }
+    return response.value;
+  } finally {
+    operation.controller.signal.removeEventListener("abort", cancelContent);
+    chrome.tabs.onUpdated?.removeListener(onUpdated);
+    chrome.tabs.onRemoved?.removeListener(onRemoved);
+    if (activeScans.get(tabId) === operation) activeScans.delete(tabId);
   }
+}
 
-  return response.value;
+function assertSourceUrl(tab: chrome.tabs.Tab, expectedSourceUrl?: string): void {
+  if (expectedSourceUrl === undefined || tab.url !== expectedSourceUrl) {
+    throw new ExportPipelineError(
+      "scan_stale",
+      "The source conversation changed. Start a new export."
+    );
+  }
 }
 
 async function handlePopupGetScanCacheSummaryRequest(
@@ -346,12 +450,15 @@ async function handlePreviewGetCachedConversationRequest(
 async function handlePopupCancelScanRequest(
   request: PopupCancelScanRequest
 ): Promise<{ readonly cancelled: true }> {
-  const tab = await getActiveTab(request.sourceTabId);
-  const tabId = requireTabId(tab);
-
+  const tabId = request.sourceTabId ?? requireTabId(await getActiveTab());
+  const operation = activeScans.get(tabId);
+  if (request.operationId === undefined || operation?.operationId === request.operationId) {
+    operation?.controller.abort();
+  }
   await sendContentMessage<{ readonly cancelled: true }>(tabId, {
+    operationId: request.operationId,
     type: CONTENT_CANCEL_SCAN_MESSAGE
-  });
+  }).catch(() => undefined);
 
   return { cancelled: true };
 }
@@ -359,6 +466,7 @@ async function handlePopupCancelScanRequest(
 async function handlePopupExportRequest(request: PopupExportRequest): Promise<PopupExportSuccess> {
   const tab = await getActiveTab(request.sourceTabId);
   const tabId = requireTabId(tab);
+  if (request.expectedSourceUrl !== undefined) assertSourceUrl(tab, request.expectedSourceUrl);
 
   await ensureContentScript(tabId);
 
@@ -382,15 +490,29 @@ async function handlePopupExportRequest(request: PopupExportRequest): Promise<Po
 
   const options = request.options ?? DEFAULT_EXPORT_OPTIONS;
   const conversation = contentResponse.value.conversation;
+  const expectedSourceUrl = request.expectedSourceUrl ?? conversation.sourceUrl;
+  assertSourceUrl(await getActiveTab(tabId), expectedSourceUrl);
+  if (conversation.sourceUrl !== expectedSourceUrl) {
+    throw new ExportPipelineError(
+      "scan_stale",
+      "The source conversation changed. Start a new export."
+    );
+  }
   const exportedMessageCount = getExportedMessageCount(conversation, options);
   const files = renderConversationFiles(conversation, options).map(serializeRenderedFile);
 
   return {
+    completenessStatus: conversation.completeness.status,
     downloaded: [],
     exportedMessageCount,
     files,
     messageCount: exportedMessageCount,
-    warnings: [...conversation.completeness.warnings, ...conversation.completeness.platformWarnings]
+    warnings: [
+      ...new Set([
+        ...conversation.completeness.warnings,
+        ...conversation.completeness.platformWarnings
+      ])
+    ]
   };
 }
 
@@ -431,7 +553,7 @@ async function sendContentMessage<T>(
     | ContentScanRequest
     | ContentGetCachedConversationRequest
     | ContentGetScanCacheSummaryRequest
-    | { readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE }
+    | ContentCancelScanRequest
 ): Promise<RuntimeResponse<T>> {
   try {
     return await chrome.tabs.sendMessage(tabId, request);

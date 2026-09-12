@@ -13,7 +13,7 @@ export async function startExportJob(
   }
   const jobId = crypto.randomUUID();
   const key = `${EXPORT_JOB_PREFIX}${jobId}`;
-  await chrome.storage.session.set({ [key]: request });
+  await chrome.storage.session.set({ [key]: { ...request, operationId: jobId } });
   try {
     const tab = await chrome.tabs.create({
       active: false,

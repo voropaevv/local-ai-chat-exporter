@@ -6,6 +6,7 @@ import {
   applyPreviewMessageSelection,
   buildPreviewSelectionOptions,
   createPreviewMessageSummary,
+  updatePreviewMessageSelection,
   togglePreviewMessageSelection
 } from "../../../src/ui/preview-selection";
 
@@ -35,6 +36,44 @@ const conversation: ConversationExport = {
 };
 
 describe("Preview message selection", () => {
+  test("selects inclusive forward and backward ranges by conversation order", () => {
+    const ids = ["z-first", "a-second", "x-third", "b-last"];
+    expect(updatePreviewMessageSelection(["z-first"], ids, "x-third", true, "z-first")).toEqual([
+      "z-first",
+      "a-second",
+      "x-third"
+    ]);
+    expect(updatePreviewMessageSelection(["b-last"], ids, "a-second", true, "b-last")).toEqual([
+      "a-second",
+      "x-third",
+      "b-last"
+    ]);
+  });
+
+  test("deselects a range while preserving other selections and removes stale or duplicate IDs", () => {
+    const ids = ["first", "second", "third", "fourth"];
+    expect(
+      updatePreviewMessageSelection(
+        ["stale", "first", "second", "second", "third", "fourth"],
+        ids,
+        "second",
+        false,
+        "fourth"
+      )
+    ).toEqual(["first"]);
+  });
+
+  test("a missing anchor uses only the target and a missing target cannot introduce a stale ID", () => {
+    const ids = ["first", "second", "third"];
+    expect(updatePreviewMessageSelection(["first"], ids, "third", true, "missing")).toEqual([
+      "first",
+      "third"
+    ]);
+    expect(
+      updatePreviewMessageSelection(["first", "stale"], ids, "missing", true, "first")
+    ).toEqual(["first"]);
+    expect(updatePreviewMessageSelection(["first"], ids, "first", false)).toEqual([]);
+  });
   test("filters the normalized conversation independently of provider DOM", () => {
     const selected = applyPreviewMessageSelection(conversation, ["assistant-1"]);
     const prepared = prepareConversationForExport(selected, { scope: "selected" });

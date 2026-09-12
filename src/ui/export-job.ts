@@ -1,11 +1,9 @@
 import {
   POPUP_EXPORT_MESSAGE,
-  POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   POPUP_SCAN_MESSAGE,
   type PopupExportRequest,
   type PopupExportSuccess,
   type RuntimeResponse,
-  type ScanCacheSummaryResult,
   type ScanSummary
 } from "../core/messages";
 
@@ -32,7 +30,9 @@ export async function runExportJob(input: {
     );
     const result = await send<ScanSummary>({
       type: POPUP_SCAN_MESSAGE,
-      sourceTabId: request.sourceTabId
+      sourceTabId: request.sourceTabId,
+      expectedSourceUrl: request.expectedSourceUrl,
+      operationId: request.operationId
     });
     assertActive();
     if (!result.ok) throw new Error(result.error.message);
@@ -41,16 +41,7 @@ export async function runExportJob(input: {
   };
   assertActive();
   if (scanId === undefined) {
-    const cache = await send<ScanCacheSummaryResult>({
-      type: POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE,
-      sourceTabId: request.sourceTabId
-    });
-    assertActive();
-    if (!cache.ok || !cache.value.hasCache) {
-      await scan();
-    } else {
-      scanId = cache.value.scanId;
-    }
+    await scan();
   }
   input.onProgress("Rendering export…");
   let result = await send<PopupExportSuccess>({

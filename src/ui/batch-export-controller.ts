@@ -6,25 +6,28 @@ import {
   type BatchManifestResult
 } from "../core/batch";
 import { ExportPipelineError, serializeExportError } from "../core/export-errors";
-import type {
-  ExportOptions,
-  getExportedMessageCount,
-  renderConversationFiles
-} from "../core/export-options";
+import type { ExportOptions } from "../core/export-options";
 import {
-  CONTENT_CANCEL_SCAN_MESSAGE,
-  CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
-  CONTENT_SCAN_MESSAGE,
-  type CachedConversationResult,
-  type ContentCancelScanRequest,
-  type ContentGetCachedConversationRequest,
-  type ContentScanRequest,
+  POPUP_CANCEL_SCAN_MESSAGE,
+  POPUP_EXPORT_MESSAGE,
+  POPUP_SCAN_MESSAGE,
+  type PopupCancelScanRequest,
+  type PopupExportRequest,
+  type PopupExportSuccess,
+  type PopupScanRequest,
   type RuntimeResponse,
   type ScanSummary
 } from "../core/messages";
 import type { RenderedFile } from "../renderers";
 import type { BatchZipResult, renderBatchZip } from "../renderers/zip";
-import { ensureContentScript } from "../utils/content-script";
+import { deserializeRenderedFile } from "../core/rendered-file-transport";
+import {
+  CHATGPT_HISTORY_ACQUIRE_MESSAGE,
+  CHATGPT_HISTORY_RELEASE_MESSAGE,
+  type ChatGptHistoryAcquireRequest,
+  type ChatGptHistoryAcquireSuccess,
+  type ChatGptHistoryReleaseRequest
+} from "../core/chatgpt-history";
 
 // Four minutes accommodates unusually long virtualized chats while keeping a
 // stuck page bounded. The extra five-second grace lets the content-side abort
@@ -71,20 +74,22 @@ interface BatchRendererModules {
   readonly createBatchZipManifestResults: (
     results: readonly BatchZipResult[]
   ) => readonly BatchExportResult[];
-  readonly getExportedMessageCount: typeof getExportedMessageCount;
   readonly renderBatchZip: typeof renderBatchZip;
-  readonly renderConversationFiles: typeof renderConversationFiles;
   readonly defaultExportOptions: ExportOptions;
 }
 
 interface BatchExportControllerDependencies {
+  readonly getOwnerTabId: () => Promise<number>;
   readonly clearTimeout: (handle: ReturnType<typeof globalThis.setTimeout>) => void;
-  readonly ensureContentScript: (tabId: number) => Promise<void>;
   readonly loadRenderers: () => Promise<BatchRendererModules>;
   readonly now: () => string;
-  readonly sendContentMessage: (
-    tabId: number,
-    request: ContentCancelScanRequest | ContentGetCachedConversationRequest | ContentScanRequest
+  readonly sendRuntimeMessage: (
+    request:
+      | PopupCancelScanRequest
+      | PopupExportRequest
+      | PopupScanRequest
+      | ChatGptHistoryAcquireRequest
+      | ChatGptHistoryReleaseRequest
   ) => Promise<RuntimeResponse<unknown>>;
   readonly setTimeout: (
     callback: () => void,
@@ -93,8 +98,13 @@ interface BatchExportControllerDependencies {
 }
 
 const defaultDependencies: BatchExportControllerDependencies = {
+  getOwnerTabId: async () => {
+    const owner = await chrome.tabs.getCurrent();
+    if (owner?.id === undefined)
+      throw new ExportPipelineError("scan_required", "Open Export multiple chats in its own tab.");
+    return owner.id;
+  },
   clearTimeout: (handle) => globalThis.clearTimeout(handle),
-  ensureContentScript,
   loadRenderers: async () => {
     const [exportOptions, zip] = await Promise.all([
       import("../core/export-options"),
@@ -104,14 +114,12 @@ const defaultDependencies: BatchExportControllerDependencies = {
     return {
       createBatchZipManifestResults: zip.createBatchZipManifestResults,
       defaultExportOptions: exportOptions.DEFAULT_EXPORT_OPTIONS,
-      getExportedMessageCount: exportOptions.getExportedMessageCount,
-      renderBatchZip: zip.renderBatchZip,
-      renderConversationFiles: exportOptions.renderConversationFiles
+      renderBatchZip: zip.renderBatchZip
     };
   },
   now: () => new Date().toISOString(),
-  sendContentMessage: async (tabId, request) =>
-    (await chrome.tabs.sendMessage(tabId, request)) as RuntimeResponse<unknown>,
+  sendRuntimeMessage: async (request) =>
+    (await chrome.runtime.sendMessage(request)) as RuntimeResponse<unknown>,
   setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs)
 };
 
@@ -192,12 +200,16 @@ async function exportTabWithTimeout(
   onProgress: (phase: BatchExportProgressPhase) => void
 ): Promise<BatchZipResult> {
   const operationController = new AbortController();
+  const operationId = crypto.randomUUID();
+  const scope: { ownerTabId?: number } = {};
   const task = exportTab(
     tab,
+    operationId,
     requestedOptions,
     operationController.signal,
     dependencies,
-    onProgress
+    onProgress,
+    scope
   );
   const timed = task.then(
     (result) => ({ result, status: "settled" as const }),
@@ -249,90 +261,152 @@ async function exportTabWithTimeout(
 
   operationController.abort();
   onProgress("cancelling");
-  const cancelRequest = dependencies
-    .sendContentMessage(tab.id, {
-      type: CONTENT_CANCEL_SCAN_MESSAGE
-    } satisfies ContentCancelScanRequest)
-    .catch(() => undefined);
+  let historyReleaseConfirmed = tab.history === undefined || scope.ownerTabId === undefined;
+  const cancelRequest =
+    tab.history !== undefined && scope.ownerTabId === undefined
+      ? Promise.resolve(undefined)
+      : dependencies
+          .sendRuntimeMessage(
+            tab.history !== undefined && scope.ownerTabId !== undefined
+              ? {
+                  type: CHATGPT_HISTORY_RELEASE_MESSAGE,
+                  ownerTabId: scope.ownerTabId,
+                  operationId
+                }
+              : {
+                  type: POPUP_CANCEL_SCAN_MESSAGE,
+                  sourceTabId: tab.id,
+                  operationId
+                }
+          )
+          .then((response) => {
+            if (response.ok) historyReleaseConfirmed = true;
+          })
+          .catch(() => undefined);
   await settleWithinGrace([timed, cancelRequest], timing.cancelGraceMs, dependencies);
+  const warnings = historyReleaseConfirmed
+    ? []
+    : [
+        "Cleanup of the temporary source tab was not confirmed. You can close it after this export."
+      ];
 
   if (outcome.status === "cancelled") {
-    return skippedResult(tab);
+    return { ...skippedResult(tab), warnings };
   }
 
   return {
     error: `Timed out after ${formatDuration(timing.tabTimeoutMs)}. The scan was cancelled and this chat was skipped so the batch could continue.`,
     status: "failed",
     tab,
-    warnings: []
+    warnings
   };
 }
 
 async function exportTab(
   tab: BatchCandidateTab,
+  operationId: string,
   requestedOptions: Partial<ExportOptions> | undefined,
   signal: AbortSignal,
   dependencies: BatchExportControllerDependencies,
-  onProgress: (phase: BatchExportProgressPhase) => void
+  onProgress: (phase: BatchExportProgressPhase) => void,
+  scope: { ownerTabId?: number }
 ): Promise<BatchZipResult> {
+  let result: BatchZipResult;
   try {
-    // Content scripts are addressed by their tab ID, so a batch can scan one
-    // source conversation at a time without stealing the user's focus. The
-    // content-side layout wait uses bounded timers when a background tab's
-    // requestAnimationFrame is suspended.
+    let sourceTab = tab;
     throwIfCancelled(signal);
-    await dependencies.ensureContentScript(tab.id);
+    if (tab.history !== undefined) {
+      scope.ownerTabId = await dependencies.getOwnerTabId();
+      throwIfCancelled(signal);
+      const acquired = (await dependencies.sendRuntimeMessage({
+        type: CHATGPT_HISTORY_ACQUIRE_MESSAGE,
+        operationId,
+        ownerTabId: scope.ownerTabId,
+        target: tab.history
+      })) as RuntimeResponse<ChatGptHistoryAcquireSuccess>;
+      throwIfCancelled(signal);
+      if (!acquired.ok) throw new ExportPipelineError(acquired.error.code, acquired.error.message);
+      sourceTab = acquired.value.tab;
+      if (sourceTab.url !== tab.url || !Number.isSafeInteger(sourceTab.id) || sourceTab.id < 0) {
+        throw new ExportPipelineError(
+          "scan_stale",
+          "The selected history conversation changed. Reload the history list."
+        );
+      }
+    }
+    // Use the same source-pinned history/scan/render pipeline as single export.
+    // Calling the content scanner directly would bypass complete API history.
     throwIfCancelled(signal);
     onProgress("scanning");
 
-    const scanResponse = (await dependencies.sendContentMessage(tab.id, {
-      type: CONTENT_SCAN_MESSAGE
-    } satisfies ContentScanRequest)) as RuntimeResponse<ScanSummary>;
+    const scanResponse = (await dependencies.sendRuntimeMessage({
+      type: POPUP_SCAN_MESSAGE,
+      sourceTabId: sourceTab.id,
+      expectedSourceUrl: tab.url,
+      operationId
+    } satisfies PopupScanRequest)) as RuntimeResponse<ScanSummary>;
     throwIfCancelled(signal);
 
     if (!scanResponse.ok) {
       throw new ExportPipelineError(scanResponse.error.code, scanResponse.error.message);
     }
 
-    const response = (await dependencies.sendContentMessage(tab.id, {
-      ...(scanResponse.value.scanId !== undefined ? { scanId: scanResponse.value.scanId } : {}),
-      type: CONTENT_GET_CACHED_CONVERSATION_MESSAGE
-    } satisfies ContentGetCachedConversationRequest)) as RuntimeResponse<CachedConversationResult>;
+    if (scanResponse.value.scanId === undefined || scanResponse.value.sourceUrl !== tab.url) {
+      throw new ExportPipelineError(
+        "scan_stale",
+        "The source conversation changed. Start a new export."
+      );
+    }
+    onProgress("rendering");
+    const renderer = await dependencies.loadRenderers();
+    throwIfCancelled(signal);
+    const options = { ...renderer.defaultExportOptions, ...requestedOptions };
+    const response = (await dependencies.sendRuntimeMessage({
+      type: POPUP_EXPORT_MESSAGE,
+      download: false,
+      returnFiles: true,
+      sourceTabId: sourceTab.id,
+      expectedSourceUrl: tab.url,
+      operationId,
+      scanId: scanResponse.value.scanId,
+      options
+    } satisfies PopupExportRequest)) as RuntimeResponse<PopupExportSuccess>;
     throwIfCancelled(signal);
 
     if (!response.ok) {
       throw new ExportPipelineError(response.error.code, response.error.message);
     }
 
-    if (!response.value.hasConversation) {
-      throw new ExportPipelineError(
-        response.value.reason === "stale" ? "scan_stale" : "scan_required",
-        response.value.reason === "stale"
-          ? "The conversation changed. Refresh it before exporting."
-          : "Prepare the conversation before exporting."
-      );
-    }
-
-    onProgress("rendering");
-    const renderer = await dependencies.loadRenderers();
-    throwIfCancelled(signal);
-    const options = { ...renderer.defaultExportOptions, ...requestedOptions };
-    const conversation = response.value.conversation;
-
-    return {
-      completenessStatus: conversation.completeness.status,
-      files: renderer.renderConversationFiles(conversation, options),
-      messageCount: renderer.getExportedMessageCount(conversation, options),
+    result = {
+      completenessStatus: response.value.completenessStatus ?? "unknown",
+      files: response.value.files.map(deserializeRenderedFile),
+      messageCount: response.value.exportedMessageCount,
       status: "success",
       tab,
-      warnings: [
-        ...conversation.completeness.warnings,
-        ...conversation.completeness.platformWarnings
-      ]
+      warnings: response.value.warnings
     };
   } catch (error) {
-    return failedResult(tab, error);
+    result = failedResult(tab, error);
   }
+  if (tab.history !== undefined && scope.ownerTabId !== undefined) {
+    try {
+      const released = await dependencies.sendRuntimeMessage({
+        type: CHATGPT_HISTORY_RELEASE_MESSAGE,
+        operationId,
+        ownerTabId: scope.ownerTabId
+      });
+      if (!released.ok) throw new Error("cleanup_failed");
+    } catch {
+      result = {
+        ...result,
+        warnings: [
+          ...result.warnings,
+          "The temporary source tab could not be closed automatically. You can close it after this export."
+        ]
+      };
+    }
+  }
+  return result;
 }
 
 function failedResult(tab: BatchCandidateTab, error: unknown): BatchZipResult {

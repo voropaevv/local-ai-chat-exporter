@@ -2,10 +2,7 @@ import {
   collectChatGptConversation,
   type ChatGptScrollCollectorOptions
 } from "../adapters/chatgpt/scroll-collector";
-import {
-  loadChatGptConversationData,
-  mergeChatGptConversationMessages
-} from "../adapters/chatgpt/conversation-data";
+import { mergeChatGptConversationMessages } from "../adapters/chatgpt/conversation-data";
 import { extractVisibleChatGptMessages } from "../adapters/chatgpt/extract-visible";
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
 import type { PlatformAdapter } from "../adapters/types";
@@ -18,7 +15,6 @@ import type { ChatGptConversationData } from "../adapters/chatgpt/conversation-d
 export interface ConversationScanOptions extends Omit<ChatGptScrollCollectorOptions, "document"> {
   readonly document?: Document;
   readonly exportedAt?: string;
-  readonly fetcher?: typeof fetch;
   readonly chatGptConversationData?: ChatGptConversationData;
   readonly chatGptConversationDataWarning?: string;
   readonly hostname?: string;
@@ -60,24 +56,21 @@ export async function scanCurrentConversationExport(
     });
   }
 
-  const conversationData =
-    options.chatGptConversationData ??
-    (await loadChatGptConversationData(href, {
-      fetcher: options.fetcher
-    }).catch(() => undefined));
+  if (options.signal?.aborted) {
+    throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+  }
+  const conversationData = options.chatGptConversationData;
 
   if (conversationData !== undefined) {
     const visibleMessages = normalizeMessagesWithStats(
       extractVisibleChatGptMessages(rootDocument)
     ).messages;
-    const messages = mergeChatGptConversationMessages(
-      conversationData.messages,
-      visibleMessages
-    );
+    const messages = mergeChatGptConversationMessages(conversationData.messages, visibleMessages);
     const completeness = buildCompletenessReport({
       duplicateCount: 0,
       messages,
-      platformWarnings: [],
+      platformWarnings: conversationData.warnings ?? [],
+      scanWarnings: conversationData.warnings ?? [],
       reachedBottom: true,
       reachedTop: true,
       scrollSteps: 0,
@@ -99,7 +92,7 @@ export async function scanCurrentConversationExport(
   }
 
   const result = await collectChatGptConversation({
-    ...withoutFetchOption(options),
+    ...withoutConversationData(options),
     document: rootDocument
   });
 
@@ -125,6 +118,10 @@ export async function scanCurrentConversationExport(
         ? result.completeness
         : {
             ...result.completeness,
+            status:
+              result.completeness.status === "complete"
+                ? "probably_complete"
+                : result.completeness.status,
             platformWarnings: [
               ...result.completeness.platformWarnings,
               options.chatGptConversationDataWarning
@@ -134,14 +131,10 @@ export async function scanCurrentConversationExport(
   };
 }
 
-function withoutFetchOption(
+function withoutConversationData(
   options: ConversationScanOptions
-): Omit<
-  ConversationScanOptions,
-  "fetcher" | "chatGptConversationData" | "chatGptConversationDataWarning"
-> {
+): Omit<ConversationScanOptions, "chatGptConversationData" | "chatGptConversationDataWarning"> {
   const collectorOptions = { ...options };
-  delete collectorOptions.fetcher;
   delete collectorOptions.chatGptConversationData;
   delete collectorOptions.chatGptConversationDataWarning;
   return collectorOptions;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { renderConversationFiles, type ExportOptions } from "../core/export-options";
 import {
@@ -26,7 +26,7 @@ import {
   applyPreviewMessageSelection,
   buildPreviewSelectionOptions,
   createPreviewMessageSummary,
-  togglePreviewMessageSelection,
+  updatePreviewMessageSelection,
   type PreviewSelectionState
 } from "./preview-selection";
 import { readStoredRedactionSettings } from "./redaction-storage";
@@ -448,13 +448,22 @@ interface MessageSelectorProps {
   readonly selectedMessageIds: readonly string[];
 }
 
-function MessageSelector({ conversation, onChange, selectedMessageIds }: MessageSelectorProps) {
+export function MessageSelector({
+  conversation,
+  onChange,
+  selectedMessageIds
+}: MessageSelectorProps) {
+  const anchorRef = useRef<{ conversation: ConversationExport; messageId: string }>();
+
   return (
     <div className="preview-message-selector">
       <div className="button-row">
         <button
           className="secondary-action compact-action"
-          onClick={() => onChange(conversation.messages.map((message) => message.id))}
+          onClick={() => {
+            anchorRef.current = undefined;
+            onChange([...new Set(conversation.messages.map((message) => message.id))]);
+          }}
           type="button"
         >
           All
@@ -462,7 +471,10 @@ function MessageSelector({ conversation, onChange, selectedMessageIds }: Message
         <button
           className="secondary-action compact-action"
           disabled={selectedMessageIds.length === 0}
-          onClick={() => onChange([])}
+          onClick={() => {
+            anchorRef.current = undefined;
+            onChange([]);
+          }}
           type="button"
         >
           None
@@ -475,15 +487,31 @@ function MessageSelector({ conversation, onChange, selectedMessageIds }: Message
           {selectedMessageIds.length}
         </span>
       </div>
+      <p className="status-text" id="preview-selection-hint">
+        Shift-click to select a range.
+      </p>
       <ul aria-label="Select messages">
         {conversation.messages.map((message) => (
           <li key={message.id}>
             <label>
               <input
                 checked={selectedMessageIds.includes(message.id)}
-                onChange={() =>
-                  onChange(togglePreviewMessageSelection(selectedMessageIds, message.id))
-                }
+                aria-describedby="preview-selection-hint"
+                onClick={(event) => {
+                  const anchor = anchorRef.current;
+                  onChange(
+                    updatePreviewMessageSelection(
+                      selectedMessageIds,
+                      conversation.messages.map((candidate) => candidate.id),
+                      message.id,
+                      event.currentTarget.checked,
+                      event.shiftKey && anchor?.conversation === conversation
+                        ? anchor.messageId
+                        : undefined
+                    )
+                  );
+                  anchorRef.current = { conversation, messageId: message.id };
+                }}
                 type="checkbox"
               />
               <span>

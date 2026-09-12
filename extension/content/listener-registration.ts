@@ -1,5 +1,5 @@
 // Version this key with the content-message protocol in src/core/messages.ts.
-export const CONTENT_LISTENER_STATE_KEY = "__jelluviContentV7ListenerRegistered";
+export const CONTENT_LISTENER_STATE_KEY = "__jelluviContentV8ListenerRegistered";
 
 export function registerContentListenerOnce(
   state: Record<string, unknown>,

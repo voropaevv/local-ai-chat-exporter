@@ -1,6 +1,91 @@
-# Release QA — Jelluvi 0.2.13
+# Release QA — Jelluvi 0.2.14
 
-## Current candidate checkpoint — 2026-09-11
+## Current candidate checkpoint — 2026-09-12
+
+**NO-GO for public release while the current-candidate acceptance matrix remains open.**
+The two successful installed-0.2.13 exports below are retained as historical evidence,
+not acceptance of the revised pipeline. Review reproduced cancellation and source-navigation
+races, permissive pagination termination, legacy hidden-message leakage, image-only turn loss,
+and DOM enrichment replacing complete message text with a partial fragment.
+
+The 0.2.14 candidate pins every scan/export to its original source URL and operation ID,
+registers cancellation before the initial tab lookup, and aborts pending page requests on
+cancellation, navigation, source closure or a bounded deadline. The progress tab is created
+before history retrieval starts, so its lifecycle—not the popup—owns preparation.
+Every fresh export scans again; previously prepared snapshots remain explicit preview inputs.
+Conversation pagination requires a boolean end marker and valid non-repeating cursors.
+Hidden/non-final/tool records are excluded, image-only turns remain attachment references with
+warnings, and DOM enrichment cannot overwrite authoritative complete message text.
+Session/history retrieval and media limitations are now disclosed in the privacy and Store copy.
+
+The same scan/render pipeline now serves single-chat and batch export. A dedicated workspace
+offers open tabs from supported providers or explicit, paginated ChatGPT history metadata. Nothing
+is preselected. Only selected history conversations open in inactive temporary tabs; source URL,
+operation ID and the owning extension document are checked. Cleanup covers cancellation,
+workspace closure and worker restart, preserves repurposed user tabs, and reports uncertain cleanup.
+Search is explicitly limited to loaded titles. Reloading history clears ordinal selections;
+open-tab refresh preserves selection only when both tab ID and conversation URL still match.
+Formats are adjacent to the ZIP action, failed jobs can be retried independently, and cancellation
+preserves completed files. Preview adds ordered Shift-click range selection.
+
+Actual Chromium testing exposed that `tabs.get` omits the extension workspace URL without broad
+`tabs` permission. Ownership validation now uses the actual extension document returned by
+[`runtime.getContexts`](https://developer.chrome.com/docs/extensions/reference/api/runtime#method-getContexts),
+plus sender identity and tab existence. No extra permission was added. This history-workspace
+capability needs Chromium 114 or newer; existing open-chat export remains available otherwise.
+
+Current verification checkpoint:
+
+- Final full `pnpm check` passed: 86 files / 602 tests, lint, typecheck, five provider contracts,
+  icons, brand, production build, classic content-script budget, Preview and site build.
+- Final E2E: 14/14 passed (8 actual Chromium extension flows, 6 source contracts). Actual flows
+  cover cold DOM hydration, hidden paginated history, cancellation, source navigation and selected
+  history export. The history workflow loaded metadata only after a click, exported exactly two
+  checked conversations out of three, verified their ordered JSON inside the downloaded ZIP,
+  kept temporary tabs inactive and sequential, preserved the original source, and removed leases
+  on success, cancellation and workspace closure. These use controlled synthetic server fixtures,
+  not acceptance against the user's installed Brave copy or every provider's current live service.
+- All eight synthetic PDF pages (light/dark) were visually reviewed and OCR checked. Four exact
+  original-chat regression sections (4,448 characters, three A4 pages) were also rendered through
+  the production parser/renderer, visually inspected and OCR checked. A raw citation marker that
+  produced replacement glyphs was fixed: known sources become links, unavailable references are
+  explicitly marked and warned about. No guessed source URLs or private prose were committed.
+  This is targeted original-text coverage, not a full review of every page of the long conversation.
+- Thirteen synthetic-data UI screenshots were checked, including both batch modes, 390px reflow,
+  keyboard focus, forced colors and real Space/Shift-click selection. Store/design approval and
+  actual account acceptance remain distinct from these mock-backed visual checks.
+- Latest installed-profile live exports, all supported-browser/provider acceptance, final
+  site/design approval, public Privacy Policy readback and Store submission remain open.
+  MacBook is outside this task; no remote display or installation is used.
+- Release guards passed: no remote code, minimal manifest permissions, release Preview and golden
+  output hygiene (one fixture). `pnpm audit --prod` found no known vulnerabilities. Gitleaks is not
+  installed locally; fresh CI history scanning remains a separate gate.
+- Runtime: Node 22.22.3, pnpm 10.6.2. Content script: 94,367 bytes. The local embedded-font renderer
+  retains its existing bundle-size warning; no claim of removing that cost is made.
+- Candidate archive: `release/jelluvi-v0.2.14.zip`, 1,268,597 bytes, 37 entries. Two independent
+  builds/packages produced identical SHA256 `3e08880997754a1421644dbbf106641f894ec3bcabe69f286df961e189551faa`.
+  Archive integrity, checksum readback and source/dist/ZIP manifest equality passed. Build input
+  fingerprint: `6f34fe979147e1ee2f70cbbaeff3d8f10c820b5cd18cc88a3493e50bbb18283c`.
+  No merge, release tag, GitHub Release, Store submission or website deployment is part of this checkpoint.
+
+## Competitive feature scope — 2026-09-12
+
+The comparison used current primary product/source pages: [ChatGPT Exporter](https://www.chatgptexporter.com/en/pricing),
+[AI Exporter](https://saveai.net/docs), [TheBluCoder](https://github.com/TheBluCoder/AI-chat-exporter),
+[VMSTE](https://github.com/VMSTE/chatgpt-exporter) and [pinguarmy](https://github.com/pinguarmy/ai-chat-exporter).
+This is a feature-gap comparison, not a measured market ranking or a claim of complete parity.
+
+| Capability | Candidate disposition |
+| --- | --- |
+| Selected multi-chat export | Dedicated open-tabs/history picker, search/filter, no automatic selection, ZIP and retry failed |
+| Common local formats | MD, TXT, JSON, CSV, HTML, PDF, DOCX, bounded PNG and ZIP; no export pricing gates |
+| Selected messages and ranges | Existing Preview scopes plus Shift-click range selection |
+| Local organization and privacy | Existing opt-in Library, Markdown profiles, filename settings, redaction and local rendering |
+| Cloud/Notion sync, unattended backups, shared links | Not added implicitly; these introduce separate external-account/data-transfer authority |
+| Complete support for every competitor provider/media/Canvas feature | Not claimed; five existing providers retain their documented support levels and media limitations |
+| CJK, advanced formulas, complete original-file backups | Existing limitations remain explicit; no unsupported fidelity claim |
+
+## Historical candidate checkpoint — 2026-09-11 (0.2.13)
 
 Installed `0.2.12` reproduced a cold-background failure on the authenticated long
 ChatGPT conversation: after a fresh page reload, Export was launched immediately,
@@ -40,8 +125,10 @@ canonical role/id/content hash was identical:
   `28a110ca4470c84eaa9b6e9d808f081b83c3ce48135156361edb19b015b9b329`.
 - `gitleaks` is not installed on this host; the pinned CI history scan remains required.
 
-The cold, complete and background long-ChatGPT acceptance gate is **PASS**. No Store
-submission, public tag, GitHub Release or merge was performed in this checkpoint.
+These two runs passed their observed normal-path checks. They did not establish cancellation,
+source-navigation safety, independent completeness or background loading throughout the entire
+preparation phase. The stronger acceptance gate is reopened by the 0.2.14 checkpoint above.
+No Store submission, public tag, GitHub Release or merge was performed in this checkpoint.
 
 ## Previous local checkpoint — 2026-09-11
 

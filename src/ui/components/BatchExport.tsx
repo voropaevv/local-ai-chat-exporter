@@ -1,3 +1,6 @@
+import type { ComponentChildren } from "preact";
+import { useState } from "preact/hooks";
+
 import type { BatchCandidateTab, BatchManifestResult } from "../../core/batch";
 import type { BatchExportProgress, BatchExportProgressPhase } from "../batch-export-controller";
 
@@ -8,16 +11,24 @@ interface BatchExportProps {
   readonly canCancel: boolean;
   readonly cancelRequested: boolean;
   readonly candidates: readonly BatchCandidateTab[];
+  readonly discoveryControls?: ComponentChildren;
+  readonly historyHasMore?: boolean;
+  readonly historyLoaded?: boolean;
+  readonly historyTotal?: number;
+  readonly formatPicker?: ComponentChildren;
   readonly onCancel: () => void;
   readonly onClearSelection: () => void;
   readonly onExportSelected: () => void;
   readonly onLoadAllCandidates: () => void;
   readonly onLoadChatGptCandidates: () => void;
-  readonly onSelectAll: () => void;
+  readonly onRetryFailed?: () => void;
+  readonly onSelectAll: (shownTabIds: readonly number[]) => void;
   readonly onToggleTab: (tabId: number) => void;
   readonly progress?: BatchExportProgress;
   readonly results: readonly BatchManifestResult[];
   readonly selectedTabIds: readonly number[];
+  readonly settingsReady?: boolean;
+  readonly source?: "tabs" | "history";
   readonly status: string;
   readonly statusTone: BatchStatusTone;
 }
@@ -27,46 +38,100 @@ export function BatchExport({
   canCancel,
   cancelRequested,
   candidates,
+  discoveryControls,
+  historyHasMore = false,
+  historyLoaded = false,
+  historyTotal,
+  formatPicker,
   onCancel,
   onClearSelection,
   onExportSelected,
   onLoadAllCandidates,
   onLoadChatGptCandidates,
+  onRetryFailed,
   onSelectAll,
   onToggleTab,
   progress,
   results,
   selectedTabIds,
+  settingsReady = true,
+  source = "tabs",
   status,
   statusTone
 }: BatchExportProps) {
+  const [query, setQuery] = useState("");
+  const [provider, setProvider] = useState("all");
   const statusClassName = getBatchStatusClassName(statusTone);
   const progressLabel = progress === undefined ? undefined : formatBatchProgress(progress);
+  const shownCandidates = candidates.filter(
+    (tab) =>
+      (provider === "all" || tab.platform === provider) &&
+      tab.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+  );
+  const providers = [
+    ...new Map(candidates.map((tab) => [tab.platform, tab.platformLabel])).entries()
+  ];
+  const hiddenSelectedCount = selectedTabIds.filter(
+    (id) => !shownCandidates.some((tab) => tab.id === id)
+  ).length;
+  const failedCount = results.filter((result) => result.status === "failed").length;
 
   return (
-    <div className="settings-control-stack" aria-busy={busy}>
+    <div className="settings-control-stack batch-export-panel" aria-busy={busy}>
+      <h2>{source === "tabs" ? "Choose open chats" : "Choose ChatGPT conversations"}</h2>
       <p className="batch-scope-note status-text" id="batch-chatgpt-scope-note">
-        ChatGPT only requests access to chatgpt.com and legacy chat.openai.com. Chats stay local.
+        {source === "tabs"
+          ? "Only chats already open in this browser. This mode does not search account history. ChatGPT requests access to chatgpt.com and legacy chat.openai.com; More providers also requests the other supported AI sites. Your exports stay local."
+          : "Load titles from your signed-in ChatGPT tab. Only selected chats are read; exports stay local."}
       </p>
-      <div className="button-row">
-        <button
-          aria-describedby="batch-chatgpt-scope-note"
-          className="primary-action compact-action"
-          disabled={busy}
-          onClick={onLoadChatGptCandidates}
-          type="button"
-        >
-          Find ChatGPT tabs
-        </button>
-        <button
-          className="secondary-action compact-action"
-          disabled={busy}
-          onClick={onLoadAllCandidates}
-          type="button"
-        >
-          More providers
-        </button>
-      </div>
+      {discoveryControls ?? (
+        <div className="button-row">
+          <button
+            aria-describedby="batch-chatgpt-scope-note"
+            className="secondary-action compact-action"
+            disabled={busy}
+            onClick={onLoadChatGptCandidates}
+            type="button"
+          >
+            Find ChatGPT tabs
+          </button>
+          <button
+            className="secondary-action compact-action"
+            disabled={busy}
+            onClick={onLoadAllCandidates}
+            type="button"
+          >
+            More providers
+          </button>
+        </div>
+      )}
+      {source === "history" && historyLoaded ? (
+        <p className="status-text" role="status">
+          {candidates.length} {candidates.length === 1 ? "chat" : "chats"} loaded
+          {historyTotal === undefined ? "" : ` of ${historyTotal}`}
+          {historyHasMore
+            ? " · More available. Search covers loaded chats only."
+            : " · No more conversations in this list."}
+        </p>
+      ) : null}
+      {candidates.length === 0 && !busy ? (
+        <div className="batch-empty-state">
+          <strong>
+            {source === "tabs"
+              ? "Start with your open chats"
+              : historyLoaded
+                ? "No conversations found"
+                : "Your history, only when you ask"}
+          </strong>
+          <p>
+            {source === "tabs"
+              ? "Open the conversations you need, then find their tabs above. Nothing is selected automatically."
+              : historyLoaded
+                ? "Try reloading the list from your signed-in ChatGPT tab."
+                : "Keep a signed-in ChatGPT tab open, then load its conversation list. Nothing is selected automatically."}
+          </p>
+        </div>
+      ) : null}
       {busy ? (
         <>
           <div
@@ -108,14 +173,46 @@ export function BatchExport({
         </>
       ) : null}
       {candidates.length > 0 ? (
-        <div className="button-row">
+        <div className="batch-picker-filters">
+          <label className="field-row">
+            <span>{source === "tabs" ? "Search chats" : "Search loaded chats"}</span>
+            <input
+              disabled={busy}
+              onInput={(event) => setQuery(event.currentTarget.value)}
+              placeholder="Search by title"
+              type="search"
+              value={query}
+            />
+          </label>
+          {source === "tabs" ? (
+            <label className="field-row">
+              <span>Provider</span>
+              <select
+                aria-label="Filter by provider"
+                disabled={busy}
+                onChange={(event) => setProvider(event.currentTarget.value)}
+                value={provider}
+              >
+                <option value="all">All providers</option>
+                {providers.map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+      {candidates.length > 0 ? (
+        <div className="button-row batch-selection-toolbar">
           <button
             className="secondary-action compact-action"
-            disabled={busy}
-            onClick={onSelectAll}
+            disabled={busy || shownCandidates.length === 0}
+            onClick={() => onSelectAll(shownCandidates.map((tab) => tab.id))}
             type="button"
           >
-            Select all
+            Select all shown
           </button>
           <button
             className="secondary-action compact-action"
@@ -127,12 +224,16 @@ export function BatchExport({
           </button>
           <span aria-live="polite" className="status-text">
             {selectedTabIds.length} selected
+            {hiddenSelectedCount > 0 ? ` · ${hiddenSelectedCount} hidden by filters` : ""}
           </span>
         </div>
       ) : null}
       {candidates.length > 0 ? (
-        <ul className="batch-tab-list" aria-label="Open AI chat tabs">
-          {candidates.map((tab) => (
+        <ul
+          className="batch-tab-list"
+          aria-label={source === "tabs" ? "Open AI chat tabs" : "Loaded ChatGPT conversations"}
+        >
+          {shownCandidates.map((tab) => (
             <li key={tab.id}>
               <label className="check-row">
                 <input
@@ -141,27 +242,41 @@ export function BatchExport({
                   onChange={() => onToggleTab(tab.id)}
                   type="checkbox"
                 />
-                <span>
+                <span className="batch-tab-copy">
                   <strong>{tab.title}</strong>
-                  <span className="muted"> - {formatBatchTabContext(tab, candidates)}</span>
+                  <span className="muted">
+                    {tab.platformLabel} · {formatBatchTabContext(tab, candidates)}
+                  </span>
                 </span>
               </label>
             </li>
           ))}
         </ul>
       ) : null}
-      {candidates.length > 0 ? (
-        <div className="button-row">
+      {candidates.length > 0 && shownCandidates.length === 0 ? (
+        <p className="batch-empty-state" role="status">
+          No chats match these filters. Your selection is unchanged.
+        </p>
+      ) : null}
+      <div className="batch-export-actions">
+        {formatPicker}
+        <div className="batch-export-actions__submit">
           <button
-            className="secondary-action"
-            disabled={busy || selectedTabIds.length === 0}
+            className="primary-action"
+            disabled={busy || !settingsReady || selectedTabIds.length === 0}
             onClick={onExportSelected}
             type="button"
           >
-            Export selected to ZIP
+            Export {selectedTabIds.length} {selectedTabIds.length === 1 ? "chat" : "chats"} to ZIP
           </button>
+          <p className="status-text">
+            Named files for each chat, in one ZIP. Keep this workspace open; you can switch tabs.
+            {source === "history"
+              ? " Selected history chats open in temporary background tabs."
+              : ""}
+          </p>
         </div>
-      ) : null}
+      </div>
       {status ? (
         <p
           aria-live={statusTone === "error" ? "assertive" : "polite"}
@@ -172,20 +287,42 @@ export function BatchExport({
         </p>
       ) : null}
       {results.length > 0 ? (
-        <ul className="batch-result-list" aria-label="Batch export results">
-          {results.map((result) => (
-            <li key={`${result.tabId}-${result.status}`}>
-              <strong>{result.title}</strong>: {result.status}
-              {result.status === "failed"
-                ? ` - ${result.error}`
-                : result.status === "skipped"
-                  ? " - batch was cancelled"
-                  : ` - ${result.messageCount} messages${
-                      result.completenessStatus !== "complete" ? " - may be partial" : ""
-                    }`}
-            </li>
-          ))}
-        </ul>
+        <section className="batch-results" aria-labelledby="batch-results-title">
+          <div className="batch-results__header">
+            <h2 id="batch-results-title">Export results</h2>
+            {failedCount > 0 && onRetryFailed !== undefined ? (
+              <button
+                className="secondary-action compact-action"
+                disabled={busy || !settingsReady}
+                onClick={onRetryFailed}
+                type="button"
+              >
+                Retry failed ({failedCount})
+              </button>
+            ) : null}
+          </div>
+          <ul className="batch-result-list" aria-label="Batch export results">
+            {results.map((result) => (
+              <li key={`${result.tabId}-${result.status}`}>
+                <strong>{result.title}</strong>: {result.status}
+                {result.status === "failed"
+                  ? ` - ${result.error}`
+                  : result.status === "skipped"
+                    ? " - batch was cancelled"
+                    : ` - ${result.messageCount} messages${
+                        result.completenessStatus !== "complete" ? " - may be partial" : ""
+                      }`}
+                {result.warnings.length > 0 ? (
+                  <ul className="batch-result-warnings" aria-label={`Warnings for ${result.title}`}>
+                    {result.warnings.map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
     </div>
   );

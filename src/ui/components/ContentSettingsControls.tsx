@@ -33,14 +33,14 @@ export function ContentSettingsControls({ onChange, settings }: ContentSettingsC
             onChange={(event) => onChange({ includeReasoning: event.currentTarget.checked })}
             type="checkbox"
           />
-          <span title="Includes only thinking sections already visible on the page. Hidden model reasoning is never accessed.">
+          <span title="Includes only thinking sections already visible on the page. Hidden model reasoning is never included in exports.">
             Include visible reasoning blocks
           </span>
         </label>
       </div>
       <span className="sr-only" id="visible-reasoning-help">
         Includes only thinking sections already visible on the page. Hidden model reasoning is never
-        accessed.
+        included in exports.
       </span>
       <MarkdownProfileSelector
         onChange={(markdownProfile) => onChange({ markdownProfile })}
