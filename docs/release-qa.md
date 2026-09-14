@@ -1,6 +1,6 @@
 # Release QA — Jelluvi 0.2.14
 
-## Current candidate checkpoint — 2026-09-12
+## Current candidate checkpoint — 2026-09-14
 
 **NO-GO for public release while the current-candidate acceptance matrix remains open.**
 The two successful installed-0.2.13 exports below are retained as historical evidence,
@@ -57,22 +57,22 @@ Current verification checkpoint:
   actual account acceptance remain distinct from these mock-backed visual checks.
 - Latest installed-profile live exports, all supported-browser/provider acceptance, final
   site/design approval, public Privacy Policy readback and Store submission remain open.
-  MacBook is outside this task; no remote display or installation is used.
+  The verified `0.2.14` `dist` is installed at the existing unpacked-extension path on MacBook:
+  manifest version, 33-file provenance input and `distSha256`
+  `56fe41666c155977232ada1b6c657402e4c4f3ff058d78c66f749d6268edc2ef`
+  passed direct peer readback. Brave was already running during replacement, so an in-browser
+  reload/restart and UI version readback remain required before calling the MacBook runtime current.
+  Screen Sharing is prohibited for this workflow.
 - Release guards passed: no remote code, minimal manifest permissions, release Preview and golden
-  output hygiene (one fixture). `pnpm audit --prod` found no known vulnerabilities. Gitleaks is not
-  installed locally. CI run `34680028823` at `54799cf` passed its pinned Gitleaks history scan
-  (154 commits), full check and Store assets, but failed all eight actual E2E flows before a
-  Chromium debugging port appeared. The six source contracts passed. Browser stderr was discarded
-  by the launcher, so this run proves a Linux test-browser startup failure, not its exact cause
-  or an export failure. The test-only launcher repair captures bounded startup diagnostics and
-  restores the usual Playwright sandbox setting only inside Linux CI; a fresh CI run is required.
-  The launcher has four focused process/argument regressions. A subsequent parallel local run
-  passed 12/14 but two history-list assertions expired before metadata arrived; its traces showed
-  roughly 30-second browser tab queries and teardown while native fixture browsers overlapped.
-  History assertions now wait for the operation's bounded terminal state before checking exact
-  row counts, with failure-state capture. Native-browser scenarios run sequentially because they
-  share foreground-window state; source-only checks can still run in parallel. This is not
-  acceptance of a production timing defect.
+  output hygiene (one fixture). `pnpm audit --prod` found no known vulnerabilities. Final CI run
+  [`34685656127`](https://github.com/voropaevv/local-ai-chat-exporter/actions/runs/34685656127)
+  at `3a839c9` passed its pinned Gitleaks history scan, full 88-file / 607-test check, all 14 E2E
+  scenarios, Store assets, release security checks and artifact upload.
+  An earlier parallel local run passed 12/14 but two history-list assertions expired before metadata
+  arrived; its traces showed roughly 30-second browser tab queries and teardown while native fixture
+  browsers overlapped. History assertions now wait for the operation's bounded terminal state before
+  checking exact row counts, with failure-state capture. Native-browser scenarios run sequentially
+  because they share foreground-window state; source-only checks can still run in parallel.
   A first sequential run passed 13/14: one paginated-API test did not observe a download within
   60 seconds after both synthetic responses completed. Its isolated diagnostic rerun passed;
   the cause is unresolved, so a passing rerun is not called a production repair. API failures now
@@ -88,6 +88,15 @@ Current verification checkpoint:
   Archive integrity, checksum readback and source/dist/ZIP manifest equality passed. Build input
   fingerprint: `397ee8e63d2e9c15d32d1a2494622e822ecfb13a3f2811c1dab771e70160d02b`.
   No merge, release tag, GitHub Release, Store submission or website deployment is part of this checkpoint.
+
+### Cross-device build completion gate
+
+After every new release-candidate build, copy the exact verified `dist` to MacBook through the
+authenticated `vlados-bridge` workflow and read back its manifest version, provenance file count and
+`distSha256`. Do not call the build complete if these differ. If Brave is already running, also reload
+the unpacked extension or restart Brave and read back the live UI version; matching files on disk alone
+do not prove that the running extension updated. Never use Screen Sharing between Mac Studio and
+MacBook for this gate.
 
 ## Competitive feature scope — 2026-09-12
 
@@ -271,8 +280,8 @@ rejected extension-management navigation. Do not bypass this through another sur
 The 10-second top quiet interval is a DOM heuristic, not server-history completeness proof.
 Keep source and export-job tabs open; discarded tabs or browser sleep are not guaranteed.
 
-Next action: install the latest candidate through an authorized available interface,
-then execute the real cold-history and five-provider matrix. The original requested
+Next action: reload the installed MacBook extension and verify its live UI version, then execute
+the real cold-history and five-provider matrix. The original requested
 release-reliability outcome remains incomplete until these gates are satisfied.
 
 ## Active hardening checkpoint — 2026-09-11
