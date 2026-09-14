@@ -28,13 +28,20 @@ export function ContentSettingsControls({ onChange, settings }: ContentSettingsC
         </label>
         <label className="check-row">
           <input
+            aria-describedby="visible-reasoning-help"
             checked={settings.includeReasoning}
             onChange={(event) => onChange({ includeReasoning: event.currentTarget.checked })}
             type="checkbox"
           />
-          <span>Visible reasoning</span>
+          <span title="Includes only thinking sections already visible on the page. Hidden model reasoning is never included in exports.">
+            Include visible reasoning blocks
+          </span>
         </label>
       </div>
+      <span className="sr-only" id="visible-reasoning-help">
+        Includes only thinking sections already visible on the page. Hidden model reasoning is never
+        included in exports.
+      </span>
       <MarkdownProfileSelector
         onChange={(markdownProfile) => onChange({ markdownProfile })}
         value={settings.markdownProfile}

@@ -1,23 +1,31 @@
-import type { ExportOptions, SerializedExportError } from "./export-options";
-import type { BatchCandidateTab, BatchManifestResult } from "./batch";
-import type { CompletenessReport, ConversationExport, ExportFormat } from "./schema";
+import type { SerializedExportError } from "./export-errors";
+import type { ExportOptions } from "./export-options";
+import type { DiagnosticReport } from "./diagnostics";
+import type { BatchCandidateTab } from "./batch";
+import type {
+  CompletenessReport,
+  ConversationExport,
+  ExportedMessage,
+  ExportFormat
+} from "./schema";
 import type { RenderedBytes, RenderedFile } from "../renderers";
 
 export const POPUP_SCAN_MESSAGE = "jelluvi/scan-current-tab";
 export const POPUP_CANCEL_SCAN_MESSAGE = "jelluvi/cancel-scan";
 export const POPUP_EXPORT_MESSAGE = "jelluvi/export-current-tab";
 export const POPUP_BATCH_LIST_MESSAGE = "jelluvi/list-open-chat-tabs";
-export const POPUP_BATCH_EXPORT_MESSAGE = "jelluvi/export-open-chat-tabs";
 export const POPUP_GET_ACTIVE_TAB_INFO_MESSAGE = "jelluvi/get-active-tab-info";
 export const POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/get-scan-cache-summary";
 export const POPUP_OPEN_PREVIEW_MESSAGE = "jelluvi/open-preview";
+export const SETTINGS_GET_DIAGNOSTICS_MESSAGE = "jelluvi/get-diagnostics";
 export const PREVIEW_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/preview-get-cached-conversation";
 export const PREVIEW_RETURN_TO_SOURCE_MESSAGE = "jelluvi/preview-return-to-source";
-export const CONTENT_SCAN_MESSAGE = "jelluvi/content-scan";
-export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/content-cancel-scan";
-export const CONTENT_EXPORT_MESSAGE = "jelluvi/content-export";
-export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/content-get-scan-cache-summary";
-export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/content-get-cached-conversation";
+// Keep content requests versioned so a listener left in an already-open tab
+// cannot race the freshly injected listener after an extension update.
+export const CONTENT_SCAN_MESSAGE = "jelluvi/v8/content-scan";
+export const CONTENT_CANCEL_SCAN_MESSAGE = "jelluvi/v8/content-cancel-scan";
+export const CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE = "jelluvi/v8/content-get-scan-cache-summary";
+export const CONTENT_GET_CACHED_CONVERSATION_MESSAGE = "jelluvi/v8/content-get-cached-conversation";
 
 export interface ScanSummary {
   readonly completeness: CompletenessReport;
@@ -28,44 +36,57 @@ export interface ScanSummary {
 }
 
 export interface PopupScanRequest {
+  readonly expectedSourceUrl?: string;
+  readonly operationId?: string;
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_SCAN_MESSAGE;
 }
 
 export interface PopupCancelScanRequest {
+  readonly operationId?: string;
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_CANCEL_SCAN_MESSAGE;
 }
 
 export interface PopupExportRequest {
+  readonly expectedSourceUrl?: string;
+  readonly operationId?: string;
   readonly type: typeof POPUP_EXPORT_MESSAGE;
   readonly copyToClipboard?: boolean;
   readonly download?: boolean;
   readonly options?: Partial<ExportOptions>;
   readonly returnFiles?: boolean;
+  readonly scanId?: string;
+  readonly sourceTabId?: number;
 }
 
 export interface PopupBatchListRequest {
+  readonly origins: readonly string[];
   readonly type: typeof POPUP_BATCH_LIST_MESSAGE;
 }
 
-export interface PopupBatchExportRequest {
-  readonly options?: Partial<ExportOptions>;
-  readonly tabIds: readonly number[];
-  readonly type: typeof POPUP_BATCH_EXPORT_MESSAGE;
-}
-
 export interface PopupGetScanCacheSummaryRequest {
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_GET_SCAN_CACHE_SUMMARY_MESSAGE;
 }
 
 export interface PopupGetActiveTabInfoRequest {
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_GET_ACTIVE_TAB_INFO_MESSAGE;
 }
 
 export interface PopupOpenPreviewRequest {
   readonly formats: readonly ExportFormat[];
+  readonly sourceTabId?: number;
   readonly type: typeof POPUP_OPEN_PREVIEW_MESSAGE;
   readonly zipFormats?: readonly Exclude<ExportFormat, "zip">[];
 }
+
+export interface SettingsGetDiagnosticsRequest {
+  readonly type: typeof SETTINGS_GET_DIAGNOSTICS_MESSAGE;
+}
+
+export type SettingsGetDiagnosticsSuccess = DiagnosticReport;
 
 export interface PreviewGetCachedConversationRequest {
   readonly scanId?: string;
@@ -79,19 +100,20 @@ export interface PreviewReturnToSourceRequest {
 }
 
 export interface ContentScanRequest {
+  readonly expectedSourceUrl?: string;
+  readonly operationId?: string;
+  readonly chatGptConversationData?: {
+    readonly messages: readonly ExportedMessage[];
+    readonly title?: string;
+    readonly warnings?: readonly string[];
+  };
+  readonly chatGptConversationDataWarning?: string;
   readonly type: typeof CONTENT_SCAN_MESSAGE;
 }
 
 export interface ContentCancelScanRequest {
+  readonly operationId?: string;
   readonly type: typeof CONTENT_CANCEL_SCAN_MESSAGE;
-}
-
-export interface ContentExportRequest {
-  readonly type: typeof CONTENT_EXPORT_MESSAGE;
-  readonly copyToClipboard?: boolean;
-  readonly delivery: "anchor" | "return_files";
-  readonly download?: boolean;
-  readonly options: Partial<ExportOptions>;
 }
 
 export interface ContentGetScanCacheSummaryRequest {
@@ -104,15 +126,13 @@ export interface ContentGetCachedConversationRequest {
 }
 
 export interface PopupExportSuccess {
-  readonly clipboardError?: SerializedExportError;
+  readonly completenessStatus?: CompletenessReport["status"];
   readonly downloaded: readonly string[];
   readonly exportedMessageCount: number;
-  readonly files?: readonly RenderedFile<RenderedBytes>[];
+  readonly files: readonly SerializedRenderedFile[];
   readonly messageCount: number;
   readonly warnings: readonly string[];
 }
-
-export type ContentExportSuccess = PopupExportSuccess;
 
 export type ScanCacheMissReason = "missing" | "stale";
 
@@ -129,6 +149,7 @@ export type ScanCacheSummaryResult =
 
 export interface ActiveTabInfoResult {
   readonly platformLabel?: string;
+  readonly sourceTabId?: number;
   readonly sourceUrl?: string;
   readonly supported: boolean;
 }
@@ -153,19 +174,17 @@ export interface BatchListSuccess {
   readonly tabs: readonly BatchCandidateTab[];
 }
 
-export interface BatchExportSuccess {
-  readonly downloaded: readonly string[];
-  readonly results: readonly BatchManifestResult[];
-  readonly zipFile?: SerializedRenderedFile;
-  readonly zipFilename?: string;
-}
-
 export interface SerializedRenderedFile {
   readonly bytes: string | readonly number[];
   readonly encoding: RenderedFile<RenderedBytes>["encoding"];
   readonly filename: string;
   readonly format: RenderedFile<RenderedBytes>["format"];
   readonly mimeType: string;
+  /**
+   * Binary files use base64 in new runtime messages. When omitted, `bytes`
+   * retains the legacy meaning: text is a string and binary is a number array.
+   */
+  readonly transportEncoding?: "base64";
 }
 
 export type RuntimeResponse<T> =

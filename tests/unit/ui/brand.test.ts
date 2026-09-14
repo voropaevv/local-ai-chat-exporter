@@ -46,7 +46,8 @@ describe("Jelluvi branding", () => {
     expect(optionsApp).toContain("<h1>Settings</h1>");
     expect(optionsApp).not.toContain("settings-version");
     expect(previewApp).toContain(`<p className="brand-kicker">${productName}</p>`);
-    expect(previewApp).toContain("applyThemePreference(readThemePreference())");
+    expect(previewApp).toContain("applyThemePreference(themePreference)");
+    expect(previewApp).toContain("resolveThemePreference(themePreference)");
     expect(previewHtml).toContain(`<title>${productName} Preview</title>`);
   });
 

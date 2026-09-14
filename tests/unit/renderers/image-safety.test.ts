@@ -2,6 +2,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, test } from "vitest";
 
 import type { ConversationExport, ExportedMessage } from "../../../src/core/schema";
+import { sanitizeImageRefForVisualOutput } from "../../../src/core/image-safety";
 import {
   renderCsv,
   renderDocx,
@@ -15,6 +16,17 @@ import {
 
 const dataImage =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+test("visual exports accept bounded raster data but reject SVG and oversized payloads", () => {
+  expect(sanitizeImageRefForVisualOutput({ dataUri: dataImage }).dataUri).toBe(dataImage);
+  expect(
+    sanitizeImageRefForVisualOutput({ dataUri: "data:image/svg+xml;base64,PHN2Zy8+" }).dataUri
+  ).toBeUndefined();
+  expect(
+    sanitizeImageRefForVisualOutput({ dataUri: `data:image/jpeg;base64,${"A".repeat(12_000_001)}` })
+      .dataUri
+  ).toBeUndefined();
+});
 
 function makeMessage(overrides: Partial<ExportedMessage> = {}): ExportedMessage {
   return {

@@ -1,4 +1,4 @@
-import { ExportPipelineError } from "../core/export-options";
+import { ExportPipelineError } from "../core/export-errors";
 import type { LocalRendererFormat, RenderedFile } from "../renderers";
 
 export interface ClipboardApi {

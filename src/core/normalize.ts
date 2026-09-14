@@ -1,5 +1,6 @@
 import type {
   ChatRole,
+  ExportedAttachmentRef,
   ExportedCanvasRef,
   ExportedCodeBlock,
   ExportedImageRef,
@@ -21,6 +22,7 @@ export interface NormalizableMessage {
   readonly html?: string;
   readonly codeBlocks?: readonly ExportedCodeBlock[];
   readonly images?: readonly ExportedImageRef[];
+  readonly attachments?: readonly ExportedAttachmentRef[];
   readonly sources?: readonly ExportedSourceRef[];
   readonly thinkingBlocks?: readonly ExportedThinkingBlock[];
   readonly canvas?: readonly ExportedCanvasRef[];
@@ -77,22 +79,54 @@ export function normalizeMessagesWithStats(
   for (const message of messages) {
     const role = normalizeRole(message.role);
     const text = cleanText(message.text ?? message.markdown ?? "");
+    const markdown = message.markdown !== undefined ? cleanText(message.markdown) : undefined;
+    const html = message.html;
+    const codeBlocks = normalizeCodeBlocks(message.codeBlocks);
+    const images = normalizeImageRefs(message.images);
+    const attachments = normalizeAttachmentRefs(message.attachments);
+    const sources = normalizeSourceRefs(message.sources);
+    const thinkingBlocks = normalizeThinkingBlocks(message.thinkingBlocks);
+    const canvas = normalizeCanvasRefs(message.canvas);
 
-    if (text.length === 0) {
+    if (
+      text.length === 0 &&
+      attachments.length === 0 &&
+      codeBlocks.length === 0 &&
+      images.length === 0 &&
+      sources.length === 0 &&
+      thinkingBlocks.length === 0 &&
+      canvas.length === 0
+    ) {
       continue;
     }
 
     const explicitId = normalizeOptionalString(message.id);
-    const fingerprint = `${role}:${stableHash(text)}`;
+    const fingerprint = `${role}:${stableHash(
+      JSON.stringify({
+        attachments,
+        canvas,
+        codeBlocks,
+        html,
+        images,
+        markdown,
+        sources,
+        text,
+        thinkingBlocks
+      })
+    )}`;
     const id = explicitId ?? `msg-${stableHash(`${fingerprint}:${normalizedMessages.length}`)}`;
+    const duplicate =
+      explicitId !== undefined ? seenIds.has(explicitId) : seenFingerprints.has(fingerprint);
 
-    if (seenIds.has(id) || seenFingerprints.has(fingerprint)) {
+    if (duplicate) {
       duplicateCount += 1;
       continue;
     }
 
     seenIds.add(id);
-    seenFingerprints.add(fingerprint);
+    if (explicitId === undefined) {
+      seenFingerprints.add(fingerprint);
+    }
 
     normalizedMessages.push({
       id,
@@ -103,15 +137,14 @@ export function normalizeMessagesWithStats(
         ? { participant: normalizeOptionalString(message.participant) }
         : {}),
       text,
-      ...(message.markdown !== undefined ? { markdown: cleanText(message.markdown) } : {}),
-      ...(message.html !== undefined ? { html: message.html } : {}),
-      codeBlocks: normalizeCodeBlocks(message.codeBlocks),
-      images: normalizeImageRefs(message.images),
-      ...(message.sources !== undefined ? { sources: normalizeSourceRefs(message.sources) } : {}),
-      ...(message.thinkingBlocks !== undefined
-        ? { thinkingBlocks: normalizeThinkingBlocks(message.thinkingBlocks) }
-        : {}),
-      ...(message.canvas !== undefined ? { canvas: normalizeCanvasRefs(message.canvas) } : {}),
+      ...(markdown !== undefined ? { markdown } : {}),
+      ...(html !== undefined ? { html } : {}),
+      codeBlocks,
+      images,
+      ...(attachments.length > 0 ? { attachments } : {}),
+      ...(message.sources !== undefined ? { sources } : {}),
+      ...(message.thinkingBlocks !== undefined ? { thinkingBlocks } : {}),
+      ...(message.canvas !== undefined ? { canvas } : {}),
       ...(message.createdAt !== undefined ? { createdAt: message.createdAt } : {}),
       ...(message.model !== undefined ? { model: message.model } : {}),
       metadata: isRecord(message.metadata) ? { ...message.metadata } : {}
@@ -122,6 +155,26 @@ export function normalizeMessagesWithStats(
     duplicateCount,
     messages: normalizedMessages
   };
+}
+
+function normalizeAttachmentRefs(
+  attachments: readonly ExportedAttachmentRef[] | undefined
+): readonly ExportedAttachmentRef[] {
+  return (attachments ?? [])
+    .map((attachment) => ({
+      ...(attachment.id !== undefined ? { id: cleanText(attachment.id) } : {}),
+      kind: attachment.kind,
+      name: cleanText(attachment.name),
+      ...(attachment.description !== undefined
+        ? { description: cleanText(attachment.description) }
+        : {}),
+      ...(attachment.mimeType !== undefined ? { mimeType: cleanText(attachment.mimeType) } : {}),
+      ...(attachment.sizeBytes !== undefined ? { sizeBytes: attachment.sizeBytes } : {}),
+      ...(attachment.url !== undefined ? { url: cleanText(attachment.url) } : {}),
+      ...(attachment.previewHtml !== undefined ? { previewHtml: attachment.previewHtml } : {}),
+      ...(attachment.warning !== undefined ? { warning: cleanText(attachment.warning) } : {})
+    }))
+    .filter((attachment) => attachment.name.length > 0);
 }
 
 function normalizeSourceRefs(

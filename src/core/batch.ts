@@ -1,20 +1,35 @@
 import type { LocalRendererFormat } from "../renderers/types";
-import { getProviderByUrl, getProviderOriginForUrl, type ProviderId } from "./provider-catalog";
+import type { CompletenessStatus } from "./schema";
+import {
+  getProviderByUrl,
+  getProviderDefinition,
+  getProviderOriginForUrl,
+  SUPPORTED_CHAT_ORIGINS,
+  type ProviderId
+} from "./provider-catalog";
 
 export interface BatchTabLike {
   readonly id?: number;
   readonly title?: string;
   readonly url?: string;
+  readonly windowId?: number;
 }
 
 type BatchPlatform = ProviderId;
 
 export interface BatchCandidateTab {
+  /** Metadata-only history choice; a source tab is leased only after selection. */
+  readonly history?: {
+    readonly conversationId: string;
+    readonly sourceTabId: number;
+    readonly sourceUrl: string;
+  };
   readonly id: number;
   readonly platform: BatchPlatform;
   readonly platformLabel: string;
   readonly title: string;
   readonly url: string;
+  readonly windowId: number;
 }
 
 export interface BatchManifestFile {
@@ -26,6 +41,7 @@ export interface BatchManifestFile {
 }
 
 export interface BatchExportSuccess {
+  readonly completenessStatus?: CompletenessStatus;
   readonly files: readonly BatchManifestFile[];
   readonly messageCount: number;
   readonly status: "success";
@@ -40,7 +56,14 @@ export interface BatchExportFailure {
   readonly warnings: readonly string[];
 }
 
-export type BatchExportResult = BatchExportSuccess | BatchExportFailure;
+export interface BatchExportSkipped {
+  readonly reason: "batch_cancelled";
+  readonly status: "skipped";
+  readonly tab: BatchCandidateTab;
+  readonly warnings: readonly string[];
+}
+
+export type BatchExportResult = BatchExportSuccess | BatchExportFailure | BatchExportSkipped;
 
 export interface BatchManifestInput {
   readonly exportedAt: string;
@@ -59,6 +82,7 @@ export interface BatchManifest {
 export type BatchManifestResult =
   | {
       readonly files: readonly BatchManifestFile[];
+      readonly completenessStatus?: CompletenessStatus;
       readonly messageCount: number;
       readonly platform: BatchPlatform;
       readonly status: "success";
@@ -75,6 +99,15 @@ export type BatchManifestResult =
       readonly title: string;
       readonly url: string;
       readonly warnings: readonly string[];
+    }
+  | {
+      readonly platform: BatchPlatform;
+      readonly reason: "batch_cancelled";
+      readonly status: "skipped";
+      readonly tabId: number;
+      readonly title: string;
+      readonly url: string;
+      readonly warnings: readonly string[];
     };
 
 export interface SupportedChatPageInfo {
@@ -84,9 +117,21 @@ export interface SupportedChatPageInfo {
 
 export { SUPPORTED_CHAT_ORIGINS } from "./provider-catalog";
 
+export const CHATGPT_CHAT_ORIGINS: readonly string[] = [
+  ...getProviderDefinition("chatgpt").origins
+];
+
+export function getAllowedBatchDiscoveryOrigins(
+  requestedOrigins: readonly string[]
+): readonly string[] {
+  const allowedOrigins = new Set(SUPPORTED_CHAT_ORIGINS);
+
+  return [...new Set(requestedOrigins.filter((origin) => allowedOrigins.has(origin)))];
+}
+
 export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly BatchCandidateTab[] {
   return tabs.flatMap((tab) => {
-    if (tab.id === undefined || tab.url === undefined) {
+    if (tab.id === undefined || tab.url === undefined || tab.windowId === undefined) {
       return [];
     }
 
@@ -102,7 +147,8 @@ export function getBatchCandidateTabs(tabs: readonly BatchTabLike[]): readonly B
         platform: provider.id,
         platformLabel: provider.label,
         title: tab.title?.trim() || "Untitled chat",
-        url: tab.url
+        url: tab.url,
+        windowId: tab.windowId
       }
     ];
   });
@@ -143,6 +189,9 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
     results: input.results.map((result) => {
       if (result.status === "success") {
         return {
+          ...(result.completenessStatus !== undefined
+            ? { completenessStatus: result.completenessStatus }
+            : {}),
           files: result.files,
           messageCount: result.messageCount,
           platform: result.tab.platform,
@@ -154,9 +203,21 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
         };
       }
 
+      if (result.status === "failed") {
+        return {
+          error: result.error,
+          platform: result.tab.platform,
+          status: result.status,
+          tabId: result.tab.id,
+          title: result.tab.title,
+          url: result.tab.url,
+          warnings: result.warnings
+        };
+      }
+
       return {
-        error: result.error,
         platform: result.tab.platform,
+        reason: result.reason,
         status: result.status,
         tabId: result.tab.id,
         title: result.tab.title,
@@ -169,8 +230,9 @@ export function createBatchManifest(input: BatchManifestInput): BatchManifest {
 
 function slugify(value: string): string {
   const slug = value
+    .normalize("NFKC")
     .toLocaleLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 72);
 

@@ -6,7 +6,7 @@ import {
   buildCopyMarkdownStatusMessage,
   buildExportStatusMessage,
   buildCopyMarkdownRequest,
-  buildBatchExportRequest,
+  buildBatchExportOptions,
   buildDownloadRequest,
   buildGetActiveTabInfoRequest,
   buildGetScanCacheSummaryRequest,
@@ -204,7 +204,7 @@ describe("popup state", () => {
       formats: ["zip"],
       zipFormats: ["md", "json", "html", "txt"]
     });
-    expect(buildBatchExportRequest(zipState, [1, 2]).options).toMatchObject({
+    expect(buildBatchExportOptions(zipState)).toMatchObject({
       formats: ["md", "json", "html", "txt"]
     });
   });
@@ -212,10 +212,9 @@ describe("popup state", () => {
   test("builds batch requests from the current separate file formats", () => {
     const htmlTxtState = toggleFormat(toggleFormat(createInitialPopupState(), "html"), "txt");
 
-    expect(buildBatchExportRequest(htmlTxtState, [7]).options).toMatchObject({
+    expect(buildBatchExportOptions(htmlTxtState)).toMatchObject({
       formats: ["md", "html", "txt"]
     });
-    expect(buildBatchExportRequest(htmlTxtState, [7]).tabIds).toEqual([7]);
   });
 
   test("builds export status with exported scope count", () => {

@@ -19,6 +19,8 @@ Jelluvi must preserve these invariants:
 - SVG icon source must reject embedded rasters, scripts, external hrefs, remote fonts, platform logos, and visible text.
 - Generated release ZIPs must contain production extension files plus the project license and
   third-party notices only.
+- The provider-page content script must remain a classic self-contained script below 100 KiB;
+  renderers, ZIP/PDF code, and fonts must stay in extension pages or the background worker.
 
 ## Required Checks
 

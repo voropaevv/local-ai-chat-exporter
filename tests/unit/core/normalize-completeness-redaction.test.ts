@@ -57,6 +57,132 @@ describe("normalizeMessages", () => {
       text: "Answer"
     });
   });
+
+  test("retains and deduplicates attachment-only messages by attachment identity", () => {
+    const messages = normalizeMessages([
+      {
+        id: "attachment-message-1",
+        role: "user",
+        text: "",
+        attachments: [{ kind: "file", name: " one.md " }]
+      },
+      {
+        id: "attachment-message-2",
+        role: "user",
+        text: "",
+        attachments: [{ kind: "file", name: "two.md" }]
+      }
+    ]);
+
+    expect(messages).toHaveLength(2);
+    expect(messages.map((message) => message.attachments?.[0]?.name)).toEqual(["one.md", "two.md"]);
+  });
+
+  test("keeps distinct no-id messages whose only content is code, an image, or an attachment", () => {
+    const messages = normalizeMessages([
+      {
+        role: "assistant",
+        text: "",
+        codeBlocks: [{ language: "ts", code: "const first = 1;" }]
+      },
+      {
+        role: "assistant",
+        text: "",
+        codeBlocks: [{ language: "ts", code: "const second = 2;" }]
+      },
+      {
+        role: "assistant",
+        text: "",
+        images: [{ alt: "First chart", src: "https://example.com/first.png" }]
+      },
+      {
+        role: "assistant",
+        text: "",
+        images: [{ alt: "Second chart", src: "https://example.com/second.png" }]
+      },
+      {
+        role: "assistant",
+        text: "",
+        attachments: [{ kind: "file", name: "first.md" }]
+      },
+      {
+        role: "assistant",
+        text: "",
+        attachments: [{ kind: "file", name: "second.md" }]
+      }
+    ]);
+
+    expect(messages).toHaveLength(6);
+    expect(messages.map((message) => message.codeBlocks[0]?.code)).toEqual([
+      "const first = 1;",
+      "const second = 2;",
+      undefined,
+      undefined,
+      undefined,
+      undefined
+    ]);
+    expect(messages.map((message) => message.images[0]?.src)).toEqual([
+      undefined,
+      undefined,
+      "https://example.com/first.png",
+      "https://example.com/second.png",
+      undefined,
+      undefined
+    ]);
+    expect(messages.map((message) => message.attachments?.[0]?.name)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "first.md",
+      "second.md"
+    ]);
+  });
+
+  test("keeps distinct no-id source, thinking, and canvas-only messages", () => {
+    const messages = normalizeMessages([
+      {
+        role: "assistant",
+        sources: [
+          {
+            kind: "citation",
+            title: "First source",
+            url: "https://example.com/first"
+          }
+        ]
+      },
+      {
+        role: "assistant",
+        thinkingBlocks: [{ text: "Visible reasoning" }]
+      },
+      {
+        role: "assistant",
+        canvas: [{ title: "Draft canvas", text: "Canvas content" }]
+      }
+    ]);
+
+    expect(messages).toHaveLength(3);
+    expect(messages[0]?.sources?.[0]?.title).toBe("First source");
+    expect(messages[1]?.thinkingBlocks?.[0]?.text).toBe("Visible reasoning");
+    expect(messages[2]?.canvas?.[0]?.title).toBe("Draft canvas");
+  });
+
+  test("keeps identical message text when distinct explicit turn ids are present", () => {
+    const messages = normalizeMessages([
+      {
+        id: "turn-1",
+        role: "user",
+        text: "Repeat this exact prompt."
+      },
+      {
+        id: "turn-2",
+        role: "user",
+        text: "Repeat this exact prompt."
+      }
+    ]);
+
+    expect(messages.map((message) => message.id)).toEqual(["turn-1", "turn-2"]);
+  });
 });
 
 describe("buildCompletenessReport", () => {

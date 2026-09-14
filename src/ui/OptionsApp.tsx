@@ -1,8 +1,9 @@
 import {
   Braces,
+  Bug,
+  Download,
   FileArchive,
   FileCode,
-  FileJson,
   FileText,
   FileType,
   Moon,
@@ -13,15 +14,21 @@ import {
 } from "lucide-preact";
 import type { LucideIcon } from "lucide-preact";
 import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 
-import type { BatchCandidateTab, BatchManifestResult } from "../core/batch";
-import type {
-  BatchExportSuccess,
-  BatchListSuccess,
-  RuntimeResponse,
-  SerializedRenderedFile
-} from "../core/messages";
+import {
+  CHATGPT_CHAT_ORIGINS,
+  SUPPORTED_CHAT_ORIGINS,
+  type BatchCandidateTab,
+  type BatchManifestResult
+} from "../core/batch";
+import type { DiagnosticReport } from "../core/diagnostics";
+import {
+  CHATGPT_HISTORY_LIST_MESSAGE,
+  type ChatGptHistoryListSuccess
+} from "../core/chatgpt-history";
+import type { BatchListSuccess, RuntimeResponse } from "../core/messages";
+import { SETTINGS_GET_DIAGNOSTICS_MESSAGE } from "../core/messages";
 import {
   DEFAULT_REDACTION_SETTINGS,
   normalizeRedactionSettings,
@@ -29,10 +36,14 @@ import {
   type RedactionSettings
 } from "../core/redaction";
 import type { ExportFormat } from "../core/schema";
-import type { RenderedBytes, RenderedFile } from "../renderers";
 import { downloadRenderedFiles } from "../utils/download";
+import { runBatchExport, type BatchExportProgress } from "./batch-export-controller";
 import { requestBatchDiscoveryPermission, requestBatchHostPermissions } from "./batch-permissions";
-import { BatchExport, formatBatchExportSummary } from "./components/BatchExport";
+import {
+  BatchExport,
+  formatBatchExportSummary,
+  type BatchStatusTone
+} from "./components/BatchExport";
 import { BrandIcon } from "./components/BrandIcon";
 import { ContentSettingsControls } from "./components/ContentSettingsControls";
 import { LocalLibraryPanel } from "./components/LocalLibraryPanel";
@@ -47,10 +58,12 @@ import {
   type StoredPopupFileFormat
 } from "./export-settings-storage";
 import { DEFAULT_FILENAME_TEMPLATE, createFilenamePreview } from "./filename-template";
+import { createDiagnosticExportFile } from "./diagnostic-export";
 import { formatCount } from "./pluralize";
+import { POPUP_EXPORT_FORMATS, POPUP_FORMAT_ICONS } from "./popup-format-options";
 import { readStoredRedactionSettings, writeStoredRedactionSettings } from "./redaction-storage";
 import {
-  buildBatchExportRequest,
+  buildBatchExportOptions,
   buildBatchListRequest,
   createInitialPopupState,
   type PopupState
@@ -62,26 +75,6 @@ import {
   type ThemePreference
 } from "./theme-preference";
 
-const DEFAULT_FORMATS = [
-  "md",
-  "pdf",
-  "json",
-  "txt",
-  "html",
-  "docx",
-  "csv",
-  "png"
-] as const satisfies readonly StoredPopupFileFormat[];
-const FORMAT_ICONS = {
-  csv: Braces,
-  docx: FileText,
-  html: FileCode,
-  json: FileJson,
-  md: FileText,
-  pdf: FileText,
-  png: FileType,
-  txt: FileText
-} as const;
 const FILENAME_PATTERN_PRESETS = [
   {
     label: "Default",
@@ -106,21 +99,45 @@ const FILENAME_PATTERN_PRESETS = [
 ] as const;
 
 export function OptionsApp() {
+  const isBatchView = new URLSearchParams(window.location.search).get("view") === "batch";
+  const batchAbortControllerRef = useRef<AbortController | undefined>(undefined);
   const [exportSettings, setExportSettings] = useState<ExportSettings>(DEFAULT_EXPORT_SETTINGS);
+  const [settingsReady, setSettingsReady] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
+  const [batchSource, setBatchSource] = useState<"tabs" | "history">("tabs");
+  const [historyPage, setHistoryPage] = useState<Omit<ChatGptHistoryListSuccess, "tabs">>();
+  const [batchCanCancel, setBatchCanCancel] = useState(false);
+  const [batchCancelRequested, setBatchCancelRequested] = useState(false);
   const [batchCandidates, setBatchCandidates] = useState<readonly BatchCandidateTab[]>([]);
+  const [batchDiscoveryOrigins, setBatchDiscoveryOrigins] =
+    useState<readonly string[]>(CHATGPT_CHAT_ORIGINS);
   const [batchResults, setBatchResults] = useState<readonly BatchManifestResult[]>([]);
+  const [batchProgress, setBatchProgress] = useState<BatchExportProgress>();
   const [batchSelectedTabIds, setBatchSelectedTabIds] = useState<readonly number[]>([]);
   const [batchStatus, setBatchStatus] = useState("");
+  const [batchStatusTone, setBatchStatusTone] = useState<BatchStatusTone>("neutral");
+  const [diagnosticBusy, setDiagnosticBusy] = useState(false);
+  const [diagnosticStatus, setDiagnosticStatus] = useState("");
   const [filenameSaveStatus, setFilenameSaveStatus] = useState("");
   const [redaction, setRedaction] = useState<RedactionSettings>(DEFAULT_REDACTION_SETTINGS);
   const [redactionSaveStatus, setRedactionSaveStatus] = useState("");
   const [themePreference, setThemePreference] = useState<ThemePreference>(readThemePreference);
 
   useEffect(() => {
+    document.title = isBatchView ? "Export multiple chats — Jelluvi" : "Settings — Jelluvi";
+  }, [isBatchView]);
+
+  useEffect(() => {
     applyThemePreference(themePreference);
     writeThemePreference(themePreference);
   }, [themePreference]);
+
+  useEffect(
+    () => () => {
+      batchAbortControllerRef.current?.abort();
+    },
+    []
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +153,11 @@ export function OptionsApp() {
         if (!cancelled) {
           setFilenameSaveStatus("Storage is unavailable in this context.");
           setRedactionSaveStatus("Storage is unavailable in this context.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSettingsReady(true);
         }
       });
 
@@ -185,27 +207,60 @@ export function OptionsApp() {
     window.close();
   }
 
-  async function handleLoadBatchCandidates() {
-    const permission = await requestBatchDiscoveryPermission();
+  async function handleLoadBatchCandidates(origins: readonly string[]) {
+    const chatGptOnly =
+      origins.length === CHATGPT_CHAT_ORIGINS.length &&
+      origins.every((origin, index) => origin === CHATGPT_CHAT_ORIGINS[index]);
+
+    setBatchBusy(true);
+    setBatchCanCancel(false);
+    setBatchCancelRequested(false);
+    setBatchProgress(undefined);
+    setBatchStatusTone("progress");
+    setBatchStatus(
+      chatGptOnly
+        ? "Waiting for the browser to approve ChatGPT site access..."
+        : "Waiting for the browser to approve the selected AI site access..."
+    );
+    const permission = await requestBatchDiscoveryPermission(origins);
 
     setBatchResults([]);
 
     if (!permission.granted) {
+      setBatchStatusTone("error");
       setBatchStatus(permission.message ?? "Site access was not granted.");
+      setBatchBusy(false);
       return;
     }
 
-    setBatchBusy(true);
+    setBatchStatusTone("progress");
     setBatchStatus("Looking for open AI chat tabs...");
+    setBatchDiscoveryOrigins(origins);
 
-    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest(origins));
 
     if (response.ok) {
       const tabs = response.value.tabs;
       setBatchCandidates(tabs);
-      setBatchSelectedTabIds(tabs.map((tab) => tab.id));
-      setBatchStatus(`Found ${formatCount(tabs.length, "open AI chat tab")}. All selected.`);
+      setBatchSelectedTabIds((selected) =>
+        selected.filter((id) => {
+          const previous = batchCandidates.find((tab) => tab.id === id);
+          const current = tabs.find((tab) => tab.id === id);
+          return (
+            previous !== undefined &&
+            current !== undefined &&
+            previous.url.split("#")[0] === current.url.split("#")[0]
+          );
+        })
+      );
+      setBatchStatusTone(tabs.length > 0 ? "success" : "neutral");
+      setBatchStatus(
+        tabs.length > 0
+          ? `Found ${formatCount(tabs.length, "open AI chat tab")}. Choose the chats to export.`
+          : "No open AI chat tabs were found for the approved sites."
+      );
     } else {
+      setBatchStatusTone("error");
       setBatchStatus(response.error.message);
     }
 
@@ -220,88 +275,226 @@ export function OptionsApp() {
     );
   }
 
-  function handleSelectAllBatchTabs() {
-    setBatchSelectedTabIds(batchCandidates.map((tab) => tab.id));
+  function handleBatchSourceChange(source: "tabs" | "history") {
+    if (batchBusy || source === batchSource) return;
+    setBatchSource(source);
+    setBatchCandidates([]);
+    setBatchSelectedTabIds([]);
+    setBatchResults([]);
+    setBatchProgress(undefined);
+    setBatchStatus("");
+    setBatchStatusTone("neutral");
+    setHistoryPage(undefined);
+  }
+
+  async function handleLoadHistory(loadMore = false) {
+    if (batchBusy || (loadMore && historyPage?.nextOffset === undefined)) return;
+    // History IDs are ordinals within one loading sequence, not durable conversation identities.
+    // A fresh list may reorder them, so never transfer an old selection by ID to that list.
+    if (!loadMore) setBatchSelectedTabIds([]);
+    setBatchBusy(true);
+    setBatchCanCancel(false);
+    setBatchCancelRequested(false);
+    setBatchProgress(undefined);
+    setBatchStatusTone("progress");
+    setBatchStatus("Loading ChatGPT conversation titles...");
+    try {
+      if (!loadMore) {
+        const permission = await requestBatchDiscoveryPermission(CHATGPT_CHAT_ORIGINS);
+        if (!permission.granted) {
+          setBatchStatusTone("error");
+          setBatchStatus(permission.message ?? "ChatGPT site access was not granted.");
+          return;
+        }
+      }
+      const response = await sendRuntimeMessage<ChatGptHistoryListSuccess>({
+        type: CHATGPT_HISTORY_LIST_MESSAGE,
+        ...(loadMore && historyPage !== undefined
+          ? {
+              offset: historyPage.nextOffset,
+              sourceTabId: historyPage.sourceTabId,
+              sourceUrl: historyPage.sourceUrl
+            }
+          : {})
+      });
+      if (!response.ok) {
+        setBatchStatusTone("error");
+        setBatchStatus(response.error.message);
+        return;
+      }
+      const seenIds = new Set<number>();
+      const seenUrls = new Set<string>();
+      const tabs = [...(loadMore ? batchCandidates : []), ...response.value.tabs].filter((tab) => {
+        if (seenIds.has(tab.id) || seenUrls.has(tab.url)) return false;
+        seenIds.add(tab.id);
+        seenUrls.add(tab.url);
+        return true;
+      });
+      setBatchCandidates(tabs);
+      setBatchSelectedTabIds((selected) => selected.filter((id) => seenIds.has(id)));
+      setHistoryPage({
+        sourceTabId: response.value.sourceTabId,
+        sourceUrl: response.value.sourceUrl,
+        nextOffset: response.value.nextOffset,
+        total: response.value.total
+      });
+      if (!loadMore) setBatchResults([]);
+      setBatchStatusTone("neutral");
+      setBatchStatus("");
+    } catch (error) {
+      setBatchStatusTone("error");
+      setBatchStatus(
+        error instanceof Error
+          ? error.message
+          : "Could not load ChatGPT history. Try loading the list again."
+      );
+    } finally {
+      setBatchBusy(false);
+    }
+  }
+
+  function handleSelectAllBatchTabs(shownTabIds: readonly number[]) {
+    setBatchSelectedTabIds((selected) => [...new Set([...selected, ...shownTabIds])]);
   }
 
   function handleClearBatchSelection() {
     setBatchSelectedTabIds([]);
   }
 
-  async function handleBatchExport() {
-    if (batchSelectedTabIds.length === 0) {
-      setBatchStatus("Select at least one open tab.");
+  async function handleBatchExport(retryTabIds?: readonly number[]) {
+    if (batchBusy || !settingsReady) {
+      return;
+    }
+    const requestedTabIds = retryTabIds ?? batchSelectedTabIds;
+    if (requestedTabIds.length === 0) {
+      setBatchStatusTone("warning");
+      setBatchStatus("Select at least one chat.");
       return;
     }
 
-    const selectedTabs = batchCandidates.filter((tab) => batchSelectedTabIds.includes(tab.id));
+    const selectedTabs = batchCandidates.filter((tab) => requestedTabIds.includes(tab.id));
 
-    if (selectedTabs.length !== batchSelectedTabIds.length) {
+    if (selectedTabs.length !== requestedTabIds.length) {
       setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatusTone("warning");
       setBatchStatus(
-        "Some selected tabs are no longer available. Review the updated selection and export again."
+        "Some selected chats are no longer available. Review the updated selection and export again."
       );
       return;
     }
 
+    setBatchBusy(true);
+    setBatchCanCancel(false);
+    setBatchCancelRequested(false);
+    setBatchProgress(undefined);
+    setBatchStatusTone("progress");
+    setBatchStatus("Waiting for the browser to confirm access to the selected chat sites...");
     const permission = await requestBatchHostPermissions(selectedTabs);
 
     if (!permission.granted) {
+      setBatchStatusTone("error");
       setBatchStatus(permission.message ?? "Site access was not granted.");
+      setBatchBusy(false);
       return;
     }
 
-    setBatchBusy(true);
-    setBatchStatus("Checking selected open tabs...");
+    setBatchStatusTone("progress");
+    setBatchStatus("Checking selected chats...");
 
-    const preflightedTabs = await preflightBatchTabs(batchSelectedTabIds);
+    const preflightedTabs =
+      batchSource === "history" ? selectedTabs : await preflightBatchTabs(requestedTabIds);
 
     if (preflightedTabs === undefined) {
       setBatchBusy(false);
       return;
     }
 
-    setBatchStatus("Exporting selected tabs locally into one ZIP...");
+    setBatchStatusTone("progress");
+    setBatchStatus("Exporting selected chats locally into one ZIP...");
+    const abortController = new AbortController();
+    batchAbortControllerRef.current = abortController;
+    setBatchCanCancel(true);
 
-    const response = await sendRuntimeMessage<BatchExportSuccess>(
-      buildBatchExportRequest(
-        buildSettingsPopupState(exportSettings, redaction),
-        batchSelectedTabIds
-      )
-    );
-
-    if (response.ok) {
-      const successCount = response.value.results.filter(
-        (result) => result.status === "success"
+    try {
+      const response = await runBatchExport({
+        onProgress: setBatchProgress,
+        options: buildBatchExportOptions(buildSettingsPopupState(exportSettings, redaction)),
+        signal: abortController.signal,
+        tabs: preflightedTabs
+      });
+      const successCount = response.results.filter((result) => result.status === "success").length;
+      const failedCount = response.results.filter((result) => result.status === "failed").length;
+      const skippedCount = response.results.filter((result) => result.status === "skipped").length;
+      const partialCount = response.results.filter(
+        (result) => result.status === "success" && result.completenessStatus !== "complete"
       ).length;
-      const failedCount = response.value.results.length - successCount;
-      const resultSummary = formatBatchExportSummary(successCount, failedCount);
+      const resultSummary = formatBatchExportSummary(successCount, failedCount, skippedCount);
+      const completenessSummary =
+        partialCount > 0 ? ` ${formatCount(partialCount, "export")} may be partial.` : "";
+      const cancellationSummary = response.cancelled
+        ? response.zipFile === undefined
+          ? " Batch cancelled before any chat completed."
+          : " Batch cancelled; completed exports were preserved."
+        : "";
 
-      try {
-        setBatchResults(response.value.results);
-        if (response.value.zipFile === undefined || response.value.zipFilename === undefined) {
-          setBatchStatus(`No ZIP downloaded. ${resultSummary}.`);
-        } else {
-          await downloadRenderedFiles([deserializeRenderedFile(response.value.zipFile)]);
-          setBatchStatus(`Saved one ZIP: ${response.value.zipFilename}. ${resultSummary}.`);
-        }
-      } catch (error) {
-        setBatchResults(response.value.results);
-        setBatchStatus(error instanceof Error ? error.message : "Download failed.");
+      setBatchResults((previous) =>
+        retryTabIds === undefined
+          ? response.results
+          : previous.map(
+              (result) => response.results.find((next) => next.tabId === result.tabId) ?? result
+            )
+      );
+      if (response.zipFile === undefined) {
+        setBatchStatusTone(response.cancelled ? "warning" : "error");
+        setBatchStatus(
+          `No ZIP downloaded. ${resultSummary}.${completenessSummary}${cancellationSummary}`
+        );
+      } else {
+        await downloadRenderedFiles([response.zipFile]);
+        setBatchStatusTone(
+          failedCount > 0 || skippedCount > 0 || partialCount > 0 ? "warning" : "success"
+        );
+        setBatchStatus(
+          `ZIP download requested: ${response.zipFile.filename}. ${resultSummary}.${completenessSummary}${cancellationSummary}${retryTabIds === undefined ? "" : " Previous ZIP downloads are unchanged."}`
+        );
       }
-    } else {
-      setBatchStatus(response.error.message);
+    } catch (error) {
+      setBatchStatusTone("error");
+      setBatchStatus(error instanceof Error ? error.message : "Batch export failed.");
+    } finally {
+      if (batchAbortControllerRef.current === abortController) {
+        batchAbortControllerRef.current = undefined;
+      }
+      setBatchProgress(undefined);
+      setBatchCanCancel(false);
+      setBatchCancelRequested(false);
+      setBatchBusy(false);
+    }
+  }
+
+  function handleCancelBatchExport() {
+    const abortController = batchAbortControllerRef.current;
+
+    if (abortController === undefined || abortController.signal.aborted) {
+      return;
     }
 
-    setBatchBusy(false);
+    setBatchCanCancel(false);
+    setBatchCancelRequested(true);
+    setBatchStatusTone("progress");
+    setBatchStatus("Cancelling safely. Completed chats will still be saved to the ZIP...");
+    abortController.abort();
   }
 
   async function preflightBatchTabs(
     selectedTabIds: readonly number[]
   ): Promise<readonly BatchCandidateTab[] | undefined> {
-    const response = await sendRuntimeMessage<BatchListSuccess>(buildBatchListRequest());
+    const response = await sendRuntimeMessage<BatchListSuccess>(
+      buildBatchListRequest(batchDiscoveryOrigins)
+    );
 
     if (!response.ok) {
+      setBatchStatusTone("error");
       setBatchStatus(response.error.message);
       return undefined;
     }
@@ -310,8 +503,25 @@ export function OptionsApp() {
     const selectedTabs = tabs.filter((tab) => selectedTabIds.includes(tab.id));
     setBatchCandidates(tabs);
 
+    const changedTabIds = selectedTabs
+      .filter((tab) => {
+        const selected = batchCandidates.find((candidate) => candidate.id === tab.id);
+        return selected === undefined || selected.url.split("#")[0] !== tab.url.split("#")[0];
+      })
+      .map((tab) => tab.id);
+
+    if (changedTabIds.length > 0) {
+      setBatchSelectedTabIds((selected) => selected.filter((id) => !changedTabIds.includes(id)));
+      setBatchStatusTone("warning");
+      setBatchStatus(
+        "A selected tab changed conversations. Review the updated list and select that chat again."
+      );
+      return undefined;
+    }
+
     if (selectedTabs.length !== selectedTabIds.length) {
       setBatchSelectedTabIds(selectedTabs.map((tab) => tab.id));
+      setBatchStatusTone("warning");
       setBatchStatus(
         "Some selected tabs are no longer available. Review the updated selection and export again."
       );
@@ -319,6 +529,154 @@ export function OptionsApp() {
     }
 
     return selectedTabs;
+  }
+
+  async function handleDiagnosticExport() {
+    setDiagnosticBusy(true);
+    setDiagnosticStatus("");
+
+    const response = await sendRuntimeMessage<DiagnosticReport>({
+      type: SETTINGS_GET_DIAGNOSTICS_MESSAGE
+    });
+
+    if (!response.ok) {
+      setDiagnosticStatus(response.error.message);
+      setDiagnosticBusy(false);
+      return;
+    }
+
+    try {
+      await downloadRenderedFiles([createDiagnosticExportFile(response.value)]);
+      setDiagnosticStatus("Saved.");
+    } catch (error) {
+      setDiagnosticStatus(error instanceof Error ? error.message : "Download failed.");
+    } finally {
+      setDiagnosticBusy(false);
+    }
+  }
+
+  if (isBatchView) {
+    return (
+      <main className="app-shell app-shell--options batch-workspace">
+        <header className="settings-header batch-workspace__header">
+          <BrandIcon />
+          <div>
+            <h1>Export multiple chats</h1>
+            <p className="status-text">Choose chats. Save one local ZIP.</p>
+          </div>
+          <a className="batch-settings-link" href="index.html" rel="noreferrer" target="_blank">
+            Advanced settings
+          </a>
+        </header>
+        <div className="batch-source-picker">
+          <div className="settings-segmented" role="group" aria-label="Conversation source">
+            <button
+              aria-pressed={batchSource === "tabs"}
+              className={`settings-segmented__button${batchSource === "tabs" ? " settings-segmented__button--active" : ""}`}
+              disabled={batchBusy}
+              onClick={() => handleBatchSourceChange("tabs")}
+              type="button"
+            >
+              Open tabs
+            </button>
+            <button
+              aria-pressed={batchSource === "history"}
+              className={`settings-segmented__button${batchSource === "history" ? " settings-segmented__button--active" : ""}`}
+              disabled={batchBusy}
+              onClick={() => handleBatchSourceChange("history")}
+              type="button"
+            >
+              ChatGPT history
+            </button>
+          </div>
+          <p className="status-text">Changing source clears the list and selection.</p>
+        </div>
+        <BatchExport
+          key={batchSource}
+          busy={batchBusy}
+          canCancel={batchCanCancel}
+          cancelRequested={batchCancelRequested}
+          candidates={batchCandidates}
+          discoveryControls={
+            batchSource === "history" ? (
+              <div className="button-row">
+                <button
+                  aria-describedby="batch-chatgpt-scope-note"
+                  className="secondary-action compact-action"
+                  disabled={batchBusy}
+                  onClick={() => handleLoadHistory()}
+                  title="Load a fresh list and clear the current selection"
+                  type="button"
+                >
+                  {historyPage === undefined ? "Load ChatGPT history" : "Reload history list"}
+                </button>
+                {historyPage?.nextOffset === undefined ? null : (
+                  <button
+                    className="secondary-action compact-action"
+                    disabled={batchBusy}
+                    onClick={() => handleLoadHistory(true)}
+                    type="button"
+                  >
+                    Load more
+                  </button>
+                )}
+              </div>
+            ) : undefined
+          }
+          historyHasMore={historyPage?.nextOffset !== undefined}
+          historyLoaded={historyPage !== undefined}
+          historyTotal={historyPage?.total}
+          formatPicker={
+            <div className="batch-format-picker">
+              <span className="batch-field-label" id="batch-format-label">
+                Formats inside the ZIP
+              </span>
+              <div
+                className="settings-format-row"
+                role="group"
+                aria-labelledby="batch-format-label"
+              >
+                {POPUP_EXPORT_FORMATS.map((format) => (
+                  <FormatSettingButton
+                    active={isFormatActive(exportSettings, format)}
+                    disabled={batchBusy || !settingsReady}
+                    format={format}
+                    key={format}
+                    onClick={() => toggleDefaultFormat(format)}
+                  />
+                ))}
+              </div>
+            </div>
+          }
+          onCancel={handleCancelBatchExport}
+          onClearSelection={handleClearBatchSelection}
+          onExportSelected={() => handleBatchExport()}
+          onLoadAllCandidates={() => handleLoadBatchCandidates(SUPPORTED_CHAT_ORIGINS)}
+          onLoadChatGptCandidates={() => handleLoadBatchCandidates(CHATGPT_CHAT_ORIGINS)}
+          onRetryFailed={() =>
+            handleBatchExport(
+              batchResults
+                .filter((result) => result.status === "failed")
+                .map((result) => result.tabId)
+            )
+          }
+          onSelectAll={handleSelectAllBatchTabs}
+          onToggleTab={handleToggleBatchTab}
+          progress={batchProgress}
+          results={batchResults}
+          selectedTabIds={batchSelectedTabIds}
+          settingsReady={settingsReady}
+          source={batchSource}
+          status={batchStatus}
+          statusTone={batchStatusTone}
+        />
+        {filenameSaveStatus ? (
+          <p className="status-text" role="status">
+            {filenameSaveStatus}
+          </p>
+        ) : null}
+      </main>
+    );
   }
 
   return (
@@ -345,7 +703,7 @@ export function OptionsApp() {
 
       <SettingsCard icon={FileText} title="Export">
         <div className="settings-format-row" role="group" aria-label="Export formats">
-          {DEFAULT_FORMATS.map((format) => (
+          {POPUP_EXPORT_FORMATS.map((format) => (
             <FormatSettingButton
               active={isFormatActive(exportSettings, format)}
               format={format}
@@ -373,6 +731,15 @@ export function OptionsApp() {
         />
       </SettingsCard>
 
+      <SettingsCard icon={Braces} title="Batch export">
+        <p className="status-text">
+          Choose open chats or selected ChatGPT history conversations and save them in one ZIP.
+        </p>
+        <a className="batch-settings-link" href="?view=batch">
+          Export multiple chats
+        </a>
+      </SettingsCard>
+
       <SettingsCard icon={FileCode} title="Content">
         <ContentSettingsControls onChange={updateExportSettings} settings={exportSettings} />
       </SettingsCard>
@@ -384,7 +751,7 @@ export function OptionsApp() {
         />
       </SettingsCard>
 
-      <SettingsCard icon={ShieldCheck} title="Privacy">
+      <SettingsCard icon={ShieldCheck} title="Redaction">
         <label className="field-row settings-select-row">
           <span className="sr-only">Redaction preset</span>
           <select
@@ -396,8 +763,8 @@ export function OptionsApp() {
             }
             value={redaction.preset}
           >
-            <option value="off">Off</option>
-            <option value="basic">Default</option>
+            <option value="off">None</option>
+            <option value="basic">Basic</option>
             <option value="strict">Strict</option>
             <option value="custom">Custom</option>
           </select>
@@ -428,19 +795,21 @@ export function OptionsApp() {
         <LocalLibraryPanel />
       </SettingsCard>
 
-      <SettingsCard icon={Braces} title="Batch">
-        <BatchExport
-          busy={batchBusy}
-          candidates={batchCandidates}
-          onClearSelection={handleClearBatchSelection}
-          onExportSelected={handleBatchExport}
-          onLoadCandidates={handleLoadBatchCandidates}
-          onSelectAll={handleSelectAllBatchTabs}
-          onToggleTab={handleToggleBatchTab}
-          results={batchResults}
-          selectedTabIds={batchSelectedTabIds}
-          status={batchStatus}
-        />
+      <SettingsCard icon={Bug} title="Diagnostics">
+        <button
+          className="secondary-action settings-diagnostic-action"
+          disabled={diagnosticBusy}
+          onClick={handleDiagnosticExport}
+          type="button"
+        >
+          <Download size={18} strokeWidth={2.2} aria-hidden="true" />
+          <span>{diagnosticBusy ? "Preparing..." : "Export JSON"}</span>
+        </button>
+        {diagnosticStatus ? (
+          <p className="status-text" role="status">
+            {diagnosticStatus}
+          </p>
+        ) : null}
       </SettingsCard>
     </main>
   );
@@ -570,16 +939,23 @@ function SegmentedButtons<T extends string>({ items, onChange, value }: Segmente
 
 interface FormatSettingButtonProps {
   readonly active: boolean;
-  readonly format: (typeof DEFAULT_FORMATS)[number];
+  readonly disabled?: boolean;
+  readonly format: StoredPopupFileFormat;
   readonly onClick: () => void;
 }
 
-function FormatSettingButton({ active, format, onClick }: FormatSettingButtonProps) {
-  const Icon = FORMAT_ICONS[format];
+function FormatSettingButton({
+  active,
+  disabled = false,
+  format,
+  onClick
+}: FormatSettingButtonProps) {
+  const Icon = POPUP_FORMAT_ICONS[format];
 
   return (
     <button
       aria-pressed={active}
+      disabled={disabled}
       className={
         active ? "settings-format-button settings-format-button--active" : "settings-format-button"
       }
@@ -647,16 +1023,6 @@ function buildSettingsPopupState(
       redactionCustomPatterns: [...redaction.customPatterns],
       redactionPreset: redaction.preset
     }
-  };
-}
-
-function deserializeRenderedFile(file: SerializedRenderedFile): RenderedFile<RenderedBytes> {
-  return {
-    bytes: typeof file.bytes === "string" ? file.bytes : Uint8Array.from(file.bytes),
-    encoding: file.encoding,
-    filename: file.filename,
-    format: file.format,
-    mimeType: file.mimeType
   };
 }
 

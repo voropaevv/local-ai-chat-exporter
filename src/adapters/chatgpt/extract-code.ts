@@ -4,10 +4,7 @@ import { chatGptSelectors } from "./selectors";
 
 export function extractCodeBlocks(root: Element): readonly ExportedCodeBlock[] {
   return Array.from(root.querySelectorAll(chatGptSelectors.codeBlocks))
-    .filter((element) => {
-      const tagName = element.tagName.toLocaleLowerCase();
-      return tagName === "pre" || element.closest("pre") === null;
-    })
+    .filter(isTopLevelCodeContainer)
     .map((element) => {
       const codeElement =
         element.tagName.toLocaleLowerCase() === "pre" ? element.querySelector("code") : element;
@@ -21,6 +18,19 @@ export function extractCodeBlocks(root: Element): readonly ExportedCodeBlock[] {
       };
     })
     .filter((codeBlock) => codeBlock.code.length > 0);
+}
+
+function isTopLevelCodeContainer(element: Element): boolean {
+  const tagName = element.tagName.toLocaleLowerCase();
+
+  if (tagName !== "pre") {
+    return element.closest("pre") === null;
+  }
+
+  // ChatGPT can nest a syntax-highlighter <pre> inside the visual <pre> container.
+  // Rendering stops at the outer block, so counting the nested copy would shift every
+  // later code block while also duplicating the structured codeBlocks array.
+  return element.parentElement?.closest("pre") === null;
 }
 
 function normalizeCodeText(input: string): string {

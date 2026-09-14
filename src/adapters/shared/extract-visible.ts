@@ -33,7 +33,9 @@ export function extractVisibleMessagesBySelectors(
       messageElement,
       selectorConfig?.contentSelector ?? config.contentSelector
     );
-    const cleanedNode = cleanChatGptNode(contentElement);
+    const cleanedNode = cleanChatGptNode(contentElement, {
+      chatGptSpecificCleanup: false
+    });
 
     if (cleanedNode.text.length === 0 && cleanedNode.codeBlocks.length === 0) {
       continue;

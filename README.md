@@ -1,6 +1,6 @@
 # Jelluvi
 
-Open-source, local-first browser extension for exporting the AI chat conversation currently open in your browser to local files.
+Free, open-source, local-first browser extension for exporting selected AI chats to local files.
 
 The extension is designed around no telemetry, no analytics, no remote rendering, no external export servers, no remote hosted code, and minimal Manifest V3 permissions.
 
@@ -44,12 +44,20 @@ Markdown profiles are available for default archives, Obsidian, GitHub, GitBook,
 
 ## Extension workflow
 
-- The popup contains only provider status, format choices, Export, Copy MD, Preview, and transient
-  preparation controls. There is no manual Scan button or Options drawer.
+- The popup contains provider status, format choices, Export, Copy MD, Preview, and a direct
+  `Export multiple chats` link. There is no manual Scan button or Options drawer.
 - Export, Copy MD, and Preview prepare or refresh the local snapshot automatically.
 - Preview provides provider-neutral all, selected, user, assistant, and range views. The current
   prepared view can be downloaded, copied, opened as PDF, or saved to the opt-in Local Library.
-- Settings contains persistent export, content, PDF, privacy, library, and batch controls. Support
+- `Export multiple chats` opens a dedicated workspace: choose open supported chat tabs or
+  explicitly load ChatGPT history, search the loaded list, select chats and formats, then save one
+  ZIP. No chats are selected automatically. Failed chats can be retried without re-exporting
+  successful ones; cancellation still packages completed files.
+- History listing reads titles and identifiers one page at a time, not conversation bodies.
+  Only selected ChatGPT conversations are opened in temporary inactive tabs for export. Keep the
+  batch workspace and original signed-in ChatGPT source tab open; temporary tabs are closed after
+  use. Browsing in another tab does not require keeping the source active.
+- Settings contains persistent export, content, PDF, redaction and library controls. Support
   and product documentation remain on GitHub and the website.
 
 Provider metadata, origins, support levels, limitations, and capabilities are defined in one
@@ -120,16 +128,36 @@ Business model:
 - No telemetry, analytics, ads, trackers, session replay, remote logging, remote rendering, or export server is used.
 - No Jelluvi account is required.
 - Conversation content is not uploaded to Jelluvi or any export server.
+- For ChatGPT, a user action can retrieve earlier messages from the current conversation through
+  same-origin, paginated requests using the existing signed-in session. The temporary session
+  token is not stored, logged, exported, or sent to Jelluvi or third parties.
+- Conversation-data retrieval includes user messages and final assistant responses, excluding
+  hidden reasoning and tool records. Optional visible reasoning comes only from sections already
+  displayed on the page; Jelluvi does not request hidden reasoning separately.
 - Conversation content is not stored by default.
 - Browser storage is used for versioned local export, PDF, content, theme, and redaction preferences.
 - Optional site access is requested only when the user starts batch discovery or batch export.
-- Jelluvi does not request browsing-history (`tabs`) or browser-downloads permissions.
+- Batch discovery defaults to ChatGPT-only access. Scanning every supported AI provider is a
+  separate explicit action with a broader permission prompt.
+- Loading ChatGPT history is a separate explicit action. History metadata stays in the batch
+  workspace's memory; unselected conversation bodies are not read.
+- Jelluvi does not request `tabs`, `history`, or `downloads` permissions. Metadata access for
+  supported open tabs comes from explicitly granted site access.
 
 ## Limitations
 
 - ChatGPT is the primary v1 platform.
 - Secondary platform adapters are best-effort and currently scan visible loaded messages only.
-- The extension exports the current conversation only; it does not scrape account-wide history in the background.
+- ChatGPT history selection is opt-in and paginated; it is not an automatic account backup and
+  does not claim to enumerate archived, deleted or every project/workspace conversation. Secondary
+  providers currently support selected open tabs, not account-history discovery.
+- The selected-history workspace requires Chromium 114 or newer for document ownership checks;
+  it does not request broad tab metadata permission as a fallback.
+- Complete ChatGPT history retrieval requires a working signed-in session and network access.
+  If it is unavailable, page-based collection remains a fallback with reported capture limitations.
+- A complete message-history result does not guarantee that original uploads, generated images,
+  or attached files are embedded. Exports preserve available text and attachment references;
+  only available embedded data-image assets are copied into ZIP bundles.
 - PDF output is generated locally from the normalized conversation model. If local PDF generation fails, Jelluvi falls back to local PDF-ready HTML and shows a warning.
 - PDF v1 embeds local Noto Sans and Noto Sans Mono fonts with Latin, Greek, and Cyrillic support. CJK text, complex emoji, and advanced formula layout may use fallback glyphs; formulas are preserved as plain text.
 - PNG export is a local semantic long-image renderer for moderate selected or range exports. The maximum local PNG height is 16,000 px; longer chats fall back to a local text explanation and should use selected messages, ranges, PDF, HTML, or text formats.

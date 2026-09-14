@@ -7,6 +7,12 @@ import {
 } from "../core/image-safety";
 import { renderFilenameTemplate } from "../utils/filename-template";
 import type { RenderedFile, RendererOptions } from "./types";
+import {
+  formatAttachmentLabel,
+  formatDisplayDateTime,
+  formatFileSize,
+  shouldShowCaptureStatus
+} from "./presentation";
 
 const PNG_WIDTH = 1200;
 const PNG_MAX_HEIGHT = 16000;
@@ -201,13 +207,24 @@ function buildPngLines(
   if (options.includeMetadata !== false) {
     lines.push(
       { color: PNG_MUTED, scale: PNG_TEXT_SCALE, text: `Source: ${conversation.sourceUrl}` },
-      { color: PNG_MUTED, scale: PNG_TEXT_SCALE, text: `Exported: ${conversation.exportedAt}` },
       {
         color: PNG_MUTED,
         scale: PNG_TEXT_SCALE,
-        text: `Messages: ${conversation.messageCount} - Completeness: ${conversation.completeness.status}`
+        text: `Exported: ${formatDisplayDateTime(conversation.exportedAt)}`
+      },
+      {
+        color: PNG_MUTED,
+        scale: PNG_TEXT_SCALE,
+        text: `Messages: ${conversation.messageCount}`
       }
     );
+    if (shouldShowCaptureStatus(conversation)) {
+      lines.push({
+        color: PNG_MUTED,
+        scale: PNG_TEXT_SCALE,
+        text: `Capture status: ${conversation.completeness.status.replace(/_/gu, " ")}`
+      });
+    }
   }
 
   const warnings = [
@@ -226,7 +243,7 @@ function buildPngLines(
     lines.push(blankLine(), {
       color: PNG_ACCENT,
       scale: PNG_TEXT_SCALE,
-      text: `${message.index + 1}. ${normalizeSingleLine(message.authorLabel)} (${message.role})`
+      text: `${message.index + 1}. ${normalizeSingleLine(message.authorLabel)}`
     });
     renderMessagePngLines(message).forEach((line) => lines.push(line));
   });
@@ -242,7 +259,28 @@ function renderMessagePngLines(message: ExportedMessage): readonly PngLine[] {
   }
 
   if (message.createdAt !== undefined) {
-    lines.push({ color: PNG_MUTED, scale: PNG_TEXT_SCALE, text: `Created: ${message.createdAt}` });
+    lines.push({
+      color: PNG_MUTED,
+      scale: PNG_TEXT_SCALE,
+      text: `Created: ${formatDisplayDateTime(message.createdAt)}`
+    });
+  }
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    lines.push({ color: PNG_MUTED, scale: PNG_TEXT_SCALE, text: "Attachments:" });
+    message.attachments!.forEach((attachment) => {
+      const details = [
+        formatAttachmentLabel(attachment),
+        formatFileSize(attachment.sizeBytes),
+        attachment.url
+      ].filter((value): value is string => value !== undefined && value.length > 0);
+
+      lines.push({
+        color: PNG_TEXT,
+        scale: PNG_TEXT_SCALE,
+        text: `- ${attachment.name}${details.length > 0 ? ` - ${details.join(" - ")}` : ""}`
+      });
+    });
   }
 
   normalizeText(message.markdown ?? message.text)

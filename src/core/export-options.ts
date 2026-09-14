@@ -4,6 +4,7 @@ import {
   redactText,
   type RedactionSettings
 } from "./redaction";
+import { ExportPipelineError } from "./export-errors";
 import { filterMessagesByScope, type SelectionRange, type SelectionScope } from "./selection";
 import type {
   CompletenessReport,
@@ -26,17 +27,6 @@ import { DEFAULT_PDF_SETTINGS, normalizePdfSettings } from "../renderers/pdf-set
 
 export type ExportScope = SelectionScope;
 
-export type ExportErrorCode =
-  | "unsupported_platform"
-  | "no_messages_found"
-  | "scan_cancelled"
-  | "download_failed"
-  | "clipboard_failed"
-  | "unsupported_format"
-  | "content_script_injection_failed"
-  | "scan_required"
-  | "scan_stale";
-
 export interface ExportOptions {
   readonly formats: ExportFormat[];
   readonly scope: ExportScope;
@@ -53,11 +43,6 @@ export interface ExportOptions {
   readonly zipFormats?: readonly LocalRendererFormat[];
 }
 
-export interface SerializedExportError {
-  readonly code: ExportErrorCode;
-  readonly message: string;
-}
-
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   formats: ["md"],
   scope: "all",
@@ -71,18 +56,6 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   filenameTemplate: "{datetime}_{platform}_{title}.{format}",
   pdfSettings: DEFAULT_PDF_SETTINGS
 };
-
-export class ExportPipelineError extends Error {
-  readonly code: ExportErrorCode;
-  readonly causeValue?: unknown;
-
-  constructor(code: ExportErrorCode, message: string, cause?: unknown) {
-    super(message);
-    this.name = "ExportPipelineError";
-    this.code = code;
-    this.causeValue = cause;
-  }
-}
 
 export function normalizeExportOptions(options: Partial<ExportOptions> = {}): ExportOptions {
   const redaction = normalizeRedactionSettings(
@@ -108,7 +81,11 @@ export function renderConversationFiles(
   options: Partial<ExportOptions> = {}
 ): readonly RenderedFile<RenderedBytes>[] {
   const normalizedOptions = normalizeExportOptions(options);
-  const preparedConversation = prepareConversation(conversation, normalizedOptions);
+  const preparedConversation = prepareConversation(
+    conversation,
+    normalizedOptions,
+    normalizedOptions.formats.includes("zip")
+  );
 
   if (preparedConversation.messages.length === 0) {
     throw new ExportPipelineError(
@@ -156,32 +133,17 @@ export function getExportedMessageCount(
   }).length;
 }
 
-export function isExportPipelineError(error: unknown): error is ExportPipelineError {
-  return error instanceof ExportPipelineError;
-}
-
-export function serializeExportError(error: unknown): SerializedExportError {
-  if (isExportPipelineError(error)) {
-    return {
-      code: error.code,
-      message: error.message
-    };
-  }
-
-  return {
-    code: "download_failed",
-    message: error instanceof Error ? error.message : "Export failed."
-  };
-}
-
 function prepareConversation(
   conversation: ConversationExport,
-  options: ExportOptions
+  options: ExportOptions,
+  preserveEmbeddedImageData = false
 ): ConversationExport {
   const messages = filterMessagesByScope(conversation.messages, {
     range: options.range,
     scope: options.scope
-  }).map((message, index) => prepareMessage(message, index, options));
+  }).map((message, index) =>
+    prepareMessage(message, index, options, preserveEmbeddedImageData)
+  );
 
   return {
     schemaVersion: conversation.schemaVersion,
@@ -208,7 +170,8 @@ function prepareConversation(
 function prepareMessage(
   message: ExportedMessage,
   index: number,
-  options: ExportOptions
+  options: ExportOptions,
+  preserveEmbeddedImageData: boolean
 ): ExportedMessage {
   return {
     id: redactIfNeeded(message.id, options.redaction),
@@ -225,7 +188,40 @@ function prepareMessage(
     codeBlocks: message.codeBlocks.map((codeBlock) =>
       prepareCodeBlock(codeBlock, options.redaction)
     ),
-    images: message.images.map((image) => prepareImageRef(image, options.redaction)),
+    images: message.images.map((image) =>
+      prepareImageRef(image, options.redaction, preserveEmbeddedImageData)
+    ),
+    ...(message.attachments !== undefined
+      ? {
+          attachments: message.attachments.map((attachment) => ({
+            ...(attachment.id !== undefined
+              ? { id: redactIfNeeded(attachment.id, options.redaction) }
+              : {}),
+            kind: attachment.kind,
+            name: redactIfNeeded(attachment.name, options.redaction),
+            ...(attachment.description !== undefined
+              ? { description: redactIfNeeded(attachment.description, options.redaction) }
+              : {}),
+            ...(attachment.mimeType !== undefined
+              ? { mimeType: redactIfNeeded(attachment.mimeType, options.redaction) }
+              : {}),
+            ...(attachment.sizeBytes !== undefined ? { sizeBytes: attachment.sizeBytes } : {}),
+            ...(attachment.url !== undefined
+              ? { url: redactIfNeeded(attachment.url, options.redaction) }
+              : {}),
+            ...(attachment.previewHtml !== undefined
+              ? {
+                  previewHtml: omitDataImagePayloads(
+                    redactIfNeeded(attachment.previewHtml, options.redaction)
+                  )
+                }
+              : {}),
+            ...(attachment.warning !== undefined
+              ? { warning: redactIfNeeded(attachment.warning, options.redaction) }
+              : {})
+          }))
+        }
+      : {}),
     ...(options.includeMetadata && message.participant !== undefined
       ? { participant: redactIfNeeded(message.participant, options.redaction) }
       : {}),
@@ -301,8 +297,12 @@ function prepareCodeBlock(
   };
 }
 
-function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings): ExportedImageRef {
-  return sanitizeImageRefForOutput({
+function prepareImageRef(
+  image: ExportedImageRef,
+  redaction: RedactionSettings,
+  preserveEmbeddedImageData: boolean
+): ExportedImageRef {
+  const preparedImage = {
     ...(image.alt !== undefined ? { alt: redactIfNeeded(image.alt, redaction) } : {}),
     ...(image.src !== undefined ? { src: redactIfNeeded(image.src, redaction) } : {}),
     ...(image.dataUri !== undefined ? { dataUri: image.dataUri } : {}),
@@ -311,7 +311,9 @@ function prepareImageRef(image: ExportedImageRef, redaction: RedactionSettings):
       : {}),
     ...(image.width !== undefined ? { width: image.width } : {}),
     ...(image.height !== undefined ? { height: image.height } : {})
-  });
+  };
+
+  return preserveEmbeddedImageData ? preparedImage : sanitizeImageRefForOutput(preparedImage);
 }
 
 function prepareCompleteness(
@@ -355,3 +357,6 @@ function createPreview(value: string): string {
 function redactIfNeeded(value: string, redaction: RedactionSettings): string {
   return redactText(value, redaction);
 }
+
+export { ExportPipelineError, isExportPipelineError, serializeExportError } from "./export-errors";
+export type { ExportErrorCode, SerializedExportError } from "./export-errors";
