@@ -18,6 +18,16 @@ describe("ChatGPT image filtering", () => {
         <img alt="User avatar" src="https://example.com/avatar.png" width="32" height="32">
         <img alt="Hidden diagram" aria-hidden="true" src="https://example.com/hidden.png" width="640" height="360">
         <img alt="Tiny status icon" src="https://example.com/status.png" width="18" height="18">
+        <span data-testid="citation-pill">
+          <a href="https://example.com/source">
+            <img
+              alt="Image"
+              src="https://www.google.com/s2/favicons?domain=https://example.com&sz=128"
+              width="128"
+              height="128"
+            >
+          </a>
+        </span>
       </article>
     `);
 

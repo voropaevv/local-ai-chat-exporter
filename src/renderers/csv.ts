@@ -9,7 +9,8 @@ const CSV_COLUMNS = [
   "text",
   "model",
   "createdAt",
-  "messageId"
+  "messageId",
+  "attachments"
 ] as const;
 
 export function renderCsv(
@@ -39,7 +40,14 @@ function renderMessageRow(message: ExportedMessage): string {
     message.text,
     message.model ?? "",
     message.createdAt ?? "",
-    message.id
+    message.id,
+    (message.attachments ?? [])
+      .map((attachment) =>
+        [attachment.name, attachment.description, attachment.url]
+          .filter((value): value is string => value !== undefined && value.length > 0)
+          .join(" — ")
+      )
+      .join("\n")
   ]
     .map(csvEscape)
     .join(",");

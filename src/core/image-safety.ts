@@ -40,6 +40,38 @@ export function sanitizeConversationImagesForOutput(
   };
 }
 
+export function sanitizeConversationImagesForVisualOutput(
+  conversation: ConversationExport
+): ConversationExport {
+  const sanitized = sanitizeConversationImagesForOutput(conversation);
+
+  return {
+    ...sanitized,
+    messages: sanitized.messages.map((message, index) => ({
+      ...message,
+      images: conversation.messages[index]?.images.map(sanitizeImageRefForVisualOutput) ?? []
+    }))
+  };
+}
+
+export function sanitizeImageRefForVisualOutput(image: ExportedImageRef): ExportedImageRef {
+  if (image.dataUri === undefined) {
+    return { ...image };
+  }
+
+  if (
+    !/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/iu.test(image.dataUri) ||
+    image.dataUri.length > 12_000_000
+  ) {
+    return sanitizeImageRefForOutput(image);
+  }
+
+  return {
+    ...image,
+    dataUri: image.dataUri.replace(/\s+/gu, "")
+  };
+}
+
 export function sanitizeMessageImagesForOutput(message: ExportedMessage): ExportedMessage {
   return {
     ...message,
@@ -53,6 +85,27 @@ export function sanitizeMessageImagesForOutput(message: ExportedMessage): Export
       code: omitDataImagePayloads(codeBlock.code)
     })),
     images: message.images.map(sanitizeImageRefForOutput),
+    ...(message.attachments !== undefined
+      ? {
+          attachments: message.attachments.map((attachment) => ({
+            ...attachment,
+            name: omitDataImagePayloads(attachment.name),
+            ...(attachment.description !== undefined
+              ? { description: omitDataImagePayloads(attachment.description) }
+              : {}),
+            ...(attachment.mimeType !== undefined
+              ? { mimeType: omitDataImagePayloads(attachment.mimeType) }
+              : {}),
+            ...(attachment.url !== undefined ? { url: omitDataImagePayloads(attachment.url) } : {}),
+            ...(attachment.previewHtml !== undefined
+              ? { previewHtml: omitDataImagePayloads(attachment.previewHtml) }
+              : {}),
+            ...(attachment.warning !== undefined
+              ? { warning: omitDataImagePayloads(attachment.warning) }
+              : {})
+          }))
+        }
+      : {}),
     metadata: sanitizeUnknownDataImagePayloads(message.metadata) as Readonly<
       Record<string, unknown>
     >

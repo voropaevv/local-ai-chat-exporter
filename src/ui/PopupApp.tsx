@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useState } from "preact/hooks";
+import { Files } from "lucide-preact";
 
 import type {
   ActiveTabInfoResult,
@@ -23,7 +24,6 @@ import {
   buildCopyMarkdownStatusMessage,
   buildCopyMarkdownRequest,
   buildDownloadRequest,
-  buildExportStatusMessage,
   buildGetActiveTabInfoRequest,
   buildGetScanCacheSummaryRequest,
   buildOpenPreviewRequest,
@@ -32,11 +32,15 @@ import {
   popupReducer
 } from "./state/popup-state";
 import { readStoredRedactionSettings } from "./redaction-storage";
+import { readSourceTabId } from "./source-tab";
 import { copyRenderedFileToClipboard } from "../utils/clipboard";
+import { deserializeRenderedFile } from "../core/rendered-file-transport";
+import { START_EXPORT_JOB } from "./export-job";
 
 export function PopupApp() {
   const [state, dispatch] = useReducer(popupReducer, undefined, createInitialPopupState);
   const [activeTabRetryKey, setActiveTabRetryKey] = useState(0);
+  const [sourceTabId, setSourceTabId] = useState<number | undefined>(readSourceTabId);
   const [settingsReady, setSettingsReady] = useState(false);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions =
@@ -82,7 +86,9 @@ export function PopupApp() {
 
     dispatch({ type: "active_tab_info_started" });
 
-    waitForActiveTabInfo(sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest()))
+    waitForActiveTabInfo(
+      sendRuntimeMessage<ActiveTabInfoResult>(buildGetActiveTabInfoRequest(sourceTabId))
+    )
       .then((response) => {
         if (cancelled) {
           return;
@@ -97,6 +103,7 @@ export function PopupApp() {
             supported: activeTabInfo.supported,
             type: "set_active_tab_info"
           });
+          setSourceTabId(activeTabInfo.sourceTabId ?? sourceTabId);
           return;
         }
 
@@ -111,12 +118,12 @@ export function PopupApp() {
     return () => {
       cancelled = true;
     };
-  }, [activeTabRetryKey]);
+  }, [activeTabRetryKey, sourceTabId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    sendRuntimeMessage<ScanCacheSummaryResult>(buildGetScanCacheSummaryRequest())
+    sendRuntimeMessage<ScanCacheSummaryResult>(buildGetScanCacheSummaryRequest(sourceTabId))
       .then((response) => {
         const cachedScan = response.ok ? getCachedScanSummary(response.value) : undefined;
 
@@ -131,12 +138,12 @@ export function PopupApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sourceTabId]);
 
   async function handleScan(): Promise<boolean> {
     dispatch({ type: "scan_started" });
 
-    const response = await sendRuntimeMessage<ScanSummary>(buildScanRequest());
+    const response = await sendRuntimeMessage<ScanSummary>(buildScanRequest(sourceTabId));
 
     if (response.ok) {
       dispatch({ scan: response.value, type: "scan_succeeded" });
@@ -149,7 +156,7 @@ export function PopupApp() {
 
   async function ensureFreshConversation(): Promise<boolean> {
     const cacheResponse = await sendRuntimeMessage<ScanCacheSummaryResult>(
-      buildGetScanCacheSummaryRequest()
+      buildGetScanCacheSummaryRequest(sourceTabId)
     );
 
     if (cacheResponse.ok && cacheResponse.value.hasCache) {
@@ -162,13 +169,23 @@ export function PopupApp() {
 
   async function handleCancelScan() {
     dispatch({ type: "scan_cancelled" });
-    await sendRuntimeMessage(buildCancelScanRequest());
+    await sendRuntimeMessage(buildCancelScanRequest(sourceTabId));
   }
 
   async function handleDownload() {
-    if (await ensureFreshConversation()) {
-      await runExportAction(buildDownloadRequest(state));
+    dispatch({ type: "export_started" });
+    const response = await sendRuntimeMessage({
+      type: START_EXPORT_JOB,
+      request: buildDownloadRequest(state, sourceTabId)
+    });
+    if (!response.ok) {
+      dispatch({ message: response.error.message, type: "scan_failed" });
+      return;
     }
+    dispatch({
+      type: "export_finished",
+      message: "Export is running in its own progress tab. You can switch tabs."
+    });
   }
 
   async function handleCopyMarkdown() {
@@ -178,7 +195,9 @@ export function PopupApp() {
 
     dispatch({ type: "export_started" });
 
-    const response = await sendWithStaleRetry<PopupExportSuccess>(buildCopyMarkdownRequest(state));
+    const response = await sendWithStaleRetry<PopupExportSuccess>(
+      buildCopyMarkdownRequest(state, sourceTabId)
+    );
 
     if (!response.ok) {
       dispatch({ message: response.error.message, type: "scan_failed" });
@@ -186,7 +205,7 @@ export function PopupApp() {
     }
 
     try {
-      await copyRenderedFileToClipboard(response.value.files ?? []);
+      await copyRenderedFileToClipboard(response.value.files.map(deserializeRenderedFile));
     } catch (error) {
       dispatch({
         message: error instanceof Error ? error.message : "Clipboard copy failed.",
@@ -208,7 +227,7 @@ export function PopupApp() {
 
     dispatch({ type: "export_started" });
 
-    const response = await sendWithStaleRetry(buildOpenPreviewRequest(state));
+    const response = await sendWithStaleRetry(buildOpenPreviewRequest(state, sourceTabId));
 
     if (!response.ok) {
       dispatch({ message: response.error.message, type: "scan_failed" });
@@ -219,23 +238,6 @@ export function PopupApp() {
       message: "Preview opened.",
       type: "export_finished"
     });
-  }
-
-  async function runExportAction(request: ReturnType<typeof buildDownloadRequest>) {
-    dispatch({ type: "export_started" });
-
-    const response = await sendWithStaleRetry<PopupExportSuccess>(request);
-
-    if (!response.ok) {
-      dispatch({ message: response.error.message, type: "scan_failed" });
-      return undefined;
-    }
-
-    dispatch({
-      message: buildExportStatusMessage(response.value),
-      type: "export_finished"
-    });
-    return response.value;
   }
 
   async function sendWithStaleRetry<T>(message: unknown): Promise<RuntimeResponse<T>> {
@@ -282,6 +284,19 @@ export function PopupApp() {
         onOutputModeChange={(outputMode) => dispatch({ outputMode, type: "set_output_mode" })}
         options={state.options}
       />
+      <a
+        className="popup-batch-link"
+        href={
+          typeof chrome !== "undefined" && chrome.runtime?.getURL !== undefined
+            ? chrome.runtime.getURL("options/index.html?view=batch")
+            : "/options/index.html?view=batch"
+        }
+        rel="noreferrer"
+        target="_blank"
+      >
+        <Files aria-hidden="true" size={16} strokeWidth={2.2} />
+        <span>Export multiple chats</span>
+      </a>
       <ScanControls
         canCancelScan={state.canCancelScan}
         onCancelScan={handleCancelScan}

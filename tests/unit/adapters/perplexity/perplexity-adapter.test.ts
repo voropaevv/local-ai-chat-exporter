@@ -30,6 +30,8 @@ describe("Perplexity adapter", () => {
     expect(perplexitySelectors.message).toContain("[data-testid='thread-question']");
     expect(perplexitySelectors.message).toContain("[data-testid='thread-answer']");
     expect(perplexitySelectors.message).toContain("[class~='group/query']");
+    expect(perplexitySelectors.message).toContain("[class~='group/user-bubble']");
+    expect(perplexitySelectors.message).toContain("[class~='group/final-text']");
   });
 
   test("extracts visible user and assistant messages from fixture DOM", () => {
@@ -79,5 +81,17 @@ describe("Perplexity adapter", () => {
     expect(messages[1].text).toContain("Отлично, у меня достаточно данных");
     expect(messages[1].text).toContain("Command Palette");
     expect(messages.map((message) => message.text)).not.toContain("Answer Links Images");
+  });
+
+  test("extracts current user-bubble and final-text message groups", () => {
+    const messages = extractVisiblePerplexityMessages(
+      loadFixture("current-user-bubble-layout.html")
+    );
+
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages.map((message) => message.text)).toEqual([
+      "Jelluvi current Perplexity query.",
+      "Jelluvi current Perplexity answer."
+    ]);
   });
 });

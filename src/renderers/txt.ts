@@ -2,6 +2,12 @@ import type { ConversationExport, ExportedCodeBlock, ExportedMessage } from "../
 import { sanitizeConversationImagesForOutput } from "../core/image-safety";
 import { renderAdvancedTextLines } from "./advanced-content";
 import { createRenderedFile, type RenderedFile, type RendererOptions } from "./types";
+import {
+  formatAttachmentLabel,
+  formatDisplayDateTime,
+  formatFileSize,
+  shouldShowCaptureStatus
+} from "./presentation";
 
 const MESSAGE_SEPARATOR = "=".repeat(80);
 
@@ -15,10 +21,13 @@ export function renderTxt(
     `Title: ${normalizeSingleLine(safeConversation.title ?? "Untitled conversation")}`,
     `Platform: ${safeConversation.platformLabel}`,
     `Source: ${safeConversation.sourceUrl}`,
-    `Exported: ${safeConversation.exportedAt}`,
-    `Messages: ${safeConversation.messageCount}`,
-    `Completeness: ${safeConversation.completeness.status}`
+    `Exported: ${formatDisplayDateTime(safeConversation.exportedAt)}`,
+    `Messages: ${safeConversation.messageCount}`
   ];
+
+  if (shouldShowCaptureStatus(safeConversation)) {
+    lines.push(`Capture status: ${safeConversation.completeness.status.replace(/_/gu, " ")}`);
+  }
 
   if (warnings.length > 0) {
     lines.push("Warnings:", ...warnings.map((warning) => `- ${warning}`));
@@ -38,16 +47,31 @@ export function renderTxt(
 }
 
 function renderMessage(message: ExportedMessage): readonly string[] {
-  const lines = [
-    `${message.index + 1}. ${normalizeSingleLine(message.authorLabel)} (${message.role})`
-  ];
+  const lines = [`${message.index + 1}. ${normalizeSingleLine(message.authorLabel)}`];
 
   if (message.model !== undefined) {
     lines.push(`Model: ${message.model}`);
   }
 
   if (message.createdAt !== undefined) {
-    lines.push(`Created: ${message.createdAt}`);
+    lines.push(`Created: ${formatDisplayDateTime(message.createdAt)}`);
+  }
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    lines.push(
+      "",
+      "Attachments:",
+      ...message.attachments!.map((attachment) => {
+        const details = [
+          formatAttachmentLabel(attachment),
+          formatFileSize(attachment.sizeBytes),
+          attachment.url,
+          attachment.warning
+        ].filter((value): value is string => value !== undefined && value.length > 0);
+
+        return `- ${attachment.name}${details.length > 0 ? ` — ${details.join(" · ")}` : ""}`;
+      })
+    );
   }
 
   lines.push("", normalizeText(message.text));

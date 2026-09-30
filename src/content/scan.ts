@@ -2,16 +2,21 @@ import {
   collectChatGptConversation,
   type ChatGptScrollCollectorOptions
 } from "../adapters/chatgpt/scroll-collector";
+import { mergeChatGptConversationMessages } from "../adapters/chatgpt/conversation-data";
+import { extractVisibleChatGptMessages } from "../adapters/chatgpt/extract-visible";
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
 import type { PlatformAdapter } from "../adapters/types";
 import { buildCompletenessReport } from "../core/completeness";
-import { ExportPipelineError } from "../core/export-options";
+import { ExportPipelineError } from "../core/export-errors";
 import { normalizeMessagesWithStats } from "../core/normalize";
 import type { ConversationExport } from "../core/schema";
+import type { ChatGptConversationData } from "../adapters/chatgpt/conversation-data";
 
 export interface ConversationScanOptions extends Omit<ChatGptScrollCollectorOptions, "document"> {
   readonly document?: Document;
   readonly exportedAt?: string;
+  readonly chatGptConversationData?: ChatGptConversationData;
+  readonly chatGptConversationDataWarning?: string;
   readonly hostname?: string;
   readonly href?: string;
   readonly title?: string;
@@ -51,8 +56,43 @@ export async function scanCurrentConversationExport(
     });
   }
 
+  if (options.signal?.aborted) {
+    throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+  }
+  const conversationData = options.chatGptConversationData;
+
+  if (conversationData !== undefined) {
+    const visibleMessages = normalizeMessagesWithStats(
+      extractVisibleChatGptMessages(rootDocument)
+    ).messages;
+    const messages = mergeChatGptConversationMessages(conversationData.messages, visibleMessages);
+    const completeness = buildCompletenessReport({
+      duplicateCount: 0,
+      messages,
+      platformWarnings: conversationData.warnings ?? [],
+      scanWarnings: conversationData.warnings ?? [],
+      reachedBottom: true,
+      reachedTop: true,
+      scrollSteps: 0,
+      virtualized: false
+    });
+
+    return {
+      schemaVersion: "1.0",
+      platform: adapter.id,
+      platformLabel: adapter.label,
+      sourceUrl: href,
+      title: conversationData.title ?? title,
+      conversationId: getConversationId(href),
+      exportedAt: options.exportedAt ?? new Date().toISOString(),
+      messageCount: messages.length,
+      completeness,
+      messages
+    };
+  }
+
   const result = await collectChatGptConversation({
-    ...options,
+    ...withoutConversationData(options),
     document: rootDocument
   });
 
@@ -73,9 +113,31 @@ export async function scanCurrentConversationExport(
     conversationId: getConversationId(href),
     exportedAt: options.exportedAt ?? new Date().toISOString(),
     messageCount: result.messages.length,
-    completeness: result.completeness,
+    completeness:
+      options.chatGptConversationDataWarning === undefined
+        ? result.completeness
+        : {
+            ...result.completeness,
+            status:
+              result.completeness.status === "complete"
+                ? "probably_complete"
+                : result.completeness.status,
+            platformWarnings: [
+              ...result.completeness.platformWarnings,
+              options.chatGptConversationDataWarning
+            ]
+          },
     messages: result.messages
   };
+}
+
+function withoutConversationData(
+  options: ConversationScanOptions
+): Omit<ConversationScanOptions, "chatGptConversationData" | "chatGptConversationDataWarning"> {
+  const collectorOptions = { ...options };
+  delete collectorOptions.chatGptConversationData;
+  delete collectorOptions.chatGptConversationDataWarning;
+  return collectorOptions;
 }
 
 function scanVisibleAdapterConversation(

@@ -100,14 +100,14 @@ describe("security release scripts", () => {
       mkdirSync(releaseDir, { recursive: true });
       writeFileSync(
         resolve(distDir, "content/main.js"),
-        '(()=>{const ready = true; globalThis.__logThreadReady = ready;})();\n'
+        "(()=>{const ready = true; globalThis.__logThreadReady = ready;})();\n"
       );
       writeFileSync(
         resolve(releaseDir, "jelluvi-v0.1.0.zip"),
         Buffer.from(
           zipSync({
             "content/main.js": new TextEncoder().encode(
-              '(()=>{const ready = true; globalThis.__logThreadReady = ready;})();\n'
+              "(()=>{const ready = true; globalThis.__logThreadReady = ready;})();\n"
             ),
             "manifest.json": new TextEncoder().encode('{"manifest_version":3}')
           })
@@ -156,9 +156,30 @@ describe("security release scripts", () => {
     });
   });
 
+  test("check-content-script-classic fails content bundles above the provider-page budget", () => {
+    withTempDir((directory) => {
+      const distDir = resolve(directory, "dist");
+      const releaseDir = resolve(directory, "release");
+      mkdirSync(resolve(distDir, "content"), { recursive: true });
+      mkdirSync(releaseDir, { recursive: true });
+      writeFileSync(resolve(distDir, "content/main.js"), "x".repeat(100 * 1024 + 1));
+
+      const result = runNodeScript("scripts/check-content-script-classic.mjs", [
+        distDir,
+        releaseDir
+      ]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("exceeds 102400-byte budget");
+    });
+  });
+
   test("check-export-output-hygiene passes clean local export files", () => {
     withTempDir((directory) => {
-      writeFileSync(resolve(directory, "conversation.md"), "# Clean export\n\nNo embedded images.\n");
+      writeFileSync(
+        resolve(directory, "conversation.md"),
+        "# Clean export\n\nNo embedded images.\n"
+      );
       writeFileSync(
         resolve(directory, "conversation.html"),
         "<!doctype html><article><p>Clean exported text.</p></article>\n"

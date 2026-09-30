@@ -12,6 +12,13 @@ import {
 } from "../core/image-safety";
 import { renderAdvancedMarkdown } from "./advanced-content";
 import { renderFrontmatter, type FrontmatterField } from "./frontmatter";
+import {
+  formatAttachmentLabel,
+  formatDisplayDateTime,
+  formatFileSize,
+  safeHref,
+  shouldShowCaptureStatus
+} from "./presentation";
 
 export const MARKDOWN_PROFILES = [
   "default",
@@ -76,8 +83,7 @@ function renderDefaultMarkdown(
         `# ${title}`,
         "",
         `Source: ${conversation.sourceUrl}`,
-        `Exported: ${conversation.exportedAt}`,
-        `Completeness: ${conversation.completeness.status}`
+        `Exported: ${formatDisplayDateTime(conversation.exportedAt)}`
       ]
     : [`# ${title}`];
 
@@ -110,8 +116,7 @@ function renderObsidianMarkdown(
         `# ${title}`,
         "",
         `Source: ${conversation.sourceUrl}`,
-        `Exported: ${conversation.exportedAt}`,
-        `Completeness: ${conversation.completeness.status}`
+        `Exported: ${formatDisplayDateTime(conversation.exportedAt)}`
       ]
     : [`# ${title}`];
 
@@ -123,10 +128,7 @@ function renderObsidianMarkdown(
   return finishMarkdown(lines);
 }
 
-function renderGithubMarkdown(
-  conversation: ConversationExport,
-  includeMetadata: boolean
-): string {
+function renderGithubMarkdown(conversation: ConversationExport, includeMetadata: boolean): string {
   const warnings = collectWarnings(conversation);
   const title = normalizeSingleLine(conversation.title ?? "Untitled conversation");
   const lines: string[] = includeMetadata
@@ -138,8 +140,7 @@ function renderGithubMarkdown(
         renderMetadataTable([
           ["Platform", conversation.platformLabel],
           ["Source", conversation.sourceUrl],
-          ["Exported", conversation.exportedAt],
-          ["Completeness", conversation.completeness.status]
+          ["Exported", formatDisplayDateTime(conversation.exportedAt)]
         ])
       ]
     : [`# ${title}`];
@@ -160,10 +161,7 @@ function renderGithubMarkdown(
   return finishMarkdown(lines);
 }
 
-function renderGitBookMarkdown(
-  conversation: ConversationExport,
-  includeMetadata: boolean
-): string {
+function renderGitBookMarkdown(conversation: ConversationExport, includeMetadata: boolean): string {
   const warnings = collectWarnings(conversation);
   const title = normalizeSingleLine(conversation.title ?? "Untitled conversation");
   const lines: string[] = includeMetadata
@@ -177,9 +175,8 @@ function renderGitBookMarkdown(
         renderMetadataTable([
           ["Platform", conversation.platformLabel],
           ["Source", conversation.sourceUrl],
-          ["Exported", conversation.exportedAt],
-          ["Messages", String(conversation.messageCount)],
-          ["Completeness", conversation.completeness.status]
+          ["Exported", formatDisplayDateTime(conversation.exportedAt)],
+          ["Messages", String(conversation.messageCount)]
         ])
       ]
     : [`# ${title}`];
@@ -226,7 +223,7 @@ function renderResearchLogMarkdown(
         ["Platform", conversation.platformLabel],
         ["Source URL", conversation.sourceUrl],
         ["Conversation ID", conversation.conversationId ?? ""],
-        ["Exported At", conversation.exportedAt],
+        ["Exported At", formatDisplayDateTime(conversation.exportedAt)],
         ["Message Count", String(conversation.messageCount)]
       ]),
       "",
@@ -280,10 +277,16 @@ function renderCommonFrontmatter(
 
   fields.push(
     { key: "exported_at", value: conversation.exportedAt },
-    { key: "message_count", value: conversation.messageCount },
-    { key: "completeness", value: conversation.completeness.status },
-    { key: "warnings", value: warnings }
+    { key: "message_count", value: conversation.messageCount }
   );
+
+  if (profile === "research-log" || shouldShowCaptureStatus(conversation)) {
+    fields.push({ key: "completeness", value: conversation.completeness.status });
+  }
+
+  if (warnings.length > 0) {
+    fields.push({ key: "warnings", value: warnings });
+  }
 
   return renderFrontmatter(fields);
 }
@@ -310,12 +313,21 @@ function renderObsidianFrontmatter(
 
   fields.push(
     { key: "exported_at", value: conversation.exportedAt },
-    { key: "message_count", value: conversation.messageCount },
-    { key: "completeness", value: conversation.completeness.status },
-    { key: "tags", value: buildObsidianTags(conversation) },
-    { key: "backlinks", value: [] },
-    { key: "warnings", value: warnings }
+    { key: "message_count", value: conversation.messageCount }
   );
+
+  if (shouldShowCaptureStatus(conversation)) {
+    fields.push({ key: "completeness", value: conversation.completeness.status });
+  }
+
+  fields.push(
+    { key: "tags", value: buildObsidianTags(conversation) },
+    { key: "backlinks", value: [] }
+  );
+
+  if (warnings.length > 0) {
+    fields.push({ key: "warnings", value: warnings });
+  }
 
   return renderFrontmatter(fields);
 }
@@ -345,15 +357,42 @@ function renderWarningsBlockquote(title: string, warnings: readonly string[]): s
 function renderMessageMarkdown(message: ExportedMessage, options: MessageMarkdownOptions): string {
   const body = normalizeMarkdown(message.markdown ?? message.text);
   const safeBody = options.escapeHtml ? escapeHtmlOutsideCodeFences(body) : body;
+  const attachments = renderAttachmentRefs(message);
   const imageRefs = renderImageRefs(message.images, safeBody);
   const advancedContent = renderAdvancedMarkdown(message);
-  const bodyWithImages = [safeBody, imageRefs, advancedContent].filter(Boolean).join("\n\n");
+  const bodyWithImages = [attachments, safeBody, imageRefs, advancedContent]
+    .filter(Boolean)
+    .join("\n\n");
 
   if (message.codeBlocks.length === 0 || containsFence(bodyWithImages)) {
     return bodyWithImages;
   }
 
   return [bodyWithImages, ...message.codeBlocks.map(renderCodeBlock)].filter(Boolean).join("\n\n");
+}
+
+function renderAttachmentRefs(message: ExportedMessage): string {
+  const attachments = message.attachments ?? [];
+
+  if (attachments.length === 0) {
+    return "";
+  }
+
+  return [
+    "Attachments:",
+    ...attachments.map((attachment) => {
+      const href = attachment.url === undefined ? undefined : safeHref(attachment.url);
+      const name = escapeMarkdownText(attachment.name);
+      const linkedName = href === undefined ? name : `[${name}](${attachment.url})`;
+      const details = [
+        formatAttachmentLabel(attachment),
+        formatFileSize(attachment.sizeBytes),
+        attachment.warning
+      ].filter((value): value is string => value !== undefined && value.length > 0);
+
+      return `- ${linkedName}${details.length > 0 ? ` — ${details.join(" · ")}` : ""}`;
+    })
+  ].join("\n");
 }
 
 function renderCodeBlock(codeBlock: ExportedCodeBlock): string {

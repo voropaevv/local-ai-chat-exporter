@@ -35,6 +35,7 @@ function omitMessageRawHtml(message: ExportedMessage): ExportedMessage {
     ...(message.markdown !== undefined ? { markdown: message.markdown } : {}),
     codeBlocks: message.codeBlocks,
     images: message.images,
+    ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
     ...(message.sources !== undefined ? { sources: message.sources } : {}),
     ...(message.thinkingBlocks !== undefined ? { thinkingBlocks: message.thinkingBlocks } : {}),
     ...(message.canvas !== undefined ? { canvas: message.canvas } : {}),

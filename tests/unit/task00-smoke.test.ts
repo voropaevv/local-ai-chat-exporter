@@ -15,13 +15,19 @@ describe("Task 00 scaffold", () => {
 
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       manifest_version?: unknown;
+      version?: unknown;
       permissions?: unknown;
       optional_permissions?: unknown;
       optional_host_permissions?: unknown;
       host_permissions?: unknown;
     };
+    const packageJson = JSON.parse(
+      readFileSync(resolve(projectRoot, "package.json"), "utf8")
+    ) as { version?: unknown };
 
     expect(manifest.manifest_version).toBe(3);
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/u);
+    expect(manifest.version).toBe(packageJson.version);
     expect(manifest.permissions).toEqual(["activeTab", "scripting", "storage"]);
     expect(manifest.optional_permissions).toBeUndefined();
     expect(manifest.optional_host_permissions).toEqual(SUPPORTED_CHAT_ORIGINS);
