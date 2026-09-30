@@ -1,5 +1,98 @@
 # Release QA — Jelluvi 0.2.14
 
+## Live automation checkpoint — 2026-09-30
+
+Baseline: `613a24a`; unchanged production candidate `0.2.14`. The release worktree was clean at baseline;
+parallel site changes remain in their original checkout. A new isolated Chrome 153 profile loaded
+the exact `dist` through the official experimental `Extensions.loadUnpacked` protocol and returned
+runtime version `0.2.14`. The profile closed after the probe. This proves installation, not provider QA.
+
+Acceptance frozen before implementation:
+
+- A runner must use isolated, explicitly owned profiles; no copied cookies, credentials or personal
+  browser databases. It must install the unchanged candidate, verify runtime version and resource
+  bytes, and close owned sessions on success/failure.
+- A saved export is checked against an independently reviewed reference; the candidate's own
+  output cannot bless itself. Missing references, partial coverage, wrong message order/content,
+  stale provenance, failed downloads or cleanup must prevent release acceptance.
+- The denominator is Chrome/Brave/Edge/Vivaldi times five shipped providers. Installation,
+  cold-short, cold-long, background-long, selected-batch, lifecycle and format/visual checks remain
+  explicit stages. A smoke run cannot complete another stage.
+- Negative controls: missing/duplicate matrix rows, stale or changed build, truncated/reordered
+  conversations, changed text with unchanged counts, and a download requested but not completed.
+- Test installation with current official local browsers, then run available authenticated cases.
+  If a dedicated profile needs login, identify that exact profile and keep other work progressing.
+
+Separate stricter evaluator review: hash-only references cannot be reconstructed independently.
+Contract v2 retains canonical source message records and rebuilds their fingerprint. Positive fixture
+references use separately reviewed source records; missing records or changed text behind unchanged
+hashes are retained negative controls. No candidate export may serve as its own reference. This
+strengthens the original reference gate; it does not waive any unread source or missing matrix cell.
+
+Implementation: `scripts/live-qa.mjs` installs the exact build through the official CDP pipe,
+verifies runtime bytes for every resource, invokes a genuine extension action on a **tab** target,
+uses the actual JSON export controls, and observes completed download events before inspecting bytes.
+No manifest permission patch, copied session, sandbox bypass or disabled background throttling is used.
+The independent-reference comparator checks roles, ordered text, counts and total normalized text length.
+A short smoke cannot satisfy a long stage (at least 50 messages or 50,000 text characters).
+The validator reconstructs evidence and rejects missing/duplicate cells, stale contracts/builds,
+changed artifacts/references, partial content and unverified cleanup. See [live-qa.md](live-qa.md).
+
+Observed failure/repair cases retained for this phase:
+
+- `Extensions.triggerAction` rejects a page target. The runner selects an unambiguous actual tab
+  target instead; the corrected action completed in installed Chrome without altered permissions.
+- Current Vivaldi exited with SIGSEGV during Playwright startup, before a browser-level CDP session
+  and extension installation were available.
+  A direct root-pipe launcher avoids the additional attachment and records PID/start time; current Vivaldi
+  still failed to expose its local endpoint. Mounted/portable, headed/headless attempts are failures,
+  **not** installation evidence. The cause is not established and the Vivaldi gate remains open.
+- An owned hung browser did not stop after SIGTERM. Cleanup now has bounded escalation for only
+  its acquired process, waits for actual process closure, and preserves the original launch error
+  with cleanup state. The failed Vivaldi retry returned `closed_verified`; earlier leaked owned
+  process and its children were stopped and directly checked absent. Failed cleanup cannot pass QA.
+- Signal negative control: Ctrl-C on a retained Chrome setup window closed its actual browser PID
+  but inherited pipe handles delayed Node's `close` event and prevented a final receipt. The repair
+  separates actual exit from stream closure, owns an isolated process group and closes transports
+  in all paths. Repeating the exact Ctrl-C case returned a failed receipt with `closed_verified`
+  for its process group and wake guard; direct checks confirmed closure. Startup failure and
+  pending/disconnected/malformed/deadline protocol responses also have regression tests.
+
+Verification: controlled independent two-message fixture completed the entire new runner's action →
+popup → real JSON download → content/order comparison path, with verified process closure. It is
+synthetic pipeline evidence, not live-provider acceptance. Installed Chrome 153, Brave 154 and
+official signed Edge 154 each verified all 34 runtime resource files and process closure. The saved
+live gate reconstructs 15/140 cells (shared installation checks) with no contradictory evidence;
+125 cells remain missing. Vivaldi installation, actual account exports, batch/lifecycle and all-format
+visual checks are not silently completed by these results.
+Final local checks: lint/typecheck, 640 unit tests in 90 files, 14/14 unchanged production E2E,
+minimal manifest permissions, no remote-code patterns and current build provenance passed.
+Normal headless Chrome and Ctrl-C setup runs both verify process-group/transport/wake-guard closure.
+One later shutdown attempt emitted transient `kill EPERM` without a receipt; its resources were
+directly checked absent, but the cause was not established. Finalization now records browser and
+wake-guard cleanup failures independently instead of losing the receipt, and an unverified guard
+blocks acceptance. Repeated normal closure passed; retained diagnostics must distinguish any
+future permission failure from a running resource, rather than declaring either by inference.
+
+MacBook direct peer recheck: the existing unpacked-extension path still matches all candidate dist
+bytes and version `0.2.14`; its registered extension configuration points to that path. Configuration
+does not retain a manifest version, so current loaded runtime version remains unverified. No remote
+desktop, browser/session transfer or new production build was used in this phase.
+
+Current GUI blocker: local Mac Studio is locked and the computer-use interface requires manual
+unlock. The normal Brave session is authenticated to ChatGPT, but the previously recorded long-chat
+URL redirected to the homepage rather than opening the source. That does not prove the conversation
+is absent. After unlock, use the site's visible search/navigation to locate the intended current source;
+do not use the candidate output as the completeness reference or count this navigation as a live export.
+
+Resources: all owned test browser sessions and wake guards are closed and directly checked absent.
+Dedicated profiles, private evidence and verified temporary browser distributions are retained for
+remaining QA; profiles must not be deleted while a later run may need their local authentication.
+The earlier Brave setup was interrupted and returned a failed receipt, not live acceptance.
+No remote desktop. Next action: after local unlock, inspect current provider access, assemble
+independent private references and run actual cold-short/long/background exports.
+Selected-batch, lifecycle and final all-format visual automation remain explicit open work.
+
 ## Current candidate checkpoint — 2026-09-14
 
 **NO-GO for public release while the current-candidate acceptance matrix remains open.**

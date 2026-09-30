@@ -10,7 +10,8 @@ export default tseslint.config(
       "node_modules/**",
       "coverage/**",
       "playwright-report/**",
-      "test-results/**"
+      "test-results/**",
+      "qa-artifacts/**"
     ]
   },
   js.configs.recommended,
