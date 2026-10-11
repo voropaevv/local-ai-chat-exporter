@@ -141,14 +141,30 @@ async function wakeGuard() {
 
 export async function savedExport(context, session, id, config, output) {
   const retainedPages = new Set(context.pages());
+  let result;
+  let failure;
   try {
-    return await runSavedExport(context, session, id, config, output);
-  } finally {
-    for (const page of context.pages()) {
-      if (!retainedPages.has(page) && !page.isClosed())
+    result = await runSavedExport(context, session, id, config, output);
+  } catch (error) {
+    failure = error;
+  }
+  const cleanupErrors = [];
+  for (const page of context.pages()) {
+    if (!retainedPages.has(page) && !page.isClosed()) {
+      try {
         await withDeadline(page.close(), "Export tab cleanup", 10000);
+      } catch (error) {
+        cleanupErrors.push(error.message);
+      }
     }
   }
+  if (failure || cleanupErrors.length) {
+    const error = failure ?? new Error("Export tab cleanup failed");
+    error.exportResult = result;
+    error.tabCleanupErrors = cleanupErrors;
+    throw error;
+  }
+  return result;
 }
 
 async function runSavedExport(context, session, id, config, output) {
@@ -331,6 +347,34 @@ async function runSavedExport(context, session, id, config, output) {
     };
   } catch (error) {
     if (jobPage && !jobPage.isClosed()) {
+      const sourceStructure = await source
+        .evaluate(() => ({
+          title: document.title === "Just a moment..." ? "provider_verification" : "other",
+          roles: document.querySelectorAll("[data-message-author-role]").length,
+          turns: document.querySelectorAll('[data-testid^="conversation-turn-"]').length,
+          headings: Array.from(document.querySelectorAll("h4"))
+            .filter((node) => /^(You said:|ChatGPT said:)$/.test(node.textContent.trim()))
+            .map((node) => {
+              const ancestors = [];
+              for (
+                let parent = node;
+                parent && ancestors.length < 5;
+                parent = parent.parentElement
+              ) {
+                ancestors.push({
+                  tag: parent.tagName,
+                  testid: parent.getAttribute("data-testid"),
+                  role: parent.getAttribute("data-message-author-role"),
+                  class: parent.className
+                });
+              }
+              return ancestors;
+            })
+        }))
+        .catch(() => null);
+      await writeFile(resolve(output, "source-structure.json"), JSON.stringify(sourceStructure), {
+        mode: 0o600
+      }).catch(() => {});
       const status = await jobPage
         .getByRole("status")
         .allTextContents()
@@ -542,6 +586,8 @@ async function runWithGuard(guard) {
     }
     if (interrupted) throw new Error("Interrupted by user");
   } catch (error) {
+    if (error.exportResult) Object.assign(receipt, error.exportResult);
+    if (error.tabCleanupErrors) receipt.tabCleanupErrors = error.tabCleanupErrors;
     receipt.error = error.message;
     if (error.resource) {
       receipt.process = error.resource.owner;

@@ -12,7 +12,7 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
     import {savedExport} from ${JSON.stringify(helper)};
     const expected='https://chatgpt.com/c/test';
     const results=[];
-    for (const mode of ['duplicate','redirect','ambiguous']) {
+    for (const mode of ['duplicate','redirect','ambiguous','cleanup-failure']) {
       const calls=[]; let queries=0; let loaded=false; let closed=false;
       const retained={isClosed:()=>false,close:async()=>{throw Error('borrowed page closed')}};
       const pages=[retained];
@@ -25,11 +25,11 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
       }};
       const source={goto:async()=>{},waitForLoadState:async()=>{loaded=true},
         url:()=>mode==='redirect'?'https://chatgpt.com/':expected,bringToFront:async()=>{},
-        isClosed:()=>closed,close:async()=>{closed=true}};
+        isClosed:()=>closed,close:async()=>{closed=true;if(mode==='cleanup-failure')throw Error('close rejected')}};
       const context={pages:()=>pages,newPage:async()=>{pages.push(source);return source},newCDPSession:async()=>({send:async()=>{}}),
         serviceWorkers:()=>[{url:()=> 'chrome-extension://ext/worker.js',evaluate:async()=>{throw Error('selected')}}]};
       try {await savedExport(context,session,'ext',{provider:'chatgpt',stage:'cold-short',url:expected},'/unused')}
-      catch(error){results.push({mode,calls,loaded,closed,error:error.message})}
+      catch(error){results.push({mode,calls,loaded,closed,error:error.message,...(mode==='cleanup-failure'?{cleanupErrors:error.tabCleanupErrors}:{})})}
     }
     console.log(JSON.stringify(results));
   `
@@ -47,4 +47,6 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
   expect(results[1].error).toContain("Source redirected before export");
   expect(results[2].calls).toEqual([]);
   expect(results[2].error).toBe("Cannot uniquely identify the actual source tab target");
+  expect(results[3].error).toBe("selected");
+  expect(results[3].cleanupErrors).toEqual(["close rejected"]);
 });
