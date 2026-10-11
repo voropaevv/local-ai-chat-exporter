@@ -147,13 +147,27 @@ export async function savedExport(context, session, id, config, output) {
   if (url.origin !== new URL(homes[config.provider]).origin || url.username || url.password) {
     throw new Error("Source must be a conversation on the selected provider origin");
   }
+  const before = await session.send("Target.getTargets", { filter: [{ type: "tab" }] });
+  const existingTargetIds = new Set(before.targetInfos.map((target) => target.targetId));
   const source = await context.newPage();
   const focusSession = await context.newCDPSession(source);
   await focusSession.send("Emulation.setFocusEmulationEnabled", { enabled: false });
   await source.goto(config.url, { waitUntil: "domcontentloaded" });
+  await source.waitForLoadState("load", { timeout: 30000 });
+  if (source.url() !== config.url) {
+    const current = new URL(source.url());
+    throw new Error(
+      `Source redirected before export: ${current.origin}; conversationPath=${current.pathname.startsWith("/c/")}; rootPath=${current.pathname === "/"}`
+    );
+  }
   await source.bringToFront();
   const { targetInfos } = await session.send("Target.getTargets", { filter: [{ type: "tab" }] });
-  const tabs = targetInfos.filter((target) => target.type === "tab" && target.url === source.url());
+  const tabs = targetInfos.filter(
+    (target) =>
+      target.type === "tab" &&
+      target.url === source.url() &&
+      !existingTargetIds.has(target.targetId)
+  );
   if (tabs.length !== 1) throw new Error("Cannot uniquely identify the actual source tab target");
   // Official default-action invocation supplies the genuine activeTab gesture. No permission patch.
   await session.send("Extensions.triggerAction", { id, targetId: tabs[0].targetId });
@@ -166,8 +180,23 @@ export async function savedExport(context, session, id, config, output) {
     const tabs = await chrome.tabs.query({});
     return tabs.find((tab) => tab.url === sourceUrl)?.id;
   }, config.url);
-  if (!Number.isInteger(sourceTabId))
-    throw new Error("Default action did not grant access to the intended tab");
+  if (!Number.isInteger(sourceTabId)) {
+    const diagnostic = await worker.evaluate(async () =>
+      (await chrome.tabs.query({})).map(({ active, id, url, status }) => ({
+        active,
+        id,
+        hasUrl: typeof url === "string",
+        status
+      }))
+    );
+    throw new Error(
+      `Default action did not grant access to the intended tab: ${JSON.stringify({
+        sourceMatchesRequested: source.url() === config.url,
+        sourceOrigin: new URL(source.url()).origin,
+        tabs: diagnostic
+      })}`
+    );
+  }
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${id}/popup/index.html?sourceTabId=${sourceTabId}`);
   await popup.getByLabel("Bundle as ZIP").uncheck();
