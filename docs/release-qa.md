@@ -37,9 +37,24 @@ Release status: **not ready**. Current dist SHA-256:
 - Prior candidate `c22f608` native Vivaldi saved the exact 40-message ChatGPT and
   50-message Claude references. These historical results do not certify the
   changed current candidate across the full matrix.
-- ChatGPT cold export in Chrome/Edge remains blocked or failed. A captured
-  diagnostic source was a provider verification page, not a loaded conversation.
-  The candidate now reports that specific shell as page_not_ready.
+- Current Chrome ChatGPT cold and hidden-throughout background runs both match
+  the independent 40-message / 59,676-character reference exactly, with all 34
+  installed resources verified and owned processes closed. Native cold export
+  also matches after starting with only the last five pairs loaded. The earlier
+  Chrome verification-page failure was resolved without a CAPTCHA click.
+- The QA runner can reuse a native installation via `--installed-id` without
+  overwriting it with a temporary registration. A full hidden Claude export and
+  ordinary browser restart confirm that enabled Jelluvi 0.2.14 remains installed.
+- Edge's provider verification resolved in its ordinary QA profile without a
+  CAPTCHA click. The current candidate then passed strict hidden-throughout Claude:
+  exact 50 messages / 9,416 characters, all 34 resources verified, cleanup verified.
+  A subsequent cold run encountered verification again and failed with the specific
+  provider-verification diagnostic and verified cleanup; that cell remains open.
+- Brave's authenticated-profile attachment currently stalls before installation/export. A
+  bounded 45-second diagnostic also failed; the timeout-only experiment was removed.
+  The separate installation profile passed verification of all 34 current resources.
+  This narrows the transport gap to profile-dependent behavior, not a demonstrated
+  general installation failure or lost conversation content.
 - Vivaldi automated attachment/new-page initialization remains unresolved;
   native export evidence above is narrower than installed-resource verification.
 - The preceding candidate's Brave Notebook export saved four control messages from the new Google
