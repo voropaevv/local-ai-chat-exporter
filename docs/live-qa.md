@@ -23,6 +23,25 @@ then waits for Enter in the terminal and closes its owned browser. Login/challen
 human actions. Authentication stays in that profile; no profile/cookie transport is performed.
 On MacBook use Brave only, following the host's operating constraint.
 
+### Recovering native QA window control
+
+A missing window/frame or an unchanged click is not proof that installation needs
+manual intervention. First refresh the native binding and full accessibility state;
+do not carry element indices across a changed tree. If a clean control session still
+ignores input, an ordinary restart of the **recorded task-owned QA process** can
+restore control. Verify its PID/start time/profile before stopping it and its absence
+before reopening the same profile. Preserve authentication and unrelated browsers;
+never edit browser preferences, copy sessions, or bypass a security warning.
+
+After recovery, use the authorized native extension installation flow and verify
+the selected `dist` directory, enabled extension/version and `Extension loaded`
+readback. Then run a real cold export against an independent reference. In the
+2026-10-11 reproduction, resetting control alone did not help; restarting only the
+QA process restored the file chooser and allowed installation plus two exact
+50-message Claude exports. This is a verified recovery, not a proven root cause
+of the native control failure. Native installation evidence does not replace the
+runner's full installed-resource or hidden-throughout checks.
+
 ## Independent references and cold export
 
 Keep configs, independent references, screenshots and downloaded private conversations in

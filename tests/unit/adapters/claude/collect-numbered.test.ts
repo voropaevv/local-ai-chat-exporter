@@ -61,6 +61,52 @@ test("missing middle and streaming never satisfy inventory completeness", async 
   }
 });
 
+test("loads earlier numbered messages when background scrolling does not hydrate", async () => {
+  const { document, container, render } = fixture();
+  const button = document.createElement("button");
+  button.textContent = "Load earlier messages";
+  container.before(button);
+  let clicks = 0;
+  let pendingPolls = 0;
+  button.onclick = () => {
+    clicks++;
+    pendingPolls = 3;
+  };
+  const result = await collectNumberedClaudeMessages({
+    document,
+    maxSteps: 12,
+    wait: async () => {
+      // Scroll writes do not trigger the hidden provider's virtualizer.
+      if (pendingPolls && --pendingPolls === 0) render([1, 2, 3, 4, 5, 6]);
+    }
+  });
+  expect(result?.complete).toBe(true);
+  expect(result?.messages).toHaveLength(6);
+  expect(clicks).toBe(1);
+  expect(container.scrollTop).toBe(400);
+});
+
+test("does not activate disabled or unrelated loading controls", async () => {
+  for (const label of ["Load earlier messages", "Delete earlier messages"]) {
+    const { document, container } = fixture();
+    const button = document.createElement("button");
+    button.textContent = label;
+    button.disabled = label === "Load earlier messages";
+    container.before(button);
+    let clicks = 0;
+    button.onclick = () => {
+      clicks++;
+    };
+    const result = await collectNumberedClaudeMessages({
+      document,
+      maxSteps: 4,
+      wait: async () => {}
+    });
+    expect(result?.complete).toBe(false);
+    expect(clicks).toBe(0);
+  }
+});
+
 test("cancellation restores viewport and unknown labels retain fallback", async () => {
   const { document, container } = fixture();
   const controller = new AbortController();

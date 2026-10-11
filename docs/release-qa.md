@@ -3,10 +3,10 @@
 ## Current candidate — 2026-10-11
 
 Release status: **not ready**. Current dist SHA-256:
-`651202e52bc93ad6dcd3866022b635655bd11e359658202cdbac28fcab0ef836`.
+`caa207f6355d9fb293b3fcd7c27bb9480a9c557f9e3e4e87021d116e6c613151`.
 
-- Lint, typecheck, 666 unit tests and 14 fixture E2E tests passed.
-- Brave Gemini cold export preserved all 50 synthetic messages in order, including
+- Lint, typecheck, 668 unit tests and 14 fixture E2E tests passed.
+- The preceding candidate's Brave Gemini cold export preserved all 50 synthetic messages in order, including
   Unicode. A second cold export completed while the export tab was selected.
   Both matched independent pre-send inputs and individually observed answers after
   whitespace normalization. This is not exact internal-whitespace proof or a
@@ -16,9 +16,24 @@ Release status: **not ready**. Current dist SHA-256:
 - New regressions cover repeated Gemini messages, delayed top hydration, bounded
   forward traversal, cancellation/navigation, hidden/sidebar spinners and malformed
   runtime envelopes. Popup launch feedback prevents repeated launches in one panel.
-- Current candidate passed exact 40-message / 59,676-character ChatGPT cold and
+- The preceding candidate passed exact 40-message / 59,676-character ChatGPT cold and
   hidden-source background checks in Brave, with all 34 installed resources
   verified. The hidden-state trace remained hidden throughout the background run.
+- Native QA Chrome installation now succeeded after restarting only its owned
+  process. Developer mode, enabled Jelluvi 0.2.14 and `Extension loaded` were read
+  back. Two cold Claude exports matched the independent 50-message / 9,416-character
+  reference exactly, although only messages 35–50 were initially loaded. An attempted
+  tab switch was too late to establish background coverage; it is not counted as
+  hidden-throughout evidence.
+- Strict Chrome background QA then reproduced a real Claude defect: scroll-only
+  hydration saved 16 of 50 messages and correctly reported incomplete coverage.
+  The collector now invokes Claude's explicit `Load earlier messages` control
+  once per unchanged numbered inventory. A delayed-response regression failed
+  before the repair and passes afterward; disabled/unrelated controls remain inert.
+  The current candidate passed both cold and hidden-throughout Claude exports:
+  all 50 messages / 9,416 characters match the independent reference exactly,
+  with all 34 installed resources verified. Source visibility was respectively
+  visible/visible and hidden/hidden. This does not close the entire browser matrix.
 - Prior candidate `c22f608` native Vivaldi saved the exact 40-message ChatGPT and
   50-message Claude references. These historical results do not certify the
   changed current candidate across the full matrix.
@@ -27,7 +42,7 @@ Release status: **not ready**. Current dist SHA-256:
   The candidate now reports that specific shell as page_not_ready.
 - Vivaldi automated attachment/new-page initialization remains unresolved;
   native export evidence above is narrower than installed-resource verification.
-- Current Brave Notebook export saved four control messages from the new Google
+- The preceding candidate's Brave Notebook export saved four control messages from the new Google
   hostname. Unicode, Markdown table, 12-item numbered list and formula checks
   passed. Long-history completeness remains open; the adapter reports partial.
 - Gemini works in an explicitly authorized existing session; the dedicated project
