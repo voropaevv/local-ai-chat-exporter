@@ -20,6 +20,34 @@ function loadPerplexityFixture(): Document {
 }
 
 describe("scanCurrentConversationExport", () => {
+  test("distinguishes a provider verification document from an empty chat", async () => {
+    const document = new JSDOM(
+      '<title>Just a moment...</title><main><input id="cf-chl-widget-example_response">Verification successful. Waiting for chatgpt.com to respond</main>'
+    ).window.document;
+    await expect(
+      scanCurrentConversationExport({
+        document,
+        hostname: "chatgpt.com",
+        href: "https://chatgpt.com/c/example"
+      })
+    ).rejects.toMatchObject({
+      code: "page_not_ready",
+      message: expect.stringContaining("verification")
+    });
+  });
+
+  test("does not mistake a conversation quoting verification text for a challenge", async () => {
+    const document = new JSDOM(
+      '<title>Just a moment...</title><main><div data-testid="assistant-message"><p>Verification successful. Waiting for chatgpt.com to respond</p></div></main>'
+    ).window.document;
+    const result = await scanCurrentConversationExport({
+      document,
+      hostname: "claude.ai",
+      href: "https://claude.ai/chat/example"
+    });
+    expect(result.messageCount).toBe(1);
+  });
+
   test("uses secondary adapters for visible-message scans and surfaces platform warnings", async () => {
     const conversation = await scanCurrentConversationExport({
       document: loadClaudeFixture(),

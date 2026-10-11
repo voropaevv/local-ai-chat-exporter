@@ -47,6 +47,16 @@ export async function scanCurrentConversationExport(
     );
   }
 
+  if (
+    rootDocument.title.trim() === "Just a moment..." &&
+    rootDocument.querySelector('[id^="cf-chl-widget-"], #challenge-error-text') !== null
+  ) {
+    throw new ExportPipelineError(
+      "page_not_ready",
+      "The provider verification page is still open. Return to the chat, wait for verification and the conversation to finish loading, then retry export."
+    );
+  }
+
   if (adapter.id !== "chatgpt") {
     return scanVisibleAdapterConversation(adapter, {
       exportedAt: options.exportedAt,

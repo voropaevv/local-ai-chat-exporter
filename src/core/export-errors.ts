@@ -1,4 +1,5 @@
 export type ExportErrorCode =
+  | "page_not_ready"
   | "unsupported_platform"
   | "no_messages_found"
   | "scan_cancelled"

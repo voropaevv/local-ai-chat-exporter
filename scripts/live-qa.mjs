@@ -263,6 +263,7 @@ async function runSavedExport(context, session, id, config, output) {
   });
   timeout.catch(() => {});
   let background;
+  let jobPage;
   try {
     const jobCreated = context.waitForEvent("page", { timeout: 15000 }).then(
       (page) => ({ page }),
@@ -271,6 +272,7 @@ async function runSavedExport(context, session, id, config, output) {
     await popup.getByRole("button", { name: "Export", exact: true }).click();
     const job = await jobCreated;
     if (job.error) throw job.error;
+    jobPage = job.page;
     if (config.stage === "background-long") {
       background = await context.newPage();
       await background.goto("about:blank");
@@ -327,6 +329,23 @@ async function runSavedExport(context, session, id, config, output) {
         config.stage
       )
     };
+  } catch (error) {
+    if (jobPage && !jobPage.isClosed()) {
+      const status = await jobPage
+        .getByRole("status")
+        .allTextContents()
+        .catch(() => []);
+      const alerts = await jobPage
+        .getByRole("alert")
+        .allTextContents()
+        .catch(() => []);
+      await writeFile(
+        resolve(output, "export-failure-status.json"),
+        JSON.stringify({ status, alerts }),
+        { mode: 0o600 }
+      ).catch(() => {});
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
     session.off("Browser.downloadWillBegin", onBegin);
