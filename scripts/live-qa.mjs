@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { verifyBuildProvenance } from "./build-provenance.mjs";
-import { launchQaBrowser, withDeadline } from "./live-qa-browser.mjs";
+import { launchQaBrowser, selectQaExtension, withDeadline } from "./live-qa-browser.mjs";
 import {
   LIVE_QA_CONTRACT,
   contractSha256,
@@ -549,7 +549,7 @@ async function runWithGuard(guard) {
     if (interrupted) throw new Error("Interrupted during browser launch");
     const session = ownedBrowser.protocol;
     receipt.browserVersion = (await session.send("Browser.getVersion")).product;
-    const { id } = await session.send("Extensions.loadUnpacked", { path: resolve(root, "dist") });
+    const id = await selectQaExtension(session, resolve(root, "dist"), options["installed-id"]);
     receipt.installation = await withDeadline(
       installedBytes(context, id, build),
       "Installed-byte verification",

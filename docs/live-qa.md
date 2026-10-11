@@ -42,6 +42,14 @@ QA process restored the file chooser and allowed installation plus two exact
 of the native control failure. Native installation evidence does not replace the
 runner's full installed-resource or hidden-throughout checks.
 
+The experimental `loadUnpacked` registration is temporary and can replace an
+existing native registration of the same extension ID. For a profile with a
+verified native installation, pass `--installed-id <ID-from-Extensions>` on later
+runs. This mode never calls `loadUnpacked` or silently reinstalls a missing copy;
+it still verifies every installed resource against the current build before export.
+After an initial temporary-install run, native installation and restart readback
+are separate requirements before claiming the profile remains ready for manual QA.
+
 ## Independent references and cold export
 
 Keep configs, independent references, screenshots and downloaded private conversations in

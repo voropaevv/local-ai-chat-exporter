@@ -4,6 +4,16 @@ import { resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { EventEmitter } from "node:events";
 
+export async function selectQaExtension(protocol, directory, installedId) {
+  if (installedId !== undefined) {
+    if (!/^[a-p]{32}$/.test(installedId)) throw new Error("Invalid installed extension ID");
+    // Do not re-register a persistent native installation as a temporary CDP one.
+    // The caller must still verify every runtime resource before using it.
+    return installedId;
+  }
+  return (await protocol.send("Extensions.loadUnpacked", { path: directory })).id;
+}
+
 export async function withDeadline(operation, label, timeoutMs = 30000) {
   let timer;
   try {

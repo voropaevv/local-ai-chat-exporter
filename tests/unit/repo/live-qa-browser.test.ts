@@ -23,6 +23,30 @@ async function evaluate(source: string) {
 }
 
 describe("owned live browser pipe", () => {
+  test("preserves an explicit installed extension and never silently reinstalls it", async () => {
+    const result = await execFileAsync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `
+      import {selectQaExtension} from ${JSON.stringify(helperPath)};
+      const calls=[]; const protocol={send:async(...args)=>{calls.push(args);return {id:'temporary'}}};
+      const installed=await selectQaExtension(protocol,'/candidate','a'.repeat(32));
+      const afterInstalled=calls.length;
+      const invalid=await selectQaExtension(protocol,'/candidate','bad-id').then(()=>false,()=>true);
+      const afterInvalid=calls.length;
+      const temporary=await selectQaExtension(protocol,'/candidate');
+      console.log(JSON.stringify({installed,afterInstalled,invalid,afterInvalid,temporary,calls}));
+      `
+    ]);
+    expect(JSON.parse(result.stdout)).toEqual({
+      installed: "a".repeat(32),
+      afterInstalled: 0,
+      invalid: true,
+      afterInvalid: 0,
+      temporary: "temporary",
+      calls: [["Extensions.loadUnpacked", { path: "/candidate" }]]
+    });
+  });
   test("bounds stalled setup operations and preserves success and original failure", async () => {
     const result = await execFileAsync(process.execPath, [
       "--input-type=module",
