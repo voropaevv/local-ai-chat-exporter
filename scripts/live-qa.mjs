@@ -140,6 +140,18 @@ async function wakeGuard() {
 }
 
 export async function savedExport(context, session, id, config, output) {
+  const retainedPages = new Set(context.pages());
+  try {
+    return await runSavedExport(context, session, id, config, output);
+  } finally {
+    for (const page of context.pages()) {
+      if (!retainedPages.has(page) && !page.isClosed())
+        await withDeadline(page.close(), "Export tab cleanup", 10000);
+    }
+  }
+}
+
+async function runSavedExport(context, session, id, config, output) {
   if (!LIVE_QA_CONTRACT.automatedExportStages.includes(config.stage))
     throw new Error("Unsupported automated stage");
   if (!homes[config.provider]) throw new Error("Unknown provider");

@@ -13,7 +13,9 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
     const expected='https://chatgpt.com/c/test';
     const results=[];
     for (const mode of ['duplicate','redirect','ambiguous']) {
-      const calls=[]; let queries=0; let loaded=false;
+      const calls=[]; let queries=0; let loaded=false; let closed=false;
+      const retained={isClosed:()=>false,close:async()=>{throw Error('borrowed page closed')}};
+      const pages=[retained];
       const target=(id)=>({type:'tab',targetId:id,url:expected});
       const session={send:async(name,args)=>{
         if(name==='Target.getTargets') return {targetInfos:queries++===0
@@ -22,11 +24,12 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
         return {};
       }};
       const source={goto:async()=>{},waitForLoadState:async()=>{loaded=true},
-        url:()=>mode==='redirect'?'https://chatgpt.com/':expected,bringToFront:async()=>{}};
-      const context={newPage:async()=>source,newCDPSession:async()=>({send:async()=>{}}),
+        url:()=>mode==='redirect'?'https://chatgpt.com/':expected,bringToFront:async()=>{},
+        isClosed:()=>closed,close:async()=>{closed=true}};
+      const context={pages:()=>pages,newPage:async()=>{pages.push(source);return source},newCDPSession:async()=>({send:async()=>{}}),
         serviceWorkers:()=>[{url:()=> 'chrome-extension://ext/worker.js',evaluate:async()=>{throw Error('selected')}}]};
       try {await savedExport(context,session,'ext',{provider:'chatgpt',stage:'cold-short',url:expected},'/unused')}
-      catch(error){results.push({mode,calls,loaded,error:error.message})}
+      catch(error){results.push({mode,calls,loaded,closed,error:error.message})}
     }
     console.log(JSON.stringify(results));
   `
@@ -36,9 +39,11 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
     mode: "duplicate",
     calls: ["new"],
     loaded: true,
+    closed: true,
     error: "selected"
   });
   expect(results[1].calls).toEqual([]);
+  expect(results.every((result: { closed: boolean }) => result.closed)).toBe(true);
   expect(results[1].error).toContain("Source redirected before export");
   expect(results[2].calls).toEqual([]);
   expect(results[2].error).toBe("Cannot uniquely identify the actual source tab target");
