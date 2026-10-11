@@ -1,5 +1,30 @@
 # Release QA — Jelluvi 0.2.14
 
+## Current candidate — 2026-10-11
+
+Release status: **not ready**. Current dist SHA-256:
+`62e310cf40bfb6d777a74fcb1d5de7927e90b1df850e494c4eff63eb995dcef0`.
+
+- Lint, typecheck, 645 unit tests and 14 fixture E2E tests passed.
+- Installed Brave exported the independent short and 68,320-character synthetic
+  ChatGPT references exactly, including a background export with a hidden source.
+  This does not cover a many-turn lazily loaded conversation.
+- Chrome saved both Claude reference messages exactly, but the visible-only
+  adapter correctly reports partial coverage; this is not a completeness pass.
+- ChatGPT cold export in Chrome/Edge remains blocked or failed. A captured
+  diagnostic source was a provider verification page, not a loaded conversation.
+  The candidate now reports that specific shell as page_not_ready.
+- Vivaldi attachment/new-page initialization remains unresolved. Bounded retries
+  and alternative startup experiments did not produce a verified installed export.
+- Notebook's new Google hostname is recognized; live Notebook export remains open.
+- Gemini access, full provider/browser/format/batch coverage, many-turn cold-load
+  completeness, MacBook loaded-runtime readback and publication gates remain open.
+
+Local operational evidence is retained in the ignored task checkpoint
+`qa-artifacts/live/checkpoint-20261011.md` and hash-bound run receipts.
+Successful local tests and partial live evidence do not establish release readiness.
+Historical checkpoints below retain their original build scope.
+
 ### Authentication-profile continuation — 2026-10-11
 
 Before launcher changes: source HEAD `c039f2e`; production candidate remains unchanged.
