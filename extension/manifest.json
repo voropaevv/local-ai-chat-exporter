@@ -13,7 +13,8 @@
     "https://gemini.google.com/*",
     "https://perplexity.ai/*",
     "https://www.perplexity.ai/*",
-    "https://notebooklm.google.com/*"
+    "https://notebooklm.google.com/*",
+    "https://notebook.google.com/*"
   ],
   "action": {
     "default_title": "Jelluvi",

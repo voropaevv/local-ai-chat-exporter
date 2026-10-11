@@ -22,6 +22,8 @@ describe("NotebookLM adapter", () => {
     const document = loadFixture("simple-conversation.html", "https://example.com/local");
 
     expect(detectNotebookLm({ hostname: "notebooklm.google.com" })).toBe(true);
+    expect(detectNotebookLm({ hostname: "notebook.google.com" })).toBe(true);
+    expect(detectNotebookLm({ hostname: "notebook.google.com.example.com" })).toBe(false);
     expect(detectNotebookLm({ document, hostname: "example.com" })).toBe(true);
     expect(detectNotebookLm({ hostname: "chatgpt.com" })).toBe(false);
   });
