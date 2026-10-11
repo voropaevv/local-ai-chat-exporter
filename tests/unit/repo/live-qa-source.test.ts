@@ -3,6 +3,36 @@ import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { expect, test } from "vitest";
 
+test("live Notebook QA accepts official aliases without broadening source access", async () => {
+  const helper = resolve(import.meta.dirname, "../../../scripts/live-qa.mjs");
+  const { stdout } = await promisify(execFile)(process.execPath, [
+    "--input-type=module",
+    "--eval",
+    `
+    import {savedExport} from ${JSON.stringify(helper)};
+    const results=[];
+    for(const url of [
+      'https://notebook.google.com/notebook/test',
+      'https://notebooklm.google.com/notebook/test',
+      'https://notebook.google.com.evil.example/notebook/test',
+      'http://notebook.google.com/notebook/test',
+      'https://user:password@notebook.google.com/notebook/test',
+      'https://gemini.google.com/app/test'
+    ]) {
+      try { await savedExport({pages:()=>[]},{send:async()=>{throw Error('accepted-source')}},
+        'ext',{provider:'notebooklm',stage:'cold-short',url},'/unused'); }
+      catch(error){results.push(error.message)}
+    }
+    console.log(JSON.stringify(results));
+  `
+  ]);
+  expect(JSON.parse(stdout)).toEqual([
+    "accepted-source",
+    "accepted-source",
+    ...Array(4).fill("Source must be a conversation on the selected provider origin")
+  ]);
+});
+
 test("live export binds the newly created tab and refuses redirected or ambiguous sources", async () => {
   const helper = resolve(import.meta.dirname, "../../../scripts/live-qa.mjs");
   const { stdout } = await promisify(execFile)(process.execPath, [

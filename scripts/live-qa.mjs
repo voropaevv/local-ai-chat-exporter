@@ -172,7 +172,9 @@ async function runSavedExport(context, session, id, config, output) {
     throw new Error("Unsupported automated stage");
   if (!homes[config.provider]) throw new Error("Unknown provider");
   const url = new URL(config.url);
-  if (url.origin !== new URL(homes[config.provider]).origin || url.username || url.password) {
+  const allowedOrigins = [new URL(homes[config.provider]).origin];
+  if (config.provider === "notebooklm") allowedOrigins.push("https://notebook.google.com");
+  if (!allowedOrigins.includes(url.origin) || url.username || url.password) {
     throw new Error("Source must be a conversation on the selected provider origin");
   }
   const before = await session.send("Target.getTargets", { filter: [{ type: "tab" }] });
