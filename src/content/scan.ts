@@ -4,6 +4,7 @@ import {
 } from "../adapters/chatgpt/scroll-collector";
 import { mergeChatGptConversationMessages } from "../adapters/chatgpt/conversation-data";
 import { extractVisibleChatGptMessages } from "../adapters/chatgpt/extract-visible";
+import { collectNumberedClaudeMessages } from "../adapters/claude/collect-numbered";
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
 import type { PlatformAdapter } from "../adapters/types";
 import { buildCompletenessReport } from "../core/completeness";
@@ -55,6 +56,42 @@ export async function scanCurrentConversationExport(
       "page_not_ready",
       "The provider verification page is still open. Return to the chat, wait for verification and the conversation to finish loading, then retry export."
     );
+  }
+
+  if (options.signal?.aborted) {
+    throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+  }
+
+  if (adapter.id === "claude") {
+    const collected = await collectNumberedClaudeMessages({
+      document: rootDocument,
+      signal: options.signal,
+      maxSteps: options.maxSteps,
+      wait: options.waitForDomSettle
+    });
+    if (collected !== null && collected.messages.length > 0) {
+      return {
+        schemaVersion: "1.0",
+        platform: adapter.id,
+        platformLabel: adapter.label,
+        sourceUrl: href,
+        title,
+        exportedAt: options.exportedAt ?? new Date().toISOString(),
+        messageCount: collected.messages.length,
+        messages: collected.messages,
+        completeness: buildCompletenessReport({
+          messages: collected.messages,
+          duplicateCount: 0,
+          platformWarnings: [
+            "Claude capture uses its numbered message inventory; unsupported layouts retain visible-only capture."
+          ],
+          reachedTop: collected.complete,
+          reachedBottom: collected.complete,
+          scrollSteps: collected.steps,
+          virtualized: true
+        })
+      };
+    }
   }
 
   if (adapter.id !== "chatgpt") {
