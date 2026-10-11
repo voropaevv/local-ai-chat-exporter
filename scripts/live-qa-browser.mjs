@@ -1,8 +1,46 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "@playwright/test";
 import { EventEmitter } from "node:events";
+
+export async function withDeadline(operation, label, timeoutMs = 30000) {
+  let timer;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}: deadline exceeded`)), timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function processGroupAlive(
+  group,
+  probe = process.kill,
+  inventory = () =>
+    execFileSync("/bin/ps", ["-axo", "pid=,pgid="], { encoding: "utf8", timeout: 2000 })
+) {
+  try {
+    probe(-group, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    if (error.code !== "EPERM") throw error;
+    // macOS can return EPERM while an owned group disappears. Neither permission
+    // failure nor an empty/failed inventory proves closure; require a valid census.
+    const rows = inventory()
+      .trim()
+      .split("\n")
+      .map((row) => row.trim().split(/\s+/));
+    if (!rows.length || rows.some((row) => row.length !== 2 || row.some((n) => !/^\d+$/.test(n))))
+      throw new Error("Cannot verify owned process group: invalid process inventory");
+    return rows.some((row) => Number(row[1]) === group);
+  }
+}
 
 // Official NUL-delimited root CDP pipe; no Target.attachToBrowserTarget is needed.
 export function createPipeProtocol(input, output) {
@@ -101,18 +139,16 @@ export async function launchQaBrowser(executablePath, profile, headless) {
   function alive() {
     if (!child.pid) return false;
     if (!group) return !ended;
-    try {
-      process.kill(-group, 0);
-      return true;
-    } catch (error) {
-      if (error.code === "ESRCH") return false;
-      throw error;
-    }
+    return processGroupAlive(group);
   }
   function terminate(signal) {
     if (!alive()) return;
-    if (group) process.kill(-group, signal);
-    else child.kill(signal);
+    try {
+      if (group) process.kill(-group, signal);
+      else child.kill(signal);
+    } catch (error) {
+      if (alive()) throw error;
+    }
   }
   async function waitStopped(deadlineMs) {
     const deadline = Date.now() + deadlineMs;

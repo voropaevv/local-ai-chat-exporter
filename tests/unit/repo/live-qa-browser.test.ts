@@ -23,6 +23,53 @@ async function evaluate(source: string) {
 }
 
 describe("owned live browser pipe", () => {
+  test("bounds stalled setup operations and preserves success and original failure", async () => {
+    const result = await execFileAsync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `
+      import {withDeadline} from ${JSON.stringify(helperPath)};
+      console.log(JSON.stringify([
+        await withDeadline(new Promise(()=>{}),'Stalled page',5).catch(e=>e.message),
+        await withDeadline(Promise.resolve('ready'),'Ready page',1000),
+        await withDeadline(Promise.reject(new Error('original')),'Failed page',1000).catch(e=>e.message)
+      ]));
+    `
+    ]);
+    expect(JSON.parse(result.stdout)).toEqual([
+      "Stalled page: deadline exceeded",
+      "ready",
+      "original"
+    ]);
+  });
+  test("permission failure requires a valid independent process-group inventory", async () => {
+    const result = await execFileAsync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `
+      import {processGroupAlive} from ${JSON.stringify(helperPath)};
+      const denied=()=>{throw Object.assign(new Error('denied'),{code:'EPERM'})};
+      const check=(inventory)=>{try{return processGroupAlive(123,denied,inventory)}catch{return 'blocked'}};
+      console.log(JSON.stringify([
+        check(()=> '1 1\n42 42\n'), check(()=> '1 1\n456 123\n'),
+        check(()=> ''), check(()=> 'invalid'), check(()=>{throw new Error('ps failed')}),
+        processGroupAlive(123,()=>{},()=>{throw new Error('must not read')}),
+        processGroupAlive(123,()=>{throw Object.assign(new Error(),{code:'ESRCH'})})
+      ]));
+    `
+        .replaceAll("'1 1\n42 42\n'", "'1 1\\n42 42\\n'")
+        .replaceAll("'1 1\n456 123\n'", "'1 1\\n456 123\\n'")
+    ]);
+    expect(JSON.parse(result.stdout)).toEqual([
+      false,
+      true,
+      "blocked",
+      "blocked",
+      "blocked",
+      true,
+      false
+    ]);
+  });
   test("a failed browser startup retains actual process-close evidence", async () => {
     const result = await execFileAsync(process.execPath, [
       "--input-type=module",

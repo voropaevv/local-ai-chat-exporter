@@ -1,5 +1,63 @@
 # Release QA — Jelluvi 0.2.14
 
+### Authentication-profile continuation — 2026-10-11
+
+Before launcher changes: source HEAD `c039f2e`; production candidate remains unchanged.
+Separate persistent `chrome-auth`, `brave-auth`, `edge-auth`, and `vivaldi-auth`
+profiles are owned by the existing QA runner, without copying personal sessions.
+Chrome, Brave and Edge reached the login handoff with runtime-byte verification.
+Vivaldi exposes its endpoint but repeatedly times out during Playwright attachment.
+Bounded protocol metadata identifies unanswered page-initialization commands on a
+page target whose URL is still empty. This is a symptom, not yet a proven cause.
+
+Repair acceptance frozen before implementation:
+
+- Vivaldi must reach the same installed-byte verification and five-provider login
+  handoff, with a bounded startup and no disabled security/background behavior.
+- A first-launch target not ready for attachment must not be mistaken for a ready
+  browser. A browser that never becomes ready must fail with retained cleanup evidence.
+- Chrome/Brave/Edge startup behavior and owned-process cleanup must remain valid.
+- Retain login sessions for the user; authenticated exports remain pending until login.
+- A transient process-group `EPERM` cannot establish either liveness or closure.
+  The observed group 10553 was independently absent after the failed cleanup report;
+  a regression must distinguish absent, present and unreadable process inventories.
+
+Preimages: launcher SHA-256 `c25bfe68b5e7c095d012afbf1bc05b50baa5d5dc74c35be7a9eb979509a43efa`;
+browser test SHA-256 `814710bd84845d9ed8c24e235c57b9516d38b96f63c011d5c6590d804a8c2308`.
+
+Observed continuation: official signed Vivaldi 8.2.4133.84 reproduces the same
+attachment timeout. Waiting for a nonempty startup URL and removing the CDP pipe
+did not resolve it. Starting without a window allowed connection and extension
+loading, but `context.newPage()` then stalled. These unsuccessful experiments
+were removed. Launching the five provider URLs without attaching Playwright let
+the browser load normally; a later read-only connection saw all five pages.
+Creating a new page while connected still timed out. Native UI opened the actual
+Jelluvi popup successfully. This is **not** full Vivaldi byte/export verification.
+
+The launcher now independently checks a valid process inventory after `EPERM`;
+present groups remain alive, unreadable/invalid inventories block closure, and
+absent groups can be verified closed. Subsequent failed Vivaldi runs closed
+their owned groups and guards. Installation and login-page setup operations now
+have explicit deadlines, including an unresponsive `newPage()`.
+
+New live compatibility finding: the NotebookLM homepage redirects to
+`notebook.google.com`; the current candidate popup reports that host unsupported.
+Authentication attempts encountered OpenAI email-send HTTP 403, a Claude human
+verification challenge, and a rejected Google sign-in. No account creation or
+successful authenticated export is asserted. User action-time confirmations are
+pending for the challenge and Perplexity's continuation notice.
+
+Current open work: finish authenticated login; fix Vivaldi automated new-page
+initialization (native UI works); inspect the new Notebook host after login and
+update its adapter with a real regression fixture; complete the live export matrix.
+No release-ready claim.
+
+Validation of the retained harness repair: lint and typecheck passed; 35 focused
+browser/contract tests passed, including timeout, success, original-error and
+process-inventory negative controls. A fresh headless Chrome smoke verified all
+34 installed resources and actual browser-group/wake-guard closure. No production
+build or account secret was changed.
+
 ## Live automation checkpoint — 2026-09-30
 
 Baseline: `613a24a`; unchanged production candidate `0.2.14`. The release worktree was clean at baseline;

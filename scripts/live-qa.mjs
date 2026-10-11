@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { verifyBuildProvenance } from "./build-provenance.mjs";
-import { launchQaBrowser } from "./live-qa-browser.mjs";
+import { launchQaBrowser, withDeadline } from "./live-qa-browser.mjs";
 import {
   LIVE_QA_CONTRACT,
   contractSha256,
@@ -444,12 +444,22 @@ async function runWithGuard(guard) {
     const session = ownedBrowser.protocol;
     receipt.browserVersion = (await session.send("Browser.getVersion")).product;
     const { id } = await session.send("Extensions.loadUnpacked", { path: resolve(root, "dist") });
-    receipt.installation = await installedBytes(context, id, build);
+    receipt.installation = await withDeadline(
+      installedBytes(context, id, build),
+      "Installed-byte verification",
+      45000
+    );
     receipt.verified = true;
     if (mode === "setup") {
       if (options.provider && !homes[options.provider]) throw new Error("Unknown provider");
       for (const url of options.provider ? [homes[options.provider]] : Object.values(homes))
-        await (await context.newPage()).goto(url, { waitUntil: "domcontentloaded" });
+        await withDeadline(
+          (async () => {
+            await (await context.newPage()).goto(url, { waitUntil: "domcontentloaded" });
+          })(),
+          "Authentication page setup",
+          45000
+        );
       console.log(
         `Dedicated ${browser} QA profile is open. Sign in locally; no session data will be copied. Press Enter here when done.`
       );
