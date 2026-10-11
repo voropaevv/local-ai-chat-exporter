@@ -16,16 +16,20 @@ Release status: **not ready**. Current dist SHA-256:
 - New regressions cover repeated Gemini messages, delayed top hydration, bounded
   forward traversal, cancellation/navigation, hidden/sidebar spinners and malformed
   runtime envelopes. Popup launch feedback prevents repeated launches in one panel.
-- Prior candidate `c22f608` passed exact 40-message / 59,676-character ChatGPT cold
-  and hidden-source background checks in Brave. Native Vivaldi also saved the
-  exact 40-message ChatGPT and 50-message Claude references. These historical
-  results do not certify the changed current candidate across the full matrix.
+- Current candidate passed exact 40-message / 59,676-character ChatGPT cold and
+  hidden-source background checks in Brave, with all 34 installed resources
+  verified. The hidden-state trace remained hidden throughout the background run.
+- Prior candidate `c22f608` native Vivaldi saved the exact 40-message ChatGPT and
+  50-message Claude references. These historical results do not certify the
+  changed current candidate across the full matrix.
 - ChatGPT cold export in Chrome/Edge remains blocked or failed. A captured
   diagnostic source was a provider verification page, not a loaded conversation.
   The candidate now reports that specific shell as page_not_ready.
 - Vivaldi automated attachment/new-page initialization remains unresolved;
   native export evidence above is narrower than installed-resource verification.
-- Notebook's new Google hostname is recognized; live Notebook export remains open.
+- Current Brave Notebook export saved four control messages from the new Google
+  hostname. Unicode, Markdown table, 12-item numbered list and formula checks
+  passed. Long-history completeness remains open; the adapter reports partial.
 - Gemini works in an explicitly authorized existing session; the dedicated project
   account still lacks access. Full provider/browser/format/batch coverage, strict
   background and whitespace proof, MacBook loaded-runtime readback and publication
