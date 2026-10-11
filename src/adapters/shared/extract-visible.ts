@@ -99,6 +99,13 @@ function buildMessageId(
     return messageId.trim();
   }
 
+  // Gemini puts the stable turn ID on the shared user/assistant parent.
+  // Text hashes collapse legitimate repeated answers across different turns.
+  if (platformId === "gemini") {
+    const turnId = messageElement.closest(".conversation-container[id]")?.id.trim();
+    if (turnId) return `gemini-${turnId}-${role}`;
+  }
+
   return `${platformId}-${role}-${stableHash(text)}`;
 }
 

@@ -1,3 +1,4 @@
+import { sendRuntimeMessage } from "../../src/ui/runtime-message";
 import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
@@ -39,7 +40,7 @@ function ExportJobPage() {
       const result = await runExportJob({
         request: { ...job, sourceTabId: job.sourceTabId! },
         signal: controller.current.signal,
-        send: (message) => chrome.runtime.sendMessage(message),
+        send: sendRuntimeMessage,
         onProgress: setStatus,
         download: async (value) => {
           await downloadRenderedFiles(value.files.map(deserializeRenderedFile));

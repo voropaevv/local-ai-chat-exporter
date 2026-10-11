@@ -1,11 +1,11 @@
+import { sendRuntimeMessage } from "./runtime-message";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { renderConversationFiles, type ExportOptions } from "../core/export-options";
 import {
   PREVIEW_GET_CACHED_CONVERSATION_MESSAGE,
   PREVIEW_RETURN_TO_SOURCE_MESSAGE,
-  type CachedConversationResult,
-  type RuntimeResponse
+  type CachedConversationResult
 } from "../core/messages";
 import { DEFAULT_REDACTION_SETTINGS, type RedactionSettings } from "../core/redaction";
 import type { ConversationExport, ExportFormat } from "../core/schema";
@@ -554,21 +554,6 @@ export function parsePreviewQuery(search: string): {
       ? { zipFormats: zipFormats as readonly Exclude<ExportFormat, "zip">[] }
       : {})
   };
-}
-
-async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<T>> {
-  try {
-    return (await chrome.runtime.sendMessage(message)) as RuntimeResponse<T>;
-  } catch (error) {
-    return {
-      error: {
-        code: "unsupported_platform",
-        message:
-          error instanceof Error ? error.message : "The extension could not load the preview."
-      },
-      ok: false
-    };
-  }
 }
 
 function openRenderedFile(file: RenderedFile<string | Uint8Array>): void {

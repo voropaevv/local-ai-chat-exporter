@@ -497,4 +497,35 @@ describe("dedicated multi-chat workspace", () => {
     expect(link?.href).toBe("chrome-extension://jelluvi/options/index.html?view=batch");
     expect(link?.target).toBe("_blank");
   });
+
+  test("shows launched export status and prevents another launch from the same popup", async () => {
+    mocks.send.mockImplementation(async (request) => {
+      if (request.type === "jelluvi/start-export-job") return { ok: true, value: { tabId: 42 } };
+      return {
+        ok: true,
+        value: {
+          sourceTabId: 1,
+          sourceUrl: "https://gemini.google.com/app/test",
+          supported: true,
+          platformLabel: "Gemini"
+        }
+      };
+    });
+    await act(async () => {
+      render(<PopupApp />, container);
+    });
+    await vi.waitFor(async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(button("Export").disabled).toBe(false);
+    });
+    await click("Export");
+    expect(container.textContent).toContain("Export is running in its own progress tab.");
+    expect(button("Export").disabled).toBe(true);
+    await click("Export");
+    expect(
+      mocks.send.mock.calls.filter(([request]) => request.type === "jelluvi/start-export-job")
+    ).toHaveLength(1);
+  });
 });

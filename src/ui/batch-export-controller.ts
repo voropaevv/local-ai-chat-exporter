@@ -1,3 +1,4 @@
+import { sendRuntimeMessage } from "./runtime-message";
 import {
   createBatchManifest,
   createBatchRootDirectory,
@@ -118,8 +119,8 @@ const defaultDependencies: BatchExportControllerDependencies = {
     };
   },
   now: () => new Date().toISOString(),
-  sendRuntimeMessage: async (request) =>
-    (await chrome.runtime.sendMessage(request)) as RuntimeResponse<unknown>,
+  sendRuntimeMessage: (request) =>
+    sendRuntimeMessage(request, (request) => chrome.runtime.sendMessage(request)),
   setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs)
 };
 

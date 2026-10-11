@@ -1,3 +1,4 @@
+import { sendRuntimeMessage } from "./runtime-message";
 import {
   Braces,
   Bug,
@@ -27,7 +28,7 @@ import {
   CHATGPT_HISTORY_LIST_MESSAGE,
   type ChatGptHistoryListSuccess
 } from "../core/chatgpt-history";
-import type { BatchListSuccess, RuntimeResponse } from "../core/messages";
+import type { BatchListSuccess } from "../core/messages";
 import { SETTINGS_GET_DIAGNOSTICS_MESSAGE } from "../core/messages";
 import {
   DEFAULT_REDACTION_SETTINGS,
@@ -983,21 +984,6 @@ function toggleListValue<T extends ExportFormat | StoredPopupFileFormat>(
     : [...values, value];
 
   return next.length > 0 ? next : values;
-}
-
-async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<T>> {
-  try {
-    return (await chrome.runtime.sendMessage(message)) as RuntimeResponse<T>;
-  } catch (error) {
-    return {
-      error: {
-        code: "unsupported_platform",
-        message:
-          error instanceof Error ? error.message : "The extension could not contact this tab."
-      },
-      ok: false
-    };
-  }
 }
 
 function buildSettingsPopupState(

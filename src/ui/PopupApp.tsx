@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useState } from "preact/hooks";
+import { sendRuntimeMessage } from "./runtime-message";
+import { useEffect, useReducer, useRef, useState } from "preact/hooks";
 import { Files } from "lucide-preact";
 
 import type {
@@ -42,9 +43,15 @@ export function PopupApp() {
   const [activeTabRetryKey, setActiveTabRetryKey] = useState(0);
   const [sourceTabId, setSourceTabId] = useState<number | undefined>(readSourceTabId);
   const [settingsReady, setSettingsReady] = useState(false);
+  const launchPending = useRef(false);
+  const [exportLaunched, setExportLaunched] = useState(false);
   const busy = state.scanStatus === "scanning" || state.scanStatus === "exporting";
   const canUseActions =
-    settingsReady && state.activeTabStatus === "ready" && state.sourceSupported === true && !busy;
+    settingsReady &&
+    state.activeTabStatus === "ready" &&
+    state.sourceSupported === true &&
+    !busy &&
+    !exportLaunched;
 
   useEffect(() => {
     let cancelled = false;
@@ -173,15 +180,19 @@ export function PopupApp() {
   }
 
   async function handleDownload() {
+    if (launchPending.current) return;
+    launchPending.current = true;
     dispatch({ type: "export_started" });
     const response = await sendRuntimeMessage({
       type: START_EXPORT_JOB,
       request: buildDownloadRequest(state, sourceTabId)
     });
     if (!response.ok) {
+      launchPending.current = false;
       dispatch({ message: response.error.message, type: "scan_failed" });
       return;
     }
+    setExportLaunched(true);
     dispatch({
       type: "export_finished",
       message: "Export is running in its own progress tab. You can switch tabs."
@@ -304,6 +315,12 @@ export function PopupApp() {
         progressLabel={state.progressLabel}
         scanStatus={state.scanStatus}
       />
+      {exportLaunched ? (
+        <p role="status">
+          Export is running in its own progress tab. You can switch tabs. Close this panel to view
+          progress; reopen it to start another export.
+        </p>
+      ) : null}
       {state.errorMessage && state.activeTabStatus !== "failed" ? (
         <p className="error-text" role="alert">
           {state.errorMessage}
@@ -311,19 +328,4 @@ export function PopupApp() {
       ) : null}
     </main>
   );
-}
-
-async function sendRuntimeMessage<T>(message: unknown): Promise<RuntimeResponse<T>> {
-  try {
-    return (await chrome.runtime.sendMessage(message)) as RuntimeResponse<T>;
-  } catch (error) {
-    return {
-      error: {
-        code: "unsupported_platform",
-        message:
-          error instanceof Error ? error.message : "The extension could not contact this tab."
-      },
-      ok: false
-    };
-  }
 }

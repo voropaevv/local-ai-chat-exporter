@@ -3,22 +3,34 @@
 ## Current candidate — 2026-10-11
 
 Release status: **not ready**. Current dist SHA-256:
-`62e310cf40bfb6d777a74fcb1d5de7927e90b1df850e494c4eff63eb995dcef0`.
+`651202e52bc93ad6dcd3866022b635655bd11e359658202cdbac28fcab0ef836`.
 
-- Lint, typecheck, 645 unit tests and 14 fixture E2E tests passed.
-- Installed Brave exported the independent short and 68,320-character synthetic
-  ChatGPT references exactly, including a background export with a hidden source.
-  This does not cover a many-turn lazily loaded conversation.
-- Chrome saved both Claude reference messages exactly, but the visible-only
-  adapter correctly reports partial coverage; this is not a completeness pass.
+- Lint, typecheck, 666 unit tests and 14 fixture E2E tests passed.
+- Brave Gemini cold export preserved all 50 synthetic messages in order, including
+  Unicode. A second cold export completed while the export tab was selected.
+  Both matched independent pre-send inputs and individually observed answers after
+  whitespace normalization. This is not exact internal-whitespace proof or a
+  strict hidden-throughout receipt: the browser inspection API reported visible
+  even while native UI showed the export tab selected. Do not mark that matrix
+  cell passed. Stable DOM boundaries yield `probably_complete`, not a server total.
+- New regressions cover repeated Gemini messages, delayed top hydration, bounded
+  forward traversal, cancellation/navigation, hidden/sidebar spinners and malformed
+  runtime envelopes. Popup launch feedback prevents repeated launches in one panel.
+- Prior candidate `c22f608` passed exact 40-message / 59,676-character ChatGPT cold
+  and hidden-source background checks in Brave. Native Vivaldi also saved the
+  exact 40-message ChatGPT and 50-message Claude references. These historical
+  results do not certify the changed current candidate across the full matrix.
 - ChatGPT cold export in Chrome/Edge remains blocked or failed. A captured
   diagnostic source was a provider verification page, not a loaded conversation.
   The candidate now reports that specific shell as page_not_ready.
-- Vivaldi attachment/new-page initialization remains unresolved. Bounded retries
-  and alternative startup experiments did not produce a verified installed export.
+- Vivaldi automated attachment/new-page initialization remains unresolved;
+  native export evidence above is narrower than installed-resource verification.
 - Notebook's new Google hostname is recognized; live Notebook export remains open.
-- Gemini access, full provider/browser/format/batch coverage, many-turn cold-load
-  completeness, MacBook loaded-runtime readback and publication gates remain open.
+- Gemini works in an explicitly authorized existing session; the dedicated project
+  account still lacks access. Full provider/browser/format/batch coverage, strict
+  background and whitespace proof, MacBook loaded-runtime readback and publication
+  gates remain open. Current MacBook build files match the dist hash above;
+  browser reload verification is deferred by the user and is not blocking Studio QA.
 
 Local operational evidence is retained in the ignored task checkpoint
 `qa-artifacts/live/checkpoint-20261011.md` and hash-bound run receipts.
