@@ -86,12 +86,60 @@ test("loads earlier numbered messages when background scrolling does not hydrate
   expect(container.scrollTop).toBe(400);
 });
 
+test("loads a missing middle through the later control without repeated clicks", async () => {
+  const { document, container, render } = fixture();
+  render([1, 2, 5, 6]);
+  const button = document.createElement("button");
+  button.textContent = "Load later messages";
+  container.before(button);
+  let clicks = 0;
+  let pending = 0;
+  button.onclick = () => {
+    clicks++;
+    pending = 3;
+  };
+  const result = await collectNumberedClaudeMessages({
+    document,
+    maxSteps: 12,
+    wait: async () => {
+      if (pending && --pending === 0) render([1, 2, 3, 4, 5, 6]);
+    }
+  });
+  expect(result?.complete).toBe(true);
+  expect(result?.messages).toHaveLength(6);
+  expect(clicks).toBe(1);
+  expect(container.scrollTop).toBe(400);
+});
+
 test("does not activate disabled or unrelated loading controls", async () => {
   for (const label of ["Load earlier messages", "Delete earlier messages"]) {
     const { document, container } = fixture();
     const button = document.createElement("button");
     button.textContent = label;
     button.disabled = label === "Load earlier messages";
+    container.before(button);
+    let clicks = 0;
+    button.onclick = () => {
+      clicks++;
+    };
+    const result = await collectNumberedClaudeMessages({
+      document,
+      maxSteps: 4,
+      wait: async () => {}
+    });
+    expect(result?.complete).toBe(false);
+    expect(clicks).toBe(0);
+  }
+});
+
+test("later controls respect native and aria disabled states", async () => {
+  for (const mode of ["disabled", "aria-disabled", "unrelated"]) {
+    const { document, container, render } = fixture();
+    render([1, 2, 5, 6]);
+    const button = document.createElement("button");
+    button.textContent = mode === "unrelated" ? "Delete later messages" : "Load later messages";
+    button.disabled = mode === "disabled";
+    if (mode === "aria-disabled") button.setAttribute("aria-disabled", "true");
     container.before(button);
     let clicks = 0;
     button.onclick = () => {

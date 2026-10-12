@@ -1,6 +1,29 @@
 # Release QA — Jelluvi 0.2.14
 
-## Current candidate — 2026-10-11
+## Current candidate — 2026-10-12
+
+Release status: **not ready**. Current dist SHA-256:
+`1fbb3eaddf82ad88b4f1a88238f1b8d5a1c191341cf1923bb251e53192dd8564`.
+
+- Lint, typecheck, 671 unit tests, build/package and 14 fixture E2E checks passed.
+- Live batch QA on the preceding build verified two independently reviewed long
+  conversations (40 ChatGPT messages and 50 Claude messages), selected-history
+  export of exactly two of four chats, and cancellation preserving the completed
+  first export while marking the second skipped. JSON content matched the
+  independent references; these checks do not certify every visual format.
+- A subsequent six-format batch exposed a missing Claude hydration path:
+  `Load later messages` can hide middle turns even after the first turn loads.
+  The collector now uses the exact enabled earlier/later control once per
+  unchanged numbered inventory. The delayed-middle regression failed before the
+  repair and passes afterward; native/ARIA-disabled and unrelated controls stay inert.
+- Current Chrome hidden-source Claude export matches all 50 messages / 9,416
+  characters exactly, with 34 installed resources verified and cleanup confirmed.
+- Current build files were hash-verified on MacBook, with the old dist retained
+  for recovery. Loaded-browser verification there remains deferred by the user.
+- Full cross-browser/provider, visual-format and release/publication gates remain
+  open. Historical results below apply only to their named candidate.
+
+## Previous candidate — 2026-10-11
 
 Release status: **not ready**. Current dist SHA-256:
 `caa207f6355d9fb293b3fcd7c27bb9480a9c557f9e3e4e87021d116e6c613151`.

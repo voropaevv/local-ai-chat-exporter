@@ -41,7 +41,7 @@ export async function collectNumberedClaudeMessages(options: Options): Promise<{
   const messages = new Map<number, ExportedMessage>();
   let total = initial[0].total;
   let previousComplete = "";
-  const requestedEarlierInventories = new Set<string>();
+  const requestedInventories = new Set<string>();
   let steps = 0;
   const wait = options.wait ?? (() => new Promise<void>((resolve) => setTimeout(resolve, 300)));
   const deadline = Date.now() + 120000;
@@ -95,27 +95,29 @@ export async function collectNumberedClaudeMessages(options: Options): Promise<{
         return { messages: ordered.map(([, message]) => message), complete: true, steps };
       }
       previousComplete = fingerprint;
-      if (!messages.has(1)) {
-        container.scrollTop = 0;
+      if (!allPresent) {
+        const direction = messages.has(1) ? "later" : "earlier";
+        if (direction === "earlier") container.scrollTop = 0;
+        else container.scrollTop += Math.max(1, container.clientHeight * 0.8);
         // A hidden tab may not run the provider's scroll-driven virtualizer.
         // Its explicit history control can hydrate without activating the tab.
         // Request once per inventory so a delayed response is never spammed.
-        const inventoryKey = `${total}:${entries
+        const inventoryKey = `${direction}:${total}:${entries
           .map((entry) => entry.index)
           .sort((a, b) => a - b)
           .join(",")}`;
-        const earlier = Array.from(root.querySelectorAll("button")).find(
+        const loader = Array.from(root.querySelectorAll("button")).find(
           (button) =>
             !button.disabled &&
             button.getAttribute("aria-disabled") !== "true" &&
             (button.getAttribute("aria-label") ?? button.textContent ?? "").trim() ===
-              "Load earlier messages"
+              `Load ${direction} messages`
         );
-        if (earlier && !requestedEarlierInventories.has(inventoryKey)) {
-          requestedEarlierInventories.add(inventoryKey);
-          earlier.click();
+        if (loader && !requestedInventories.has(inventoryKey)) {
+          requestedInventories.add(inventoryKey);
+          loader.click();
         }
-      } else if (!allPresent) container.scrollTop += Math.max(1, container.clientHeight * 0.8);
+      }
     }
     return {
       messages: [...messages.entries()]
