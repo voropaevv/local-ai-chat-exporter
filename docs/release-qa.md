@@ -18,6 +18,10 @@ Release status: **not ready**. Local candidate dist SHA-256:
   history coverage is partial; exact visible content is not full-history proof.
 - MacBook's 34 runtime files independently match this candidate, with a verified
   recoverable backup. Loaded-browser verification remains user-deferred.
+- CI passed for `e10e89c435d26612a46c02830d4cf306c366e635`. A fresh Chrome
+  background Claude run verifies all 34 installed resources and exactly matches
+  50 messages / 9,416 characters. Its visibility trace stays hidden throughout;
+  browser and wake-guard cleanup are independently confirmed.
 - The batch results below remain evidence for their named previous candidate.
   Full cross-browser/provider/visual coverage and publication gates remain open.
 
