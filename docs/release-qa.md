@@ -17,6 +17,11 @@ Release status: **not ready**. Local candidate dist SHA-256:
 - 682 unit tests, 14 fixture E2E checks, lint, typecheck, build/package,
   provider-drift, icons, brand, preview and site checks passed locally.
   The content script is 102,389 bytes, within the unchanged 102,400-byte limit.
+- CI passed for `919ded8`. A fresh strict Chrome background-long ChatGPT run
+  on this candidate verifies all 34 installed resources and exactly matches the
+  independent 40-message / 59,676-character reference. The visibility trace stays
+  hidden throughout and owned browser/guard cleanup is verified. This successful
+  API-path result does not close the separate DOM fallback gate above.
 - The preceding reverse-scroll candidate (`841c9980`) exported all 40 ChatGPT
   messages exactly through the native Chrome API path. Native Vivaldi batch
   exported the same 40 messages; a restored Claude tab initially rejected script
