@@ -1,6 +1,29 @@
 import type { AdapterMetadata, AdapterMetadataContext, PlatformAdapter } from "../types";
+import {
+  getProviderDefinition,
+  getProviderHostnames,
+  getProviderWarnings,
+  type ProviderId
+} from "../../core/provider-catalog";
 
 type VisibleExtractor = PlatformAdapter["extractVisibleMessages"];
+
+export function createVisibleProviderAdapter(
+  id: ProviderId,
+  selectors: PlatformAdapter["selectors"],
+  detect: PlatformAdapter["detect"],
+  extract: VisibleExtractor
+): PlatformAdapter {
+  const provider = getProviderDefinition(id);
+  return {
+    ...provider,
+    hostnames: getProviderHostnames(id),
+    providerWarnings: getProviderWarnings(id),
+    selectors,
+    detect,
+    ...createVisibleAdapterContract(extract)
+  };
+}
 
 export function createVisibleAdapterContract(
   extractVisibleMessages: VisibleExtractor

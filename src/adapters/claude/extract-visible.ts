@@ -1,10 +1,5 @@
-import {
-  getProviderDefinition,
-  getProviderHostnames,
-  getProviderWarnings
-} from "../../core/provider-catalog";
 import type { PlatformAdapter } from "../types";
-import { createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleProviderAdapter } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
@@ -41,23 +36,12 @@ const CLAUDE_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
-const CLAUDE_PROVIDER = getProviderDefinition("claude");
-
-export const claudeAdapter: PlatformAdapter = {
-  capabilities: CLAUDE_PROVIDER.capabilities,
-  id: CLAUDE_PROVIDER.id,
-  label: CLAUDE_PROVIDER.label,
-  hostnames: getProviderHostnames(CLAUDE_PROVIDER.id),
-  supportStatus: CLAUDE_PROVIDER.supportStatus,
-  selectors: claudeSelectors,
-  limitations: CLAUDE_PROVIDER.limitations,
-  ...(CLAUDE_PROVIDER.supportWarning !== undefined
-    ? { supportWarning: CLAUDE_PROVIDER.supportWarning }
-    : {}),
-  providerWarnings: getProviderWarnings(CLAUDE_PROVIDER.id),
-  detect: detectClaude,
-  ...createVisibleAdapterContract(extractVisibleClaudeMessages)
-};
+export const claudeAdapter = createVisibleProviderAdapter(
+  "claude",
+  claudeSelectors,
+  detectClaude,
+  extractVisibleClaudeMessages
+);
 
 export function extractVisibleClaudeMessages(
   root: ParentNode = getCurrentDocument()

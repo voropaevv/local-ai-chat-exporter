@@ -3,6 +3,27 @@
 ## Current candidate — 2026-10-12
 
 Release status: **not ready**. Local candidate dist SHA-256:
+`cc9dc52cfa9e570ffdbe9c8723b74014d553d41a21c864bc020269b833b1afe1`.
+
+- 680 unit tests, 14 fixture E2E checks, lint, typecheck, build/package and the
+  content-script, provider-drift, brand, preview and site checks passed locally.
+- The preceding commit failed CI's unchanged 102,400-byte content-script budget
+  at 104,292 bytes. Shared adapter metadata and export-envelope construction now
+  reduce the script to 102,287 bytes without removing collection behavior.
+- Native Perplexity QA exposed toolbar timestamps leaking into user messages.
+  Extraction now targets the message renderer; a baseline-failing regression
+  preserves genuine timestamps inside content and line breaks. Installed Chrome
+  resource verification covers all 34 files; all four control messages match the
+  independent source exactly. The live acceptance result still fails because
+  history coverage is partial; exact visible content is not full-history proof.
+- MacBook's 34 runtime files independently match this candidate, with a verified
+  recoverable backup. Loaded-browser verification remains user-deferred.
+- The batch results below remain evidence for their named previous candidate.
+  Full cross-browser/provider/visual coverage and publication gates remain open.
+
+## Verified batch candidate — 2026-10-12
+
+Release status: **not ready**. Local candidate dist SHA-256:
 `60320d790effeaed4f92f122e901cad3478f4b6223d5747c8c7b90bb6e58e02e`.
 
 - Lint, typecheck, 679 unit tests, 14 fixture E2E checks and build/package passed.

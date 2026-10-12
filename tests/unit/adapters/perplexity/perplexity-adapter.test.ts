@@ -15,6 +15,14 @@ function loadFixture(name: string, url = "https://www.perplexity.ai/search/examp
 }
 
 describe("Perplexity adapter", () => {
+  test("excludes bubble controls and timestamps but preserves time inside query content", () => {
+    const document = new JSDOM(
+      `<div class="group/user-bubble"><div><span>12:49 PM</span><button>Edit query</button></div><div><div data-renderer="lm"><p>Keep 12:49 PM in this query.<br>ROW_2 ёж</p></div><button>Read more</button></div></div>`
+    ).window.document;
+    const messages = extractVisiblePerplexityMessages(document);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].text).toBe("Keep 12:49 PM in this query.\nROW_2 ёж");
+  });
   test("detects Perplexity by hostname or visible message selectors", () => {
     const document = loadFixture("simple-conversation.html", "https://example.com/local");
 

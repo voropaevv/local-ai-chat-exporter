@@ -12,7 +12,7 @@ import type { PlatformAdapter } from "../adapters/types";
 import { buildCompletenessReport } from "../core/completeness";
 import { ExportPipelineError } from "../core/export-errors";
 import { normalizeMessagesWithStats } from "../core/normalize";
-import type { ConversationExport } from "../core/schema";
+import type { ConversationExport, ExportedMessage, CompletenessReport } from "../core/schema";
 import type { ChatGptConversationData } from "../adapters/chatgpt/conversation-data";
 
 export interface ConversationScanOptions extends Omit<ChatGptScrollCollectorOptions, "document"> {
@@ -64,6 +64,21 @@ export async function scanCurrentConversationExport(
     throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
   }
 
+  const packCollected = (
+    messages: readonly ExportedMessage[],
+    completeness: CompletenessReport
+  ): ConversationExport => ({
+    schemaVersion: "1.0",
+    platform: adapter.id,
+    platformLabel: adapter.label,
+    sourceUrl: href,
+    title,
+    exportedAt: options.exportedAt ?? new Date().toISOString(),
+    messageCount: messages.length,
+    messages,
+    completeness
+  });
+
   if (adapter.id === "claude") {
     const collected = await collectNumberedClaudeMessages({
       document: rootDocument,
@@ -72,16 +87,9 @@ export async function scanCurrentConversationExport(
       wait: options.waitForDomSettle
     });
     if (collected !== null && collected.messages.length > 0) {
-      return {
-        schemaVersion: "1.0",
-        platform: adapter.id,
-        platformLabel: adapter.label,
-        sourceUrl: href,
-        title,
-        exportedAt: options.exportedAt ?? new Date().toISOString(),
-        messageCount: collected.messages.length,
-        messages: collected.messages,
-        completeness: buildCompletenessReport({
+      return packCollected(
+        collected.messages,
+        buildCompletenessReport({
           messages: collected.messages,
           duplicateCount: 0,
           platformWarnings: [
@@ -92,7 +100,7 @@ export async function scanCurrentConversationExport(
           scrollSteps: collected.steps,
           virtualized: true
         })
-      };
+      );
     }
   }
 
@@ -104,16 +112,9 @@ export async function scanCurrentConversationExport(
       wait: options.waitForDomSettle
     });
     if (collected !== null && collected.messages.length > 0) {
-      return {
-        schemaVersion: "1.0",
-        platform: adapter.id,
-        platformLabel: adapter.label,
-        sourceUrl: href,
-        title,
-        exportedAt: options.exportedAt ?? new Date().toISOString(),
-        messageCount: collected.messages.length,
-        messages: collected.messages,
-        completeness: buildCompletenessReport({
+      return packCollected(
+        collected.messages,
+        buildCompletenessReport({
           messages: collected.messages,
           duplicateCount: 0,
           reachedTop: collected.reachedTop,
@@ -124,7 +125,7 @@ export async function scanCurrentConversationExport(
             "Gemini history was traversed through stable DOM boundaries. The provider exposes no independent total; verify the first and last messages."
           ]
         })
-      };
+      );
     }
   }
 
@@ -159,16 +160,9 @@ export async function scanCurrentConversationExport(
     });
 
     return {
-      schemaVersion: "1.0",
-      platform: adapter.id,
-      platformLabel: adapter.label,
-      sourceUrl: href,
+      ...packCollected(messages, completeness),
       title: conversationData.title ?? title,
-      conversationId: getConversationId(href),
-      exportedAt: options.exportedAt ?? new Date().toISOString(),
-      messageCount: messages.length,
-      completeness,
-      messages
+      conversationId: getConversationId(href)
     };
   }
 
@@ -179,16 +173,9 @@ export async function scanCurrentConversationExport(
     wait: options.waitForDomSettle
   });
   if (modern !== null && modern.messages.length > 0) {
-    return {
-      schemaVersion: "1.0",
-      platform: adapter.id,
-      platformLabel: adapter.label,
-      sourceUrl: href,
-      title,
-      exportedAt: options.exportedAt ?? new Date().toISOString(),
-      messageCount: modern.messages.length,
-      messages: modern.messages,
-      completeness: buildCompletenessReport({
+    return packCollected(
+      modern.messages,
+      buildCompletenessReport({
         messages: modern.messages,
         duplicateCount: 0,
         reachedTop: modern.reachedTop,
@@ -199,7 +186,7 @@ export async function scanCurrentConversationExport(
           "ChatGPT keyed-turn history uses stable DOM boundaries, not a server total; verify the first and last messages."
         ]
       })
-    };
+    );
   }
 
   const result = await collectChatGptConversation({
@@ -216,14 +203,8 @@ export async function scanCurrentConversationExport(
   }
 
   return {
-    schemaVersion: "1.0",
-    platform: adapter.id,
-    platformLabel: adapter.label,
-    sourceUrl: href,
-    title,
+    ...packCollected(result.messages, result.completeness),
     conversationId: getConversationId(href),
-    exportedAt: options.exportedAt ?? new Date().toISOString(),
-    messageCount: result.messages.length,
     completeness:
       options.chatGptConversationDataWarning === undefined
         ? result.completeness
@@ -237,8 +218,7 @@ export async function scanCurrentConversationExport(
               ...result.completeness.platformWarnings,
               options.chatGptConversationDataWarning
             ]
-          },
-    messages: result.messages
+          }
   };
 }
 
