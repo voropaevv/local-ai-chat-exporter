@@ -42,18 +42,26 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
     import {savedExport} from ${JSON.stringify(helper)};
     const expected='https://chatgpt.com/c/test';
     const results=[];
-    for (const mode of ['duplicate','redirect','ambiguous','cleanup-failure']) {
-      const calls=[]; let queries=0; let loaded=false; let closed=false;
+    for (const mode of ['duplicate','redirect','ambiguous','cleanup-failure','challenge']) {
+      const calls=[]; let queries=0; let loaded=false; let closed=false; let ready=false;
       const retained={isClosed:()=>false,close:async()=>{throw Error('borrowed page closed')}};
       const pages=[retained];
       const target=(id)=>({type:'tab',targetId:id,url:expected});
       const session={send:async(name,args)=>{
         if(name==='Target.getTargets') return {targetInfos:queries++===0
           ? [target('old')] : [target('old'),target('new'),...(mode==='ambiguous'?[target('other')]:[])]};
-        if(name==='Extensions.triggerAction') calls.push(args.targetId);
+        if(name==='Extensions.triggerAction') {if(!ready)throw Error('export-before-provider-ready');calls.push(args.targetId)};
         return {};
       }};
       const source={goto:async()=>{},waitForLoadState:async()=>{loaded=true},
+        waitForFunction:async(fn,arg,options)=>{
+          if(options.timeout!==30000)throw Error('unbounded readiness');
+          globalThis.document={title:'Just a moment...'};
+          if(fn()!==false)throw Error('challenge accepted');
+          if(mode==='challenge')throw Error('provider readiness timeout');
+          globalThis.document={title:'Claude'};
+          if(fn()!==true)throw Error('ready source rejected');ready=true;
+        },
         url:()=>mode==='redirect'?'https://chatgpt.com/':expected,bringToFront:async()=>{},
         isClosed:()=>closed,close:async()=>{closed=true;if(mode==='cleanup-failure')throw Error('close rejected')}};
       const context={pages:()=>pages,newPage:async()=>{pages.push(source);return source},newCDPSession:async()=>({send:async()=>{}}),
@@ -79,4 +87,6 @@ test("live export binds the newly created tab and refuses redirected or ambiguou
   expect(results[2].error).toBe("Cannot uniquely identify the actual source tab target");
   expect(results[3].error).toBe("selected");
   expect(results[3].cleanupErrors).toEqual(["close rejected"]);
+  expect(results[4].calls).toEqual([]);
+  expect(results[4].error).toBe("provider readiness timeout");
 });

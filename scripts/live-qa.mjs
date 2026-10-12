@@ -191,6 +191,12 @@ async function runSavedExport(context, session, id, config, output) {
     );
   }
   await source.bringToFront();
+  // Let an automatic provider check finish before hiding the source for export.
+  // Interactive challenges are never clicked here; they fail this bounded preflight.
+  await source.waitForFunction(() => document.title !== "Just a moment...", undefined, {
+    timeout: 30000
+  });
+  if (source.url() !== config.url) throw new Error("Source changed during provider readiness");
   const { targetInfos } = await session.send("Target.getTargets", { filter: [{ type: "tab" }] });
   const tabs = targetInfos.filter(
     (target) =>

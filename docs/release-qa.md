@@ -22,6 +22,12 @@ Release status: **not ready**. Local candidate dist SHA-256:
   independent 40-message / 59,676-character reference. The visibility trace stays
   hidden throughout and owned browser/guard cleanup is verified. This successful
   API-path result does not close the separate DOM fallback gate above.
+- Native Chrome Claude export also matches all 50 messages / 9,416 characters.
+  Strict Claude runs encountered provider verification instead of conversation
+  content. The QA launcher now waits up to 30 seconds for the observed verification
+  title to clear before requesting export, and refuses a changed source URL.
+  Regression tests cover readiness ordering and challenge timeout cleanup; this
+  does not solve CAPTCHAs or count an authentication-blocked run as passed.
 - The preceding reverse-scroll candidate (`841c9980`) exported all 40 ChatGPT
   messages exactly through the native Chrome API path. Native Vivaldi batch
   exported the same 40 messages; a restored Claude tab initially rejected script
