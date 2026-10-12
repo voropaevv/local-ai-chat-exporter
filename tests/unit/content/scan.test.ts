@@ -20,6 +20,23 @@ function loadPerplexityFixture(): Document {
 }
 
 describe("scanCurrentConversationExport", () => {
+  test("stable modern DOM boundaries do not certify unloaded history", async () => {
+    const document = new JSDOM(
+      '<main><div data-turn-key="last"><div><h4>You said:</h4><p>Last prompt</p></div><div><h4>ChatGPT said:</h4><p>Last answer</p></div></div></main>',
+      { url: "https://chatgpt.com/c/example" }
+    ).window.document;
+    const result = await scanCurrentConversationExport({
+      document,
+      hostname: "chatgpt.com",
+      href: "https://chatgpt.com/c/example",
+      waitForDomSettle: async () => {}
+    });
+    expect(result.messageCount).toBe(2);
+    expect(result.completeness.reachedTop).toBe(true);
+    expect(result.completeness.reachedBottom).toBe(true);
+    expect(result.completeness.status).toBe("partial");
+  });
+
   test("distinguishes a provider verification document from an empty chat", async () => {
     const document = new JSDOM(
       '<title>Just a moment...</title><main><input id="cf-chl-widget-example_response">Verification successful. Waiting for chatgpt.com to respond</main>'

@@ -59,6 +59,38 @@ test("collapsed messages must expand before capture", async () => {
   expect(result?.messages).toHaveLength(2);
 });
 
+test("reverse flex uses negative top offsets and traverses toward zero", async () => {
+  const { document, main, render } = fixture();
+  main.style.display = "flex";
+  main.style.flexDirection = "column-reverse";
+  let offset = 0;
+  const visited: number[] = [];
+  Object.defineProperty(main, "scrollTop", {
+    get: () => offset,
+    set: (value: number) => {
+      offset = Math.max(-200, Math.min(0, value));
+    }
+  });
+  let polls = 0;
+  const result = await collectModernChatGptTurns({
+    document,
+    maxSteps: 100,
+    wait: async () => {
+      visited.push(main.scrollTop);
+      if (++polls > 4) render(main.scrollTop <= -180 ? [1] : main.scrollTop < -80 ? [2] : [3]);
+    }
+  });
+  expect(result?.messages.map((m) => m.id)).toEqual(
+    [1, 2, 3].flatMap((id) => [`chatgpt-${id}-user`, `chatgpt-${id}-assistant`])
+  );
+  expect(result?.reachedTop).toBe(true);
+  expect(result?.reachedBottom).toBe(true);
+  expect(visited[0]).toBe(-200);
+  const forward = visited.slice(visited.findIndex((value) => value > -200));
+  expect(forward.every((value, i) => i === 0 || value >= forward[i - 1])).toBe(true);
+  expect(main.scrollTop).toBe(0);
+});
+
 test("disabled expansion never yields a complete result", async () => {
   const { document, render } = fixture();
   render([1], true);

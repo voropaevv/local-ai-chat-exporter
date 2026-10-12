@@ -3,6 +3,37 @@
 ## Current candidate — 2026-10-12
 
 Release status: **not ready**. Local candidate dist SHA-256:
+`0e4571dfa8e8954fb99649dd2105e73f5de69deb969dc748247c833ce89e264c`.
+
+- Modern ChatGPT uses a reversed flex scroller: zero is the bottom, and the
+  oldest content requires negative offsets. Collection now seeks the actual top
+  and traverses forward once. The regression fails on the previous implementation
+  and verifies delayed hydration, ordering and viewport restoration.
+- A live fallback run still returned only 10 of 40 messages when provider history
+  failed to load. Physical scroll boundaries are therefore not sufficient proof.
+  Modern DOM-only exports now remain `partial`; a second baseline-failing test
+  prevents the misleading `probably_complete` result. Full live fallback coverage
+  is still an open release gate, not fixed by relabeling the result.
+- 682 unit tests, 14 fixture E2E checks, lint, typecheck, build/package,
+  provider-drift, icons, brand, preview and site checks passed locally.
+  The content script is 102,389 bytes, within the unchanged 102,400-byte limit.
+- The preceding reverse-scroll candidate (`841c9980`) exported all 40 ChatGPT
+  messages exactly through the native Chrome API path. Native Vivaldi batch
+  exported the same 40 messages; a restored Claude tab initially rejected script
+  injection, then succeeded after reload through Retry failed, matching all
+  50 messages / 9,416 characters exactly. These are scoped native checks, not a
+  completed strict cross-browser matrix. Vivaldi's CDP connection still times out.
+- Publication, complete provider/visual coverage and live DOM fallback acceptance
+  remain open. Do not equate a green local suite with release readiness.
+- MacBook's 34 runtime files independently match this candidate, with a verified
+  backup; browser reload verification remains user-deferred. Native Brave Gemini
+  exported all 50 synthetic messages in order, preserving Unicode and repeated
+  content (whitespace-normalized comparison). The source was backgrounded during
+  collection, but this native observation is not a strict full-duration trace.
+
+## Previous verified candidate — 2026-10-12
+
+Release status: **not ready**. Local candidate dist SHA-256:
 `cc9dc52cfa9e570ffdbe9c8723b74014d553d41a21c864bc020269b833b1afe1`.
 
 - 680 unit tests, 14 fixture E2E checks, lint, typecheck, build/package and the

@@ -48,6 +48,9 @@ export async function collectModernChatGptTurns(options: {
     }
   }
   const originalTop = scroller.scrollTop;
+  const reversed = root.defaultView?.getComputedStyle(scroller).flexDirection === "column-reverse";
+  const end = () => (reversed ? 0 : Math.max(0, scroller.scrollHeight - scroller.clientHeight));
+  const start = () => end() - Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const originalUrl = root.defaultView?.location.href;
   const collected = new Map<string, readonly ExportedMessage[]>();
   const order: string[] = [];
@@ -73,7 +76,7 @@ export async function collectModernChatGptTurns(options: {
   try {
     for (; steps < (options.maxSteps ?? 600) && Date.now() < deadline; steps++) {
       check();
-      if (phase === "top") scroller.scrollTop = 0;
+      if (phase === "top") scroller.scrollTop = start();
       await wait();
       check();
       const entries = turns();
@@ -154,8 +157,8 @@ export async function collectModernChatGptTurns(options: {
       ]);
       const boundary =
         phase === "top"
-          ? scroller.scrollTop <= 1
-          : scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+          ? Math.abs(scroller.scrollTop - start()) <= 1
+          : Math.abs(scroller.scrollTop - end()) <= 2;
       stable = !busy && boundary && previous === fingerprint ? stable + 1 : 0;
       previous = fingerprint;
       if (stable >= 20) {
@@ -173,7 +176,7 @@ export async function collectModernChatGptTurns(options: {
       }
       if (phase === "down")
         scroller.scrollTop = Math.min(
-          scroller.scrollHeight,
+          end(),
           scroller.scrollTop + Math.max(1, scroller.clientHeight * 0.8)
         );
     }

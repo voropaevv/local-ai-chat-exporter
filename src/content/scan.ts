@@ -122,7 +122,7 @@ export async function scanCurrentConversationExport(
           scrollSteps: collected.steps,
           virtualized: true,
           platformWarnings: [
-            "Gemini history was traversed through stable DOM boundaries. The provider exposes no independent total; verify the first and last messages."
+            "Gemini exposes no independent message total; verify the first and last messages."
           ]
         })
       );
@@ -173,9 +173,8 @@ export async function scanCurrentConversationExport(
     wait: options.waitForDomSettle
   });
   if (modern !== null && modern.messages.length > 0) {
-    return packCollected(
-      modern.messages,
-      buildCompletenessReport({
+    return packCollected(modern.messages, {
+      ...buildCompletenessReport({
         messages: modern.messages,
         duplicateCount: 0,
         reachedTop: modern.reachedTop,
@@ -183,10 +182,12 @@ export async function scanCurrentConversationExport(
         scrollSteps: modern.steps,
         virtualized: true,
         platformWarnings: [
-          "ChatGPT keyed-turn history uses stable DOM boundaries, not a server total; verify the first and last messages."
+          "ChatGPT DOM traversal has no server total; verify the first and last messages."
         ]
-      })
-    );
+      }),
+      // A stable scroll edge also occurs when the provider fails to load history.
+      status: "partial"
+    });
   }
 
   const result = await collectChatGptConversation({
