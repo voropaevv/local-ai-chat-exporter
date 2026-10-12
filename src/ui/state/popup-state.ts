@@ -246,13 +246,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
         }
       };
     case "set_output_mode":
-      return {
-        ...state,
-        options: {
-          ...state.options,
-          outputMode: action.outputMode
-        }
-      };
+      return setOutputMode(state, action.outputMode);
     case "set_markdown_profile":
       return {
         ...state,
@@ -319,13 +313,7 @@ export function popupReducer(state: PopupState, action: PopupAction): PopupState
 
 export function toggleFormat(state: PopupState, format: ExportFormat): PopupState {
   if (format === "zip") {
-    return {
-      ...state,
-      options: {
-        ...state.options,
-        outputMode: state.options.outputMode === "zip" ? "separate" : "zip"
-      }
-    };
+    return setOutputMode(state, state.options.outputMode === "zip" ? "separate" : "zip");
   }
 
   const hasFormat = state.options.formats.includes(format);
@@ -338,6 +326,20 @@ export function toggleFormat(state: PopupState, format: ExportFormat): PopupStat
     options: {
       ...state.options,
       formats: formats.length > 0 ? formats : state.options.formats
+    }
+  };
+}
+
+function setOutputMode(state: PopupState, outputMode: PopupOutputMode): PopupState {
+  if (outputMode === state.options.outputMode) return state;
+  const selected = getBatchExportFormats(state);
+  return {
+    ...state,
+    options: {
+      ...state.options,
+      outputMode,
+      formats: [...selected],
+      bundleFormats: [...selected]
     }
   };
 }

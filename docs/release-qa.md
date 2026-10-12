@@ -2,6 +2,38 @@
 
 ## Current candidate — 2026-10-12
 
+Release status: **not ready**. Local candidate dist SHA-256:
+`60320d790effeaed4f92f122e901cad3478f4b6223d5747c8c7b90bb6e58e02e`.
+
+- Lint, typecheck, 679 unit tests, 14 fixture E2E checks and build/package passed.
+- New live ChatGPT markup uses a keyed wrapper containing both roles, without
+  the previously recognized role/turn attributes. The old path returned no messages.
+  A new keyed-pair traversal candidate has unit coverage for delayed history,
+  explicit expansion, hidden loading indicators, repeated content, duplicate keys,
+  navigation and cancellation. Native Chrome exports through the API path match
+  the independent 40-message reference, even with only the last five turns loaded.
+  The new DOM fallback itself still needs live acceptance; API success does not
+  certify that fallback.
+- Six-format batch output retained all source text in order in MD, TXT, HTML
+  and CSV (whitespace-normalized check). JSON matched the independent references
+  exactly. DOCX exposed lost identifier underscores. The local repair preserves
+  intraword underscores and literal code while removing real emphasis; its
+  regression failed before the repair. A new native six-format export preserves
+  all 40 source messages in DOCX in order (whitespace-normalized text check).
+- A native popup regression exposed format selection changing when toggling ZIP.
+  Packaging now preserves the currently selected formats in both directions;
+  the baseline-failing regression and installed Chrome UI both pass.
+- Current native history batch exports exactly two selected chats out of four,
+  producing six files per chat plus a manifest. JSON matches both independent
+  references (40 and 2 messages); temporary history tabs close afterward.
+- Current native cross-provider batch keeps both source tabs inactive and exports
+  all 40 ChatGPT and 50 Claude messages exactly. Both DOCX files preserve all source
+  text in order (whitespace-normalized); Claude retains its conservative warning.
+- Files on MacBook match the current candidate; its browser runtime is not yet
+  verified. Full cross-browser/provider/visual coverage and publication gates remain open.
+
+## Verified Claude repair candidate — 2026-10-12
+
 Release status: **not ready**. Current dist SHA-256:
 `1fbb3eaddf82ad88b4f1a88238f1b8d5a1c191341cf1923bb251e53192dd8564`.
 

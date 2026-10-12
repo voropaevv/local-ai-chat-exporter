@@ -4,6 +4,7 @@ import {
 } from "../adapters/chatgpt/scroll-collector";
 import { mergeChatGptConversationMessages } from "../adapters/chatgpt/conversation-data";
 import { extractVisibleChatGptMessages } from "../adapters/chatgpt/extract-visible";
+import { collectModernChatGptTurns } from "../adapters/chatgpt/modern-turns";
 import { collectNumberedClaudeMessages } from "../adapters/claude/collect-numbered";
 import { collectGeminiHistory } from "../adapters/gemini/collect-history";
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
@@ -168,6 +169,36 @@ export async function scanCurrentConversationExport(
       messageCount: messages.length,
       completeness,
       messages
+    };
+  }
+
+  const modern = await collectModernChatGptTurns({
+    document: rootDocument,
+    signal: options.signal,
+    maxSteps: options.maxSteps,
+    wait: options.waitForDomSettle
+  });
+  if (modern !== null && modern.messages.length > 0) {
+    return {
+      schemaVersion: "1.0",
+      platform: adapter.id,
+      platformLabel: adapter.label,
+      sourceUrl: href,
+      title,
+      exportedAt: options.exportedAt ?? new Date().toISOString(),
+      messageCount: modern.messages.length,
+      messages: modern.messages,
+      completeness: buildCompletenessReport({
+        messages: modern.messages,
+        duplicateCount: 0,
+        reachedTop: modern.reachedTop,
+        reachedBottom: modern.reachedBottom,
+        scrollSteps: modern.steps,
+        virtualized: true,
+        platformWarnings: [
+          "ChatGPT keyed-turn history uses stable DOM boundaries, not a server total; verify the first and last messages."
+        ]
+      })
     };
   }
 

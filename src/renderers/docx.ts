@@ -305,13 +305,25 @@ function flushParagraph(paragraphs: string[], lines: readonly string[]): void {
 }
 
 function stripInlineMarkdown(input: string): string {
+  // Code spans and escaped delimiters are literal, not emphasis markup.
+  const tokens = /(`+)([^\n]*?)\1|\\([\\`*_])/g;
+  let output = "";
+  let offset = 0;
+  for (const match of input.matchAll(tokens)) {
+    output += stripInlineEmphasis(input.slice(offset, match.index));
+    output += match[3] ?? match[2];
+    offset = match.index + match[0].length;
+  }
+  return output + stripInlineEmphasis(input.slice(offset));
+}
+
+function stripInlineEmphasis(input: string): string {
   return input
     .replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, "$1 ($2)")
-    .replace(/`([^`\n]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
+    .replace(/(?<![\p{L}\p{N}_])__([^_]+)__(?![\p{L}\p{N}_])/gu, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/_([^_]+)_/g, "$1");
+    .replace(/(?<![\p{L}\p{N}_])_([^_]+)_(?![\p{L}\p{N}_])/gu, "$1");
 }
 
 function renderParagraph(text: string, style?: string): string {

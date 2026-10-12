@@ -360,14 +360,18 @@ async function runSavedExport(context, session, id, config, output) {
               const ancestors = [];
               for (
                 let parent = node;
-                parent && ancestors.length < 5;
+                parent && ancestors.length < 10;
                 parent = parent.parentElement
               ) {
                 ancestors.push({
                   tag: parent.tagName,
                   testid: parent.getAttribute("data-testid"),
                   role: parent.getAttribute("data-message-author-role"),
-                  class: parent.className
+                  class: parent.className,
+                  attributes: Array.from(parent.attributes, (attribute) => attribute.name),
+                  labelledHeadings: Array.from(parent.querySelectorAll("h4")).filter((heading) =>
+                    /^(You said:|ChatGPT said:)$/.test(heading.textContent.trim())
+                  ).length
                 });
               }
               return ancestors;

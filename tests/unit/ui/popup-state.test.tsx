@@ -30,6 +30,21 @@ const completeness: CompletenessReport = {
 };
 
 describe("popup state", () => {
+  test("preserves selected formats when changing packaging in either direction", () => {
+    const initial = createInitialPopupState();
+    const selected = {
+      ...initial,
+      options: { ...initial.options, formats: ["json", "docx", "csv"] as const }
+    };
+    const zipped = popupReducer(selected, { type: "set_output_mode", outputMode: "zip" });
+    expect(buildDownloadRequest(zipped).options?.zipFormats).toEqual(["json", "docx", "csv"]);
+    const edited = popupReducer(zipped, { type: "set_bundle_format", format: "txt" });
+    expect(popupReducer(edited, { type: "set_output_mode", outputMode: "zip" })).toEqual(edited);
+    const separate = popupReducer(edited, { type: "set_output_mode", outputMode: "separate" });
+    expect(buildDownloadRequest(separate).options?.formats).toEqual(["json", "docx", "csv", "txt"]);
+    expect(toggleFormat(selected, "zip").options.bundleFormats).toEqual(["json", "docx", "csv"]);
+    expect(toggleFormat(edited, "zip").options.formats).toEqual(["json", "docx", "csv", "txt"]);
+  });
   test("tracks scan progress, success summary, and cancellation", () => {
     const scanning = popupReducer(createInitialPopupState(), { type: "scan_started" });
 
@@ -190,7 +205,7 @@ describe("popup state", () => {
 
   test("builds ZIP bundle requests with selected bundle formats", () => {
     const zipState = popupReducer(
-      popupReducer(createInitialPopupState(), {
+      popupReducer(toggleFormat(toggleFormat(createInitialPopupState(), "json"), "html"), {
         outputMode: "zip",
         type: "set_output_mode"
       }),
