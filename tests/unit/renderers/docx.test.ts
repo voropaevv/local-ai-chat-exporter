@@ -46,6 +46,22 @@ function makeConversation(): ConversationExport {
 }
 
 describe("renderDocx", () => {
+  test("preserves identifier underscores while removing actual emphasis", () => {
+    const conversation = makeConversation();
+    const rendered = renderDocx({
+      ...conversation,
+      messages: [
+        makeMessage({
+          text: "TURN_01_OK T1_ROW_1 ёж_ряд_1 bold italic _literal_",
+          markdown: "TURN_01_OK T1_ROW_1 ёж_ряд_1 __bold__ _italic_ `_literal_`",
+          codeBlocks: []
+        })
+      ]
+    });
+    const xml = strFromU8(unzipSync(rendered.bytes)["word/document.xml"]);
+    expect(xml).toContain("TURN_01_OK T1_ROW_1 ёж_ряд_1 bold italic _literal_");
+  });
+
   test("creates a minimal local OpenXML document with headings, code, table, and metadata", () => {
     const rendered = renderDocx(makeConversation());
 

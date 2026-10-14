@@ -243,7 +243,10 @@ export function LocalLibraryPanel() {
           ))}
         </ul>
       ) : records.length === 0 ? (
-        <p className="status-text">No saved chats.</p>
+        <p className="status-text">
+          No saved chats. Open Preview and choose Save to keep a chat in this browser. Nothing is
+          uploaded or synced.
+        </p>
       ) : (
         <p className="status-text">No matches.</p>
       )}

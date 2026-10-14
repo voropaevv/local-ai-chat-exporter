@@ -6,6 +6,7 @@ import { describe, expect, test } from "vitest";
 import { detectGemini } from "../../../../src/adapters/gemini/detect";
 import { extractVisibleGeminiMessages } from "../../../../src/adapters/gemini/extract-visible";
 import { geminiSelectors } from "../../../../src/adapters/gemini/selectors";
+import { normalizeMessages } from "../../../../src/core/normalize";
 
 const fixturesDir = resolve(import.meta.dirname, "../../../fixtures/gemini");
 
@@ -15,6 +16,19 @@ function loadFixture(name: string, url = "https://gemini.google.com/app/example"
 }
 
 describe("Gemini adapter", () => {
+  test("preserves identical messages belonging to different observed turn IDs", () => {
+    const document = new JSDOM(
+      [1, 2]
+        .map(
+          (n) =>
+            `<div class="conversation-container" id="turn-${n}"><user-query><div class="query-text">Repeat</div></user-query><model-response><message-content>OK</message-content></model-response></div>`
+        )
+        .join("")
+    ).window.document;
+    const messages = normalizeMessages(extractVisibleGeminiMessages(document));
+    expect(messages.map((message) => message.text)).toEqual(["Repeat", "OK", "Repeat", "OK"]);
+    expect(new Set(messages.map((message) => message.id)).size).toBe(4);
+  });
   test("detects Gemini by hostname or visible message selectors", () => {
     const document = loadFixture("simple-conversation.html", "https://example.com/local");
 

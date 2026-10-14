@@ -1,10 +1,5 @@
-import {
-  getProviderDefinition,
-  getProviderHostnames,
-  getProviderWarnings
-} from "../../core/provider-catalog";
 import type { PlatformAdapter } from "../types";
-import { createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleProviderAdapter } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
@@ -37,23 +32,12 @@ const NOTEBOOKLM_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
-const NOTEBOOKLM_PROVIDER = getProviderDefinition("notebooklm");
-
-export const notebookLmAdapter: PlatformAdapter = {
-  capabilities: NOTEBOOKLM_PROVIDER.capabilities,
-  id: NOTEBOOKLM_PROVIDER.id,
-  label: NOTEBOOKLM_PROVIDER.label,
-  hostnames: getProviderHostnames(NOTEBOOKLM_PROVIDER.id),
-  supportStatus: NOTEBOOKLM_PROVIDER.supportStatus,
-  selectors: notebookLmSelectors,
-  limitations: NOTEBOOKLM_PROVIDER.limitations,
-  ...(NOTEBOOKLM_PROVIDER.supportWarning !== undefined
-    ? { supportWarning: NOTEBOOKLM_PROVIDER.supportWarning }
-    : {}),
-  providerWarnings: getProviderWarnings(NOTEBOOKLM_PROVIDER.id),
-  detect: detectNotebookLm,
-  ...createVisibleAdapterContract(extractVisibleNotebookLmMessages)
-};
+export const notebookLmAdapter = createVisibleProviderAdapter(
+  "notebooklm",
+  notebookLmSelectors,
+  detectNotebookLm,
+  extractVisibleNotebookLmMessages
+);
 
 export function extractVisibleNotebookLmMessages(
   root: ParentNode = getCurrentDocument()

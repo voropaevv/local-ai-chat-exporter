@@ -18,6 +18,10 @@ interface ProviderDefinition {
   readonly supportWarning?: string;
 }
 
+const VISIBLE_LIMITATIONS = [
+  "Visible-message extraction only; unloaded or collapsed turns may be missing."
+] as const;
+
 export const PROVIDER_CATALOG = [
   {
     capabilities: {
@@ -42,7 +46,7 @@ export const PROVIDER_CATALOG = [
     },
     id: "claude",
     label: "Claude",
-    limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
+    limitations: VISIBLE_LIMITATIONS,
     origins: ["https://claude.ai/*"],
     supportStatus: "beta",
     supportWarning:
@@ -57,7 +61,7 @@ export const PROVIDER_CATALOG = [
     },
     id: "gemini",
     label: "Gemini",
-    limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
+    limitations: VISIBLE_LIMITATIONS,
     origins: ["https://gemini.google.com/*"],
     supportStatus: "beta",
     supportWarning:
@@ -72,7 +76,7 @@ export const PROVIDER_CATALOG = [
     },
     id: "perplexity",
     label: "Perplexity",
-    limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
+    limitations: VISIBLE_LIMITATIONS,
     origins: ["https://perplexity.ai/*", "https://www.perplexity.ai/*"],
     supportStatus: "experimental",
     supportWarning:
@@ -87,8 +91,8 @@ export const PROVIDER_CATALOG = [
     },
     id: "notebooklm",
     label: "NotebookLM",
-    limitations: ["Visible-message extraction only; unloaded or collapsed turns may be missing."],
-    origins: ["https://notebooklm.google.com/*"],
+    limitations: VISIBLE_LIMITATIONS,
+    origins: ["https://notebooklm.google.com/*", "https://notebook.google.com/*"],
     supportStatus: "experimental",
     supportWarning:
       "NotebookLM support is experimental. Verify first and last messages before relying on export."

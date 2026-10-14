@@ -7,15 +7,12 @@ title: "Golden Export"
 conversation_id: "golden"
 exported_at: "2026-05-31T10:20:30.000Z"
 message_count: 2
-completeness: "complete"
-warnings: []
 ---
 
 # Golden Export
 
 Source: https://chatgpt.com/c/golden
-Exported: 2026-05-31T10:20:30.000Z
-Completeness: complete
+Exported: 31 May 2026, 10:20 UTC
 
 ## 1. User
 

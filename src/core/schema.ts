@@ -36,6 +36,20 @@ export interface ExportedImageRef {
   readonly height?: number;
 }
 
+export type ExportedAttachmentKind = "file" | "website" | "image" | "other";
+
+export interface ExportedAttachmentRef {
+  readonly id?: string;
+  readonly kind: ExportedAttachmentKind;
+  readonly name: string;
+  readonly description?: string;
+  readonly mimeType?: string;
+  readonly sizeBytes?: number;
+  readonly url?: string;
+  readonly previewHtml?: string;
+  readonly warning?: string;
+}
+
 export type ExportedSourceKind = "citation" | "web_search" | "deep_research";
 
 export interface ExportedSourceRef {
@@ -69,6 +83,7 @@ export interface ExportedMessage {
   readonly html?: string;
   readonly codeBlocks: readonly ExportedCodeBlock[];
   readonly images: readonly ExportedImageRef[];
+  readonly attachments?: readonly ExportedAttachmentRef[];
   readonly sources?: readonly ExportedSourceRef[];
   readonly thinkingBlocks?: readonly ExportedThinkingBlock[];
   readonly canvas?: readonly ExportedCanvasRef[];

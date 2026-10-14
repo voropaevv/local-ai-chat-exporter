@@ -1,10 +1,5 @@
-import {
-  getProviderDefinition,
-  getProviderHostnames,
-  getProviderWarnings
-} from "../../core/provider-catalog";
 import type { PlatformAdapter } from "../types";
-import { createVisibleAdapterContract } from "../shared/contract";
+import { createVisibleProviderAdapter } from "../shared/contract";
 import {
   extractVisibleMessagesBySelectors,
   type VisibleMessageSelector
@@ -28,23 +23,12 @@ const GEMINI_MESSAGE_SELECTORS: readonly VisibleMessageSelector[] = [
   }
 ];
 
-const GEMINI_PROVIDER = getProviderDefinition("gemini");
-
-export const geminiAdapter: PlatformAdapter = {
-  capabilities: GEMINI_PROVIDER.capabilities,
-  id: GEMINI_PROVIDER.id,
-  label: GEMINI_PROVIDER.label,
-  hostnames: getProviderHostnames(GEMINI_PROVIDER.id),
-  supportStatus: GEMINI_PROVIDER.supportStatus,
-  selectors: geminiSelectors,
-  limitations: GEMINI_PROVIDER.limitations,
-  ...(GEMINI_PROVIDER.supportWarning !== undefined
-    ? { supportWarning: GEMINI_PROVIDER.supportWarning }
-    : {}),
-  providerWarnings: getProviderWarnings(GEMINI_PROVIDER.id),
-  detect: detectGemini,
-  ...createVisibleAdapterContract(extractVisibleGeminiMessages)
-};
+export const geminiAdapter = createVisibleProviderAdapter(
+  "gemini",
+  geminiSelectors,
+  detectGemini,
+  extractVisibleGeminiMessages
+);
 
 export function extractVisibleGeminiMessages(
   root: ParentNode = getCurrentDocument()

@@ -9,19 +9,21 @@ const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const distDir = resolve(projectRoot, process.argv[2] ?? "dist");
 const releaseDir = resolve(projectRoot, process.argv[3] ?? "release");
 const contentScriptPath = "content/main.js";
+const maxContentScriptBytes = Number.parseInt(
+  process.env.JELLUVI_MAX_CONTENT_SCRIPT_BYTES ?? `${100 * 1024}`,
+  10
+);
 
 async function main() {
   const checkedSources = [];
   const violations = [];
 
-  const distContentSource = await readFile(resolve(distDir, contentScriptPath), "utf8");
-  checkedSources.push(relative(projectRoot, resolve(distDir, contentScriptPath)));
-  violations.push(
-    ...findClassicScriptViolations(
-      relative(projectRoot, resolve(distDir, contentScriptPath)),
-      distContentSource
-    )
-  );
+  const distContentBytes = await readFile(resolve(distDir, contentScriptPath));
+  const distContentSource = new TextDecoder().decode(distContentBytes);
+  const distLabel = relative(projectRoot, resolve(distDir, contentScriptPath));
+  checkedSources.push(`${distLabel} (${distContentBytes.byteLength} bytes)`);
+  violations.push(...findSizeViolations(distLabel, distContentBytes.byteLength));
+  violations.push(...findClassicScriptViolations(distLabel, distContentSource));
 
   for (const zipFile of await collectReleaseZipFiles(releaseDir)) {
     const zipEntries = unzipSync(new Uint8Array(await readFile(zipFile)));
@@ -34,7 +36,8 @@ async function main() {
     }
 
     const source = new TextDecoder().decode(contentEntry);
-    checkedSources.push(label);
+    checkedSources.push(`${label} (${contentEntry.byteLength} bytes)`);
+    violations.push(...findSizeViolations(label, contentEntry.byteLength));
     violations.push(...findClassicScriptViolations(label, source));
   }
 
@@ -48,6 +51,12 @@ async function main() {
   }
 
   console.log(`Content script classic checks passed for ${checkedSources.join(", ")}.`);
+}
+
+function findSizeViolations(label, byteLength) {
+  return byteLength > maxContentScriptBytes
+    ? [`${label}: ${byteLength} bytes exceeds ${maxContentScriptBytes}-byte budget`]
+    : [];
 }
 
 async function collectReleaseZipFiles(directory) {
@@ -167,7 +176,10 @@ function preserveNewlines(value) {
 }
 
 function sampleAt(source, index) {
-  return source.slice(index, index + 120).replace(/\s+/g, " ").trim();
+  return source
+    .slice(index, index + 120)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 main().catch((error) => {

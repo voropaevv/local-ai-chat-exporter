@@ -1,6 +1,9 @@
 import { render } from "preact";
 
 import type { ConversationExport } from "../src/core/schema";
+import type { BatchCandidateTab } from "../src/core/batch";
+import { CHATGPT_HISTORY_LIST_MESSAGE } from "../src/core/chatgpt-history";
+import { createLocalLibraryRecord, saveLocalLibraryRecord } from "../src/library/local-library";
 import { OptionsApp } from "../src/ui/OptionsApp";
 import { PopupApp } from "../src/ui/PopupApp";
 import { PreviewApp } from "../src/ui/PreviewApp";
@@ -23,14 +26,30 @@ const conversation: ConversationExport = {
   messageCount: 4,
   messages: [
     {
+      attachments: [
+        {
+          description: "Markdown document",
+          kind: "file",
+          mimeType: "text/markdown",
+          name: "launch-brief.md",
+          sizeBytes: 18_420
+        },
+        {
+          description: "ZIP archive",
+          kind: "file",
+          mimeType: "application/zip",
+          name: "reference-assets.zip",
+          sizeBytes: 3_480_000
+        }
+      ],
       authorLabel: "User",
       codeBlocks: [],
       id: "qa-user-1",
       images: [],
       index: 0,
-      metadata: {},
+      metadata: { displayTimestamp: "Thursday 9:52 AM" },
       role: "user",
-      text: "Create a concise launch checklist for Jelluvi."
+      text: "Create a concise launch checklist for Jelluvi using the attached brief and reference assets."
     },
     {
       authorLabel: "ChatGPT",
@@ -39,12 +58,36 @@ const conversation: ConversationExport = {
       images: [],
       index: 1,
       markdown:
-        "Start with reliability: verify capture completeness, local exports, and recovery states.",
+        "## Launch priorities\n\nStart with **reliability** and preserve the conversation structure:\n\n- Verify capture completeness without duplicate scans.\n- Keep attached files visually distinct from the message body.\n- Render [Jelluvi documentation](https://example.com/jelluvi/docs) as a readable source link.\n\n> The export remains local and self-contained.",
       metadata: {},
       role: "assistant",
-      text: "Start with reliability: verify capture completeness, local exports, and recovery states."
+      sources: [
+        {
+          kind: "citation",
+          snippet: "Local export, preview, and recovery guidance for the Jelluvi release.",
+          title: "Jelluvi documentation",
+          url: "https://example.com/jelluvi/docs"
+        }
+      ],
+      text: "Launch priorities. Start with reliability and preserve the conversation structure. Verify capture completeness without duplicate scans.",
+      thinkingBlocks: [
+        {
+          text: "Checked the brief, grouped the release gates, and removed repeated steps.",
+          title: "Planning the checklist"
+        }
+      ]
     },
     {
+      attachments: [
+        {
+          description: "Interactive HTML report",
+          kind: "website",
+          name: "release-dashboard.html",
+          previewHtml:
+            '<!doctype html><html><head><meta charset="utf-8"><style>:root{color-scheme:dark}body{margin:0;padding:28px;background:Canvas;color:CanvasText;font-family:system-ui}h1{margin:0 0 8px;font-size:28px}p{color:GrayText}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px}.card{border:1px solid GrayText;border-radius:14px;padding:18px;background:color-mix(in srgb,CanvasText 5%,Canvas)}.value{font-size:26px;font-weight:750;color:AccentColor}</style></head><body><h1>Release dashboard</h1><p>Static, self-contained artifact preview</p><div class="cards"><div class="card"><div class="value">86</div>messages</div><div class="card"><div class="value">8</div>formats</div><div class="card"><div class="value">0</div>remote calls</div></div></body></html>',
+          url: "https://example.com/jelluvi/release-dashboard"
+        }
+      ],
       authorLabel: "User",
       codeBlocks: [],
       id: "qa-user-2",
@@ -52,7 +95,7 @@ const conversation: ConversationExport = {
       index: 2,
       metadata: {},
       role: "user",
-      text: "Include the final visual and privacy checks."
+      text: "Include the final visual and privacy checks, and keep the attached dashboard visible in Preview."
     },
     {
       authorLabel: "ChatGPT",
@@ -61,10 +104,10 @@ const conversation: ConversationExport = {
       images: [],
       index: 3,
       markdown:
-        "The checklist is ready for review.\n\n```sh\npnpm check\n```\n\nNo transcript upload is required.",
+        "## Final checks\n\n1. Compare the dark and light Preview states.\n2. Confirm user prompts, files, sources, and code remain readable.\n3. Run the release checks:\n\n```sh\npnpm check\n```\n\nNo transcript upload is required.",
       metadata: {},
       role: "assistant",
-      text: "The checklist is ready for review. pnpm check. No transcript upload is required."
+      text: "Final checks. Compare dark and light Preview states, confirm rich content remains readable, then run pnpm check."
     }
   ],
   platform: "chatgpt",
@@ -83,11 +126,74 @@ const scan = {
 };
 const visualParams = new URLSearchParams(globalThis.location.search);
 const qaStatus = visualParams.get("status") ?? "ready";
+const qaTheme = visualParams.get("theme");
+
+if (qaTheme === "light" || qaTheme === "dark") {
+  globalThis.localStorage?.setItem("jelluvi/theme", qaTheme);
+}
+
+const batchTabs = [
+  {
+    id: 101,
+    windowId: 1,
+    platform: "chatgpt",
+    platformLabel: "ChatGPT",
+    title: "Launch checklist",
+    url: "https://chatgpt.com/c/jelluvi-visual-qa"
+  },
+  {
+    id: 102,
+    windowId: 1,
+    platform: "claude",
+    platformLabel: "Claude",
+    title: "Provider comparison",
+    url: "https://claude.ai/chat/jelluvi-visual-qa"
+  },
+  {
+    id: 103,
+    windowId: 1,
+    platform: "gemini",
+    platformLabel: "Gemini",
+    title: "Export notes",
+    url: "https://gemini.google.com/app/jelluvi-visual-qa"
+  }
+] as const satisfies readonly BatchCandidateTab[];
+
+// Synthetic metadata for the visual QA entry only. No account/session/history request is made.
+const historyTabs: readonly BatchCandidateTab[] = [
+  "Sample: Release planning",
+  "Sample: Research notes",
+  "Sample: Writing review"
+].map((title, index) => ({
+  id: -(index + 1),
+  windowId: 1,
+  platform: "chatgpt",
+  platformLabel: "ChatGPT",
+  title,
+  url: `https://chatgpt.com/c/synthetic-history-${index + 1}`,
+  history: {
+    conversationId: `synthetic-history-${index + 1}`,
+    sourceTabId: 101,
+    sourceUrl: conversation.sourceUrl
+  }
+}));
 
 Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
   runtime: {
     getURL: (path: string) => (path === "brand/jelluvi.png" ? "/icons/icon-128.png" : `/${path}`),
-    sendMessage: async (message: { readonly type?: string }) => {
+    sendMessage: async (message: { readonly type?: string; readonly offset?: number }) => {
+      if (message.type === CHATGPT_HISTORY_LIST_MESSAGE) {
+        return {
+          ok: true,
+          value: {
+            tabs: message.offset === undefined ? historyTabs.slice(0, 2) : historyTabs.slice(2),
+            sourceTabId: 101,
+            sourceUrl: conversation.sourceUrl,
+            total: historyTabs.length,
+            ...(message.offset === undefined ? { nextOffset: 2 } : {})
+          }
+        };
+      }
       if (message.type === "jelluvi/get-active-tab-info") {
         if (qaStatus === "failed") {
           return {
@@ -125,8 +231,48 @@ Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
         };
       }
 
+      if (message.type === "jelluvi/list-open-chat-tabs") {
+        return { ok: true, value: { tabs: batchTabs } };
+      }
+
+      if (message.type === "jelluvi/get-diagnostics") {
+        return {
+          ok: true,
+          value: {
+            dataPolicy: {
+              conversationTextIncluded: false,
+              sourceUrlIncluded: false,
+              titleIncluded: false
+            },
+            extensionVersion: "0.2.2",
+            generatedAt: "2026-07-18T14:30:00.000Z",
+            provider: { id: "chatgpt", label: "ChatGPT" },
+            recentErrors: [],
+            scan: {
+              completeness: {
+                duplicateCount: 0,
+                messageCount: 4,
+                platformWarningCount: 0,
+                reachedBottom: true,
+                reachedTop: true,
+                scrollSteps: 3,
+                status: "complete",
+                warningCount: 0
+              },
+              messageCount: 4,
+              status: "ready"
+            },
+            schemaVersion: 1
+          }
+        };
+      }
+
       return { ok: true, value: {} };
     }
+  },
+  permissions: {
+    contains: (_permissions: unknown, callback: (granted: boolean) => void) => callback(true),
+    request: (_permissions: unknown, callback: (granted: boolean) => void) => callback(true)
   },
   storage: {
     local: {
@@ -139,9 +285,33 @@ Object.assign(globalThis.chrome as unknown as Record<string, unknown>, {
 const root = document.getElementById("app");
 const surface = visualParams.get("surface") ?? "popup";
 
-if (root !== null) {
-  render(
-    surface === "settings" ? <OptionsApp /> : surface === "preview" ? <PreviewApp /> : <PopupApp />,
-    root
+prepareVisualState()
+  .catch(() => undefined)
+  .finally(() => {
+    if (root !== null) {
+      render(
+        surface === "settings" ? (
+          <OptionsApp />
+        ) : surface === "preview" ? (
+          <PreviewApp />
+        ) : (
+          <PopupApp />
+        ),
+        root
+      );
+    }
+  });
+
+async function prepareVisualState(): Promise<void> {
+  if (visualParams.get("seedLibrary") !== "1") {
+    return;
+  }
+
+  await saveLocalLibraryRecord(
+    createLocalLibraryRecord(conversation, {
+      projectLabel: "Release",
+      savedAt: "2026-07-18T14:31:00.000Z",
+      tags: ["qa", "launch"]
+    })
   );
 }

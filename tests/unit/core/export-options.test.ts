@@ -5,6 +5,7 @@ import {
   DEFAULT_EXPORT_OPTIONS,
   ExportPipelineError,
   normalizeExportOptions,
+  prepareConversationForExport,
   renderConversationFiles,
   type ExportOptions
 } from "../../../src/core/export-options";
@@ -245,6 +246,35 @@ describe("renderConversationFiles", () => {
 
     expect(markdown).toContain("Visible thinking / reasoning");
     expect(markdown).toContain("Visible reasoning text.");
+  });
+
+  test("preserves structured attachments and redacts their portable fields", () => {
+    const [message] = prepareConversationForExport(
+      makeConversation([
+        makeMessage({
+          attachments: [
+            {
+              description: "Contact admin@example.com",
+              kind: "website",
+              name: "admin@example.com.html",
+              previewHtml: "<p>Contact admin@example.com</p>",
+              url: "https://example.com/admin@example.com"
+            }
+          ]
+        })
+      ]),
+      {
+        redact: true,
+        redaction: { customPatterns: [], preset: "strict" }
+      }
+    ).messages;
+
+    expect(message.attachments?.[0]).toMatchObject({
+      description: "Contact [REDACTED_EMAIL]",
+      kind: "website",
+      name: "[REDACTED_EMAIL]",
+      previewHtml: "<p>Contact [REDACTED_EMAIL]</p>"
+    });
   });
 
   test("can exclude advanced source and canvas sections from exports", () => {

@@ -1,23 +1,35 @@
 import type {
   ConversationExport,
+  ExportedAttachmentRef,
   ExportedCodeBlock,
   ExportedImageRef,
   ExportedMessage
 } from "../core/schema";
 import {
   renderImageReferenceText,
-  sanitizeConversationImagesForOutput
+  sanitizeConversationImagesForVisualOutput
 } from "../core/image-safety";
 import { renderFilenameTemplate } from "../utils/filename-template";
 import { formatCanvasPlain, formatSourcePlain, formatThinkingPlain } from "./advanced-content";
 import { renderHtml } from "./html";
 import { normalizePdfText, PdfFontRegistry, type PdfEmbeddedFont, type PdfFont } from "./pdf-font";
 import { DEFAULT_PDF_SETTINGS, normalizePdfSettings, type PdfSettings } from "./pdf-settings";
+import {
+  type AttachmentVisualKind,
+  formatAttachmentBadge,
+  formatAttachmentLabel,
+  formatDisplayDateTime,
+  formatFileSize,
+  getAttachmentVisualKind,
+  getMessageDisplayTimestamp,
+  shouldShowCaptureStatus
+} from "./presentation";
 import type { RenderedFile, RendererOptions } from "./types";
 
 interface PdfTheme {
   readonly background: PdfColor;
   readonly border: PdfColor;
+  readonly cardBackground: PdfColor;
   readonly codeBackground?: PdfColor;
   readonly heading: PdfColor;
   readonly muted: PdfColor;
@@ -36,23 +48,83 @@ interface PdfPageSize {
 }
 
 interface PdfPage {
+  readonly annotations: PdfLinkAnnotation[];
   readonly commands: string[];
+}
+
+interface PdfLinkAnnotation {
+  readonly height: number;
+  readonly url: string;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+interface PdfEmbeddedImage {
+  readonly bytes: Uint8Array;
+  readonly height: number;
+  readonly name: string;
+  readonly width: number;
 }
 
 interface PdfDocument {
   readonly fonts: PdfFontRegistry;
+  readonly images: readonly PdfEmbeddedImage[];
+  readonly language: string;
   readonly pages: readonly PdfPage[];
   readonly size: PdfPageSize;
+  readonly title: string;
 }
 
 interface PdfBlock {
-  readonly kind: "paragraph" | "heading" | "list" | "code" | "table" | "page-break";
-  readonly items?: readonly string[];
+  readonly kind:
+    | "paragraph"
+    | "heading"
+    | "list"
+    | "code"
+    | "table"
+    | "blockquote"
+    | "display-math"
+    | "thematic-break"
+    | "page-break";
   readonly language?: string;
   readonly level?: number;
+  readonly list?: PdfListBlock;
   readonly rows?: readonly (readonly string[])[];
   readonly text?: string;
 }
+
+interface PdfListBlock {
+  readonly items: readonly PdfListItem[];
+  readonly ordered: boolean;
+  readonly start?: number;
+}
+
+interface PdfListItem {
+  readonly parts: readonly PdfListItemPart[];
+}
+
+interface PdfInlineRun {
+  readonly font: PdfFont;
+  readonly text: string;
+  readonly url?: string;
+}
+
+interface PdfRenderedLineInk {
+  readonly bottom: number;
+  readonly pageIndex: number;
+  readonly top: number;
+}
+
+type PdfListItemPart =
+  | {
+      readonly kind: "text";
+      readonly text: string;
+    }
+  | {
+      readonly kind: "list";
+      readonly list: PdfListBlock;
+    };
 
 type PdfByteGenerator = (
   conversation: ConversationExport,
@@ -69,6 +141,7 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
   dark: {
     background: { b: 0.153, g: 0.094, r: 0.067 },
     border: { b: 0.42, g: 0.322, r: 0.251 },
+    cardBackground: { b: 0.2, g: 0.133, r: 0.09 },
     codeBackground: { b: 0.22, g: 0.157, r: 0.118 },
     heading: { b: 1, g: 1, r: 1 },
     muted: { b: 0.839, g: 0.78, r: 0.702 },
@@ -77,6 +150,7 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
   light: {
     background: { b: 1, g: 1, r: 1 },
     border: { b: 0.894, g: 0.871, r: 0.847 },
+    cardBackground: { b: 0.988, g: 0.976, r: 0.957 },
     codeBackground: { b: 0.969, g: 0.965, r: 0.949 },
     heading: { b: 0.196, g: 0.122, r: 0.075 },
     muted: { b: 0.431, g: 0.384, r: 0.341 },
@@ -85,11 +159,31 @@ const THEMES: Readonly<Record<PdfSettings["template"], PdfTheme>> = {
   simple: {
     background: { b: 1, g: 1, r: 1 },
     border: { b: 0.78, g: 0.78, r: 0.78 },
+    cardBackground: { b: 0.98, g: 0.98, r: 0.98 },
     heading: { b: 0, g: 0, r: 0 },
     muted: { b: 0.25, g: 0.25, r: 0.25 },
     text: { b: 0, g: 0, r: 0 }
   }
 };
+
+const PDF_WHITE: PdfColor = { b: 1, g: 1, r: 1 };
+
+function attachmentAccentColor(kind: AttachmentVisualKind): PdfColor {
+  switch (kind) {
+    case "archive":
+      return { b: 0.95, g: 0.32, r: 0.55 };
+    case "code":
+      return { b: 0.93, g: 0.65, r: 0.06 };
+    case "document":
+      return { b: 0.96, g: 0.51, r: 0.23 };
+    case "image":
+      return { b: 0.7, g: 0.28, r: 0.93 };
+    case "website":
+      return { b: 0.6, g: 0.72, r: 0.06 };
+    case "other":
+      return { b: 0.66, g: 0.58, r: 0.5 };
+  }
+}
 
 export function renderPdf(
   conversation: ConversationExport,
@@ -104,7 +198,7 @@ export function renderPdfFromNormalizedConversation(
   createPdfBytes: PdfByteGenerator = renderLocalPdfBytes
 ): RenderedFile<string | Uint8Array> {
   const settings = normalizePdfSettings(options.pdfSettings ?? DEFAULT_PDF_SETTINGS);
-  const safeConversation = sanitizeConversationImagesForOutput(conversation);
+  const safeConversation = sanitizeConversationImagesForVisualOutput(conversation);
 
   try {
     return {
@@ -131,8 +225,9 @@ function renderLocalPdfBytes(
   options: RendererOptions
 ): Uint8Array {
   const layout = new PdfLayout(resolvePageSize(settings), settings);
+  const documentTitle = conversation.title ?? "Untitled conversation";
 
-  layout.title(conversation.title ?? "Untitled conversation");
+  layout.title(documentTitle);
 
   if (options.includeMetadata !== false) {
     layout.metadata([
@@ -140,9 +235,11 @@ function renderLocalPdfBytes(
       ...(conversation.sourceUrl.trim().length > 0
         ? [["Source", conversation.sourceUrl] as const]
         : []),
-      ["Exported", conversation.exportedAt],
+      ["Exported", formatDisplayDateTime(conversation.exportedAt)],
       ["Messages", String(conversation.messageCount)],
-      ["Completeness", conversation.completeness.status]
+      ...(shouldShowCaptureStatus(conversation)
+        ? [["Capture status", conversation.completeness.status.replace(/_/gu, " ")] as const]
+        : [])
     ]);
   }
 
@@ -168,7 +265,12 @@ function renderLocalPdfBytes(
 
   conversation.messages.forEach((message) => renderMessage(layout, message));
 
-  return writePdf(layout.toDocument());
+  return writePdf(
+    layout.toDocument(
+      documentTitle,
+      inferPdfLanguage(conversation.messages.map((message) => message.text).join("\n"))
+    )
+  );
 }
 
 function renderPdfReadyHtmlFallback(
@@ -178,13 +280,10 @@ function renderPdfReadyHtmlFallback(
 ): RenderedFile<string> {
   const fallback = renderHtml(conversation, options);
   const reason = error instanceof Error ? error.message : "Unknown PDF generation failure.";
-  const warning = `<p><strong>PDF generation failed locally.</strong> Falling back to PDF-ready HTML. No conversation content was uploaded or sent to a server. Reason: ${escapeHtml(reason)}</p>`;
+  const warning = `<section class="capture-status" aria-label="PDF fallback"><strong>PDF generation failed locally.</strong> Falling back to PDF-ready HTML. No conversation content was uploaded or sent to a server. Reason: ${escapeHtml(reason)}</section>`;
 
   return {
-    bytes: fallback.bytes.replace(
-      "<p>This export was generated locally by extension.</p>",
-      `<p>This export was generated locally by extension.</p>\n        ${warning}`
-    ),
+    bytes: fallback.bytes.replace("</header>", `${warning}\n    </header>`),
     encoding: "utf-8",
     filename: ensureHtmlExtension(
       renderFilenameTemplate(options.filenameTemplate ?? "", {
@@ -203,34 +302,56 @@ function renderPdfReadyHtmlFallback(
 function renderMessage(layout: PdfLayout, message: ExportedMessage): void {
   layout.keepWithNext();
   layout.heading(`${message.index + 1}. ${normalizeSingleLine(message.authorLabel)}`, 2);
-  layout.note(
-    [
-      `Role: ${message.role}`,
-      ...(message.model !== undefined ? [`Model: ${message.model}`] : []),
-      ...(message.createdAt !== undefined ? [`Created: ${message.createdAt}`] : [])
-    ].join(" - ")
-  );
+  const displayTimestamp = getMessageDisplayTimestamp(message);
+  const messageDetails = [
+    ...(message.model !== undefined ? [`Model: ${message.model}`] : []),
+    ...(displayTimestamp !== undefined ? [displayTimestamp] : [])
+  ];
+
+  if (messageDetails.length > 0) {
+    layout.note(messageDetails.join(" - "));
+  }
+
+  if ((message.attachments?.length ?? 0) > 0) {
+    layout.attachmentCards(message.attachments!);
+  }
 
   for (const block of parseMessageBlocks(message)) {
     renderBlock(layout, block);
   }
 
   if (message.images.length > 0) {
+    layout.keepWithNext();
     layout.heading("Images", 3);
-    layout.list(message.images.map(renderImageReference), false);
+    message.images.forEach((image) => {
+      if (!layout.image(image)) {
+        layout.list([renderImageReference(image)], false);
+      }
+    });
   }
 
-  if ((message.sources?.length ?? 0) > 0) {
+  const sources = (message.sources ?? []).filter(
+    (source) => !markdownContainsSourceUrl(message.markdown ?? "", source.url)
+  );
+  if (sources.length > 0) {
+    layout.keepWithNext();
     layout.heading("Sources", 3);
-    layout.list(message.sources!.map(formatSourcePlain), false);
+    layout.list(sources.map(formatSourcePlain), false);
+  }
+
+  const sourceCaptureWarning = message.metadata.sourceCaptureWarning;
+  if (typeof sourceCaptureWarning === "string" && sourceCaptureWarning.trim().length > 0) {
+    layout.note(sourceCaptureWarning);
   }
 
   if ((message.canvas?.length ?? 0) > 0) {
+    layout.keepWithNext();
     layout.heading("Canvas", 3);
     layout.list(message.canvas!.map(formatCanvasPlain), false);
   }
 
   if ((message.thinkingBlocks?.length ?? 0) > 0) {
+    layout.keepWithNext();
     layout.heading("Visible thinking / reasoning", 3);
     layout.list(message.thinkingBlocks!.map(formatThinkingPlain), false);
   }
@@ -243,11 +364,23 @@ function renderBlock(layout: PdfLayout, block: PdfBlock): void {
     case "code":
       layout.code(block.text ?? "", block.language);
       return;
+    case "blockquote":
+      layout.blockquote(block.text ?? "");
+      return;
+    case "display-math":
+      layout.displayMath(block.text ?? "");
+      return;
     case "heading":
       layout.heading(block.text ?? "", block.level ?? 3);
       return;
-    case "list":
-      layout.list(block.items ?? [], false);
+    case "list": {
+      if (block.list !== undefined) {
+        layout.nestedList(block.list);
+      }
+      return;
+    }
+    case "thematic-break":
+      layout.thematicBreak();
       return;
     case "page-break":
       layout.pageBreak();
@@ -306,9 +439,22 @@ function parseMarkdownBlocks(
       continue;
     }
 
-    if (line.trim() === "---" || line.trim() === "\\pagebreak") {
+    if (line.trim() === "---") {
+      blocks.push({ kind: "thematic-break" });
+      index += 1;
+      continue;
+    }
+
+    if (line.trim() === "\\pagebreak") {
       blocks.push({ kind: "page-break" });
       index += 1;
+      continue;
+    }
+
+    if (line.trim().startsWith("$$")) {
+      const parsed = parsePdfDisplayMath(lines, index);
+      blocks.push({ kind: "display-math", text: parsed.tex });
+      index = parsed.nextIndex;
       continue;
     }
 
@@ -339,14 +485,22 @@ function parseMarkdownBlocks(
     }
 
     if (isListItem(line)) {
-      const items: string[] = [];
+      const firstMarker = parsePdfListMarker(line);
+      const ordered = firstMarker?.ordered ?? false;
+      const parsed = parsePdfList(lines, index, ordered);
 
-      while (index < lines.length && isListItem(lines[index])) {
-        items.push(stripInlineMarkdown(lines[index].replace(/^\s*(?:[-*]|\d+[.)])\s+/u, "")));
+      blocks.push({ kind: "list", list: parsed.list });
+      index = parsed.nextIndex;
+      continue;
+    }
+
+    if (/^\s*>\s?/u.test(line)) {
+      const quoteLines: string[] = [];
+      while (index < lines.length && /^\s*>\s?/u.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^\s*>\s?/u, ""));
         index += 1;
       }
-
-      blocks.push({ items, kind: "list" });
+      blocks.push({ kind: "blockquote", text: quoteLines.join("\n") });
       continue;
     }
 
@@ -358,14 +512,16 @@ function parseMarkdownBlocks(
       !lines[index].startsWith("```") &&
       !isTableStart(lines, index) &&
       !isListItem(lines[index]) &&
+      !/^\s*>\s?/u.test(lines[index]) &&
+      !lines[index].trim().startsWith("$$") &&
       lines[index].trim() !== "---" &&
       lines[index].trim() !== "\\pagebreak"
     ) {
-      paragraph.push(stripInlineMarkdown(lines[index]));
+      paragraph.push(lines[index]);
       index += 1;
     }
 
-    blocks.push({ kind: "paragraph", text: paragraph.join(" ") });
+    blocks.push({ kind: "paragraph", text: paragraph.join("\n") });
   }
 
   if (codeBlocks.length > 0 && !/^```/mu.test(markdown)) {
@@ -383,9 +539,83 @@ function parseMarkdownBlocks(
   return blocks;
 }
 
+function parsePdfList(
+  lines: readonly string[],
+  startIndex: number,
+  ordered: boolean,
+  baseIndent = parsePdfListMarker(lines[startIndex])?.indent ?? 0
+): { readonly list: PdfListBlock; readonly nextIndex: number } {
+  const items: PdfListItem[] = [];
+  let index = startIndex;
+  let start = 1;
+
+  while (index < lines.length) {
+    const marker = parsePdfListMarker(lines[index]);
+
+    if (marker === undefined || marker.ordered !== ordered || marker.indent !== baseIndent) {
+      break;
+    }
+
+    if (items.length === 0 && marker.start !== undefined) {
+      start = marker.start;
+    }
+
+    let paragraphLines = [marker.body];
+    const parts: PdfListItemPart[] = [];
+    index += 1;
+
+    while (index < lines.length && lines[index].trim().length > 0) {
+      const nestedMarker = parsePdfListMarker(lines[index]);
+
+      if (nestedMarker !== undefined) {
+        if (nestedMarker.indent <= baseIndent) {
+          break;
+        }
+
+        flushPdfListItemText(parts, paragraphLines);
+        paragraphLines = [];
+        const nested = parsePdfList(lines, index, nestedMarker.ordered, nestedMarker.indent);
+        parts.push({ kind: "list", list: nested.list });
+        index = nested.nextIndex;
+        continue;
+      }
+
+      // A top-level Markdown list commonly keeps an unindented continuation line
+      // directly below its marker (`1. **Title**\nExplanation`). It remains part of
+      // that item until a blank line or the next peer marker. Nested lists still use
+      // indentation to return control to their parent item.
+      if (baseIndent > 0 && countPdfIndent(lines[index]) <= baseIndent) {
+        break;
+      }
+
+      paragraphLines.push(lines[index].trim());
+      index += 1;
+    }
+
+    flushPdfListItemText(parts, paragraphLines);
+    items.push({ parts });
+  }
+
+  return {
+    list: {
+      items,
+      ordered,
+      ...(ordered && start !== 1 ? { start } : {})
+    },
+    nextIndex: index
+  };
+}
+
+function flushPdfListItemText(parts: PdfListItemPart[], lines: readonly string[]): void {
+  if (lines.length > 0) {
+    parts.push({ kind: "text", text: lines.join("\n") });
+  }
+}
+
 class PdfLayout {
   private readonly contentWidth: number;
   private readonly fonts = new PdfFontRegistry();
+  private readonly images: PdfEmbeddedImage[] = [];
   private readonly lineHeight: number;
   private readonly margin: number;
   private readonly pages: PdfPage[] = [];
@@ -427,9 +657,8 @@ class PdfLayout {
 
   metadata(rows: readonly (readonly [string, string])[]): void {
     rows.forEach(([label, value]) => {
-      this.drawWrappedText(`${label}: ${value}`, {
+      this.drawRichWrappedText(`**${label}:** ${value}`, {
         color: this.theme.muted,
-        font: "regular",
         size: this.settings.fontSizePt * 0.92
       });
     });
@@ -442,9 +671,8 @@ class PdfLayout {
       .map((paragraph) => paragraph.trim())
       .filter((paragraph) => paragraph.length > 0)
       .forEach((paragraph) => {
-        this.drawWrappedText(paragraph, {
+        this.drawRichWrappedText(paragraph, {
           color: this.theme.text,
-          font: "regular",
           size: this.settings.fontSizePt
         });
         this.space(4);
@@ -460,54 +688,290 @@ class PdfLayout {
     this.space(4);
   }
 
-  list(items: readonly string[], ordered: boolean): void {
+  blockquote(markdown: string): void {
+    const size = this.settings.fontSizePt;
+    this.ensureSpace(size * 1.35);
+    const renderedLines = this.drawRichWrappedText(markdown, {
+      color: this.theme.muted,
+      indent: 16,
+      size
+    });
+    const lineX = this.margin + 4;
+    const verticalPadding = 4;
+    const pageInk = new Map<number, { bottom: number; top: number }>();
+
+    renderedLines.forEach((line) => {
+      const ink = pageInk.get(line.pageIndex);
+      pageInk.set(line.pageIndex, {
+        bottom: Math.min(ink?.bottom ?? Number.POSITIVE_INFINITY, line.bottom),
+        top: Math.max(ink?.top ?? Number.NEGATIVE_INFINITY, line.top)
+      });
+    });
+    pageInk.forEach((ink, pageIndex) => {
+      this.strokeLineOnPage(
+        pageIndex,
+        lineX,
+        ink.bottom - verticalPadding,
+        lineX,
+        ink.top + verticalPadding,
+        this.theme.heading
+      );
+    });
+    this.space(5);
+  }
+
+  displayMath(tex: string): void {
+    const normalized = normalizeTexForPdf(tex);
+    const size = this.settings.fontSizePt * 1.08;
+    const lines = this.wrapExact(normalized, this.contentWidth - 28, size, "regular");
+    this.space(5);
+    lines.forEach((line) => {
+      this.ensureSpace(size * 1.5);
+      const width = this.measureText(line, "regular", size);
+      this.drawText(
+        line,
+        this.margin + Math.max(0, (this.contentWidth - width) / 2),
+        this.y,
+        "regular",
+        size,
+        this.theme.text
+      );
+      this.y -= size * 1.5;
+    });
+    this.space(5);
+  }
+
+  image(image: ExportedImageRef): boolean {
+    const decoded = decodeJpegDataUri(image.dataUri);
+    if (decoded === undefined) {
+      return false;
+    }
+
+    const sourceWidth = image.width ?? decoded.width;
+    const sourceHeight = image.height ?? decoded.height;
+    const maxHeight = Math.min(340, this.size.height - this.margin * 2);
+    const scale = Math.min(1, this.contentWidth / sourceWidth, maxHeight / sourceHeight);
+    const width = Math.max(1, sourceWidth * scale);
+    const height = Math.max(1, sourceHeight * scale);
+    this.ensureSpace(height + 12);
+    const name = `Im${this.images.length + 1}`;
+    this.images.push({ bytes: decoded.bytes, height: decoded.height, name, width: decoded.width });
+    const x = this.margin + Math.max(0, (this.contentWidth - width) / 2);
+    const y = this.y - height;
+    this.currentPage.commands.push(
+      `q ${formatNumber(width)} 0 0 ${formatNumber(height)} ${formatNumber(x)} ${formatNumber(
+        y
+      )} cm /${name} Do Q`
+    );
+    this.y = y - 10;
+    if (image.alt?.trim()) {
+      this.note(image.alt.trim());
+    }
+    return true;
+  }
+
+  list(items: readonly string[], ordered: boolean, start = 1): void {
     items.forEach((item, index) => {
-      this.drawWrappedText(`${ordered ? `${index + 1}.` : "-"} ${item}`, {
+      this.drawListItem(ordered ? `${start + index}.` : "•", item, 12, {
         color: this.theme.text,
-        font: "regular",
-        indent: 12,
         size: this.settings.fontSizePt
       });
     });
     this.space(4);
   }
 
+  attachmentCards(attachments: readonly ExportedAttachmentRef[]): void {
+    const titleSize = Math.max(9, this.settings.fontSizePt * 0.98);
+    const detailSize = Math.max(7.5, this.settings.fontSizePt * 0.82);
+    const titleLineHeight = titleSize * 1.28;
+    const detailLineHeight = detailSize * 1.3;
+    const cardGap = 8;
+    const cardPadding = 7;
+    const cardWidth = Math.min(this.contentWidth, 420);
+    const badgeWidth = 38;
+    const copyX = this.margin + cardPadding + badgeWidth + 10;
+    const copyWidth = cardWidth - cardPadding * 2 - badgeWidth - 10;
+
+    attachments.forEach((attachment) => {
+      const badge = formatAttachmentBadge(attachment);
+      const accentColor = attachmentAccentColor(getAttachmentVisualKind(attachment));
+      const typeLabel = formatAttachmentLabel(attachment);
+      const details = [typeLabel, formatFileSize(attachment.sizeBytes)]
+        .filter((value): value is string => value !== undefined && value.trim().length > 0)
+        .join(" · ");
+      const supportingText = [attachment.url, attachment.warning]
+        .filter((value): value is string => value !== undefined && value.trim().length > 0)
+        .join(" · ");
+      const titleLines = this.wrapExact(attachment.name, copyWidth, titleSize, "bold");
+      const detailLines =
+        details.length === 0 ? [] : this.wrapExact(details, copyWidth, detailSize, "regular");
+      const supportingLines =
+        supportingText.length === 0
+          ? []
+          : this.wrapExact(supportingText, copyWidth, detailSize, "regular");
+      const copyHeight =
+        titleLines.length * titleLineHeight +
+        detailLines.length * detailLineHeight +
+        supportingLines.length * detailLineHeight +
+        (detailLines.length > 0 ? 2 : 0) +
+        (supportingLines.length > 0 ? 2 : 0);
+      const cardHeight = Math.max(48, copyHeight + cardPadding * 2);
+
+      this.ensureSpace(cardHeight + cardGap);
+
+      const cardTop = this.y;
+      const cardBottom = cardTop - cardHeight;
+      const badgeHeight = 36;
+      const badgeBottom = cardTop - (cardHeight + badgeHeight) / 2;
+
+      this.fillAndStrokeRoundedRect(
+        this.margin,
+        cardBottom,
+        cardWidth,
+        cardHeight,
+        9,
+        this.theme.cardBackground,
+        this.theme.border
+      );
+      this.fillRoundedRect(
+        this.margin + cardPadding,
+        badgeBottom,
+        badgeWidth,
+        badgeHeight,
+        8,
+        accentColor
+      );
+
+      const badgeSize = Math.max(7, Math.min(9, detailSize));
+      const measuredBadgeWidth = this.measureText(badge, "bold", badgeSize);
+      this.drawText(
+        badge,
+        this.margin + cardPadding + Math.max(4, (badgeWidth - measuredBadgeWidth) / 2),
+        badgeBottom + (badgeHeight - badgeSize) / 2 + 1,
+        "bold",
+        badgeSize,
+        PDF_WHITE
+      );
+
+      let baseline = cardTop - cardPadding - titleSize;
+
+      titleLines.forEach((line) => {
+        this.drawText(line, copyX, baseline, "bold", titleSize, this.theme.text);
+        baseline -= titleLineHeight;
+      });
+
+      if (detailLines.length > 0) {
+        baseline -= 2;
+        detailLines.forEach((line) => {
+          this.drawText(line, copyX, baseline, "regular", detailSize, this.theme.muted);
+          baseline -= detailLineHeight;
+        });
+      }
+
+      if (supportingLines.length > 0) {
+        baseline -= 2;
+        supportingLines.forEach((line) => {
+          this.drawText(line, copyX, baseline, "regular", detailSize, this.theme.muted);
+          baseline -= detailLineHeight;
+        });
+      }
+
+      this.y = cardBottom - cardGap;
+    });
+
+    this.space(Math.max(10, this.settings.fontSizePt));
+  }
+
+  nestedList(list: PdfListBlock): void {
+    this.renderNestedList(list, 0);
+    this.space(4);
+  }
+
+  thematicBreak(): void {
+    const gapBeforeLine = 8;
+    const gapAfterLine = 15;
+    this.ensureSpace(gapBeforeLine + gapAfterLine);
+    this.y -= gapBeforeLine;
+    this.strokeLine(
+      this.margin,
+      this.y,
+      this.margin + this.contentWidth,
+      this.y,
+      this.theme.border
+    );
+    this.y -= gapAfterLine;
+  }
+
   code(code: string, language: string | undefined): void {
-    const label =
-      language !== undefined && language.trim().length > 0 ? `Code (${language})` : "Code";
+    void language;
     const lines = code.replace(/\r\n?/g, "\n").replace(/\n+$/u, "").split("\n");
     const size = Math.max(8, this.settings.fontSizePt * 0.88);
     const lineHeight = size * 1.35;
     const wrappedLines = lines.flatMap((line) =>
-      wrapText(line.length > 0 ? line : " ", this.contentWidth - 16, size, "mono")
+      this.wrapExact(line.length > 0 ? line : " ", this.contentWidth - 16, size, "mono")
     );
-    const codeAreaHeight = lineHeight * wrappedLines.length;
-    const blockHeight = lineHeight + codeAreaHeight + size + 18;
+    const paddingY = Math.max(7, size * 0.75);
+    const outerGap = 6;
+    const minimumSegmentHeight = paddingY * 2 + lineHeight;
+    const metrics = this.fonts.metrics("mono");
+    const inkAscent = (metrics.capHeight * size) / 1000;
+    const inkDescent = (-metrics.descent * size) / 1000;
+    const lineLeading = Math.max(0, lineHeight - inkAscent - inkDescent) / 2;
 
-    this.ensureSpace(blockHeight);
-    this.drawWrappedText(label, {
-      color: this.theme.muted,
-      font: "bold",
-      size: this.settings.fontSizePt * 0.9
-    });
+    this.ensureSpace(outerGap + minimumSegmentHeight);
+    this.space(outerGap);
 
-    if (this.theme.codeBackground !== undefined) {
-      const codeBottom = this.y - codeAreaHeight - 3;
-      const codeTop = this.y + size + 5;
+    let lineIndex = 0;
+    while (lineIndex < wrappedLines.length) {
+      if (this.y - minimumSegmentHeight < this.margin) {
+        this.addPage();
+      }
 
-      this.fillRect(
-        this.margin,
-        codeBottom,
-        this.contentWidth,
-        codeTop - codeBottom,
-        this.theme.codeBackground
+      const segmentTop = this.y;
+      const availableHeight = segmentTop - this.margin;
+      const linesOnPage = Math.max(
+        1,
+        Math.min(
+          wrappedLines.length - lineIndex,
+          Math.floor((availableHeight - paddingY * 2) / lineHeight)
+        )
       );
+      const segmentHeight = paddingY * 2 + linesOnPage * lineHeight;
+      const segmentBottom = segmentTop - segmentHeight;
+
+      if (this.theme.codeBackground !== undefined) {
+        this.fillRect(
+          this.margin,
+          segmentBottom,
+          this.contentWidth,
+          segmentHeight,
+          this.theme.codeBackground
+        );
+      }
+
+      let baseline = segmentTop - paddingY - lineLeading - inkAscent;
+      for (let offset = 0; offset < linesOnPage; offset += 1) {
+        this.drawText(
+          wrappedLines[lineIndex + offset],
+          this.margin + 8,
+          baseline,
+          "mono",
+          size,
+          this.theme.text
+        );
+        baseline -= lineHeight;
+      }
+
+      lineIndex += linesOnPage;
+      this.y = segmentBottom;
+
+      if (lineIndex < wrappedLines.length) {
+        this.addPage();
+      }
     }
 
-    wrappedLines.forEach((line) => {
-      this.line(line, this.margin + 8, "mono", size, this.theme.text);
-    });
-    this.space(size + 6);
+    // The next block starts at a text baseline, not at its visible top edge.
+    this.space(this.settings.fontSizePt * 1.35 + 6);
   }
 
   table(rows: readonly (readonly string[])[]): void {
@@ -516,38 +980,115 @@ class PdfLayout {
     }
 
     const columnCount = Math.max(...rows.map((row) => row.length), 1);
-    const columnWidth = this.contentWidth / columnCount;
     const size = Math.max(8, this.settings.fontSizePt * 0.9);
     const lineHeight = size * 1.35;
-
-    rows.forEach((row) => {
+    const columnWidths = allocateTableColumnWidths(rows, this.contentWidth, size, (value) =>
+      this.measureText(value, "regular", size)
+    );
+    const layoutRow = (row: readonly string[], header: boolean) => {
       const cellLines = Array.from({ length: columnCount }, (_value, columnIndex) =>
-        wrapText(stripInlineMarkdown(row[columnIndex] ?? ""), columnWidth - 8, size, "regular")
+        this.wrapExact(
+          stripInlineMarkdown(row[columnIndex] ?? ""),
+          columnWidths[columnIndex] - 10,
+          size,
+          header ? "bold" : "regular"
+        )
       );
       const rowHeight = Math.max(...cellLines.map((lines) => lines.length), 1) * lineHeight + 8;
 
-      this.ensureSpace(rowHeight + 2);
-      const rowTop = this.y;
+      return { cellLines, rowHeight };
+    };
 
+    const headerLayout = layoutRow(rows[0], true);
+    const pageHeight = this.size.height - this.margin * 2;
+    const minimumRowHeight = lineHeight + 8;
+    const canRepeatHeader = headerLayout.rowHeight + minimumRowHeight <= pageHeight;
+    if (rows.length > 1) {
+      const firstBodyHeight = layoutRow(rows[1], false).rowHeight;
+      this.ensureSpace(
+        Math.min(
+          headerLayout.rowHeight + firstBodyHeight,
+          headerLayout.rowHeight + minimumRowHeight
+        )
+      );
+    }
+
+    const renderSegment = (
+      cellLines: readonly (readonly string[])[],
+      offset: number,
+      count: number,
+      header: boolean
+    ): void => {
+      const rowHeight = count * lineHeight + 8;
+      const rowTop = this.y;
+      if (header) {
+        this.fillRect(
+          this.margin,
+          rowTop - rowHeight,
+          this.contentWidth,
+          rowHeight,
+          this.theme.cardBackground
+        );
+      }
+
+      let currentX = this.margin;
       cellLines.forEach((lines, columnIndex) => {
-        const x = this.margin + columnIndex * columnWidth;
+        const columnWidth = columnWidths[columnIndex];
+        const x = currentX;
         this.strokeRect(x, rowTop - rowHeight, columnWidth, rowHeight, this.theme.border);
-        lines.forEach((line, lineIndex) => {
+        lines.slice(offset, offset + count).forEach((line, lineIndex) => {
           this.drawText(
             line,
             x + 4,
             rowTop - lineHeight * (lineIndex + 1),
-            "regular",
+            header ? "bold" : "regular",
             size,
             this.theme.text
           );
         });
+        currentX += columnWidth;
       });
 
       this.y -= rowHeight;
-    });
+    };
 
-    this.space(6);
+    const renderRow = (row: readonly string[], header: boolean): void => {
+      const { cellLines, rowHeight } = layoutRow(row, header);
+      const totalLines = Math.max(...cellLines.map((lines) => lines.length), 1);
+      const newPage = () => {
+        this.addPage();
+        if (!header && canRepeatHeader) {
+          renderSegment(
+            headerLayout.cellLines,
+            0,
+            Math.max(...headerLayout.cellLines.map((lines) => lines.length), 1),
+            true
+          );
+        }
+      };
+      // Keep ordinary rows intact; oversized rows are split without dropping text.
+      const freshCapacity = pageHeight - (!header && canRepeatHeader ? headerLayout.rowHeight : 0);
+      if (rowHeight <= freshCapacity && this.y - rowHeight < this.margin) newPage();
+      let offset = 0;
+      while (offset < totalLines) {
+        let capacity = Math.floor((this.y - this.margin - 8) / lineHeight);
+        if (capacity < 1) {
+          newPage();
+          capacity = Math.floor((this.y - this.margin - 8) / lineHeight);
+        }
+        const count = Math.min(totalLines - offset, Math.max(1, capacity));
+        renderSegment(cellLines, offset, count, header);
+        offset += count;
+        if (offset < totalLines) newPage();
+      }
+    };
+
+    rows.forEach((row, index) => renderRow(row, index === 0));
+
+    // `this.y` is the bottom border of the final row, while normal text starts at a
+    // baseline. Reserve a full table line before the next block so its glyph ascent
+    // cannot cross the border (especially for bold paragraphs).
+    this.space(lineHeight);
   }
 
   keepWithNext(): void {
@@ -559,21 +1100,23 @@ class PdfLayout {
   }
 
   space(amount: number): void {
-    this.ensureSpace(amount);
     this.y -= amount;
   }
 
-  toDocument(): PdfDocument {
+  toDocument(title: string, language: string): PdfDocument {
     return {
       fonts: this.fonts,
+      images: this.images,
+      language,
       pages: this.pages,
-      size: this.size
+      size: this.size,
+      title
     };
   }
 
   private addPage(): void {
     const commands: string[] = [];
-    this.pages.push({ commands });
+    this.pages.push({ annotations: [], commands });
     this.y = this.size.height - this.margin;
 
     if (this.settings.template === "dark") {
@@ -599,11 +1142,102 @@ class PdfLayout {
     }
   ): void {
     const indent = options.indent ?? 0;
-    const lines = wrapText(text, this.contentWidth - indent, options.size, options.font);
+    const lines = this.wrapExact(text, this.contentWidth - indent, options.size, options.font);
 
     lines.forEach((line) => {
       this.line(line, this.margin + indent, options.font, options.size, options.color);
     });
+  }
+
+  private drawRichWrappedText(
+    markdown: string,
+    options: {
+      readonly color: PdfColor;
+      readonly indent?: number;
+      readonly size: number;
+    }
+  ): readonly PdfRenderedLineInk[] {
+    const indent = options.indent ?? 0;
+    const runs = parsePdfInlineRuns(markdown);
+    const lines = wrapPdfInlineRuns(runs, this.contentWidth - indent, (run) =>
+      this.measureText(run.text, run.font, options.size)
+    );
+    const renderedLines: PdfRenderedLineInk[] = [];
+
+    lines.forEach((lineRuns) => {
+      this.ensureSpace(options.size * 1.35);
+      const lineFonts =
+        lineRuns.length > 0 ? lineRuns.map((run) => run.font) : ["regular" as const];
+      const metrics = lineFonts.map((font) => this.fonts.metrics(font));
+      renderedLines.push({
+        bottom:
+          this.y + (Math.min(...metrics.map((metric) => metric.descent)) * options.size) / 1000,
+        pageIndex: this.pages.length - 1,
+        top: this.y + (Math.max(...metrics.map((metric) => metric.capHeight)) * options.size) / 1000
+      });
+      let currentX = this.margin + indent;
+
+      lineRuns.forEach((run) => {
+        const width = this.drawText(
+          run.text,
+          currentX,
+          this.y,
+          run.font,
+          options.size,
+          run.url === undefined ? options.color : this.theme.heading
+        );
+        if (run.url !== undefined && width > 0) {
+          this.currentPage.annotations.push({
+            height: options.size * 1.2,
+            url: run.url,
+            width,
+            x: currentX,
+            y: this.y - options.size * 0.2
+          });
+        }
+        currentX += width;
+      });
+      this.y -= options.size * 1.35;
+    });
+
+    return renderedLines;
+  }
+
+  private drawListItem(
+    marker: string,
+    markdown: string,
+    indent: number,
+    options: { readonly color: PdfColor; readonly size: number }
+  ): void {
+    const markerGap = marker.length > 2 ? 24 : 18;
+    this.ensureSpace(options.size * 1.35);
+    if (marker.length > 0) {
+      this.drawText(marker, this.margin + indent, this.y, "regular", options.size, options.color);
+    }
+    if (markdown.length === 0) {
+      this.y -= options.size * 1.35;
+      return;
+    }
+    this.drawRichWrappedText(markdown, {
+      color: options.color,
+      indent: indent + markerGap,
+      size: options.size
+    });
+  }
+
+  private measureText(text: string, font: PdfFont, size: number): number {
+    return this.fonts
+      .encodeTextRuns(font, text)
+      .reduce((width, run) => width + (run.width * size) / 1000, 0);
+  }
+
+  private wrapExact(
+    text: string,
+    maxWidth: number,
+    size: number,
+    font: PdfFont
+  ): readonly string[] {
+    return wrapExactText(text, maxWidth, (value) => this.measureText(value, font, size));
   }
 
   private line(text: string, x: number, font: PdfFont, size: number, color: PdfColor): void {
@@ -619,12 +1253,18 @@ class PdfLayout {
     font: PdfFont,
     size: number,
     color: PdfColor
-  ): void {
-    const encodedText = this.fonts.encodeText(font, text);
+  ): number {
+    const runs = this.fonts.encodeTextRuns(font, text);
+    let currentX = x;
 
-    this.currentPage.commands.push(
-      `BT ${colorOperator(color, "fill")} /${fontResource(font)} ${formatNumber(size)} Tf ${formatNumber(x)} ${formatNumber(y)} Td <${encodedText}> Tj ET`
-    );
+    runs.forEach((run) => {
+      this.currentPage.commands.push(
+        `BT ${colorOperator(color, "fill")} /${fontResource(run.font)} ${formatNumber(size)} Tf ${formatNumber(currentX)} ${formatNumber(y)} Td <${run.encodedText}> Tj ET`
+      );
+      currentX += (run.width * size) / 1000;
+    });
+
+    return currentX - x;
   }
 
   private fillRect(x: number, y: number, width: number, height: number, color: PdfColor): void {
@@ -633,10 +1273,103 @@ class PdfLayout {
     );
   }
 
+  private fillRoundedRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+    color: PdfColor
+  ): void {
+    this.currentPage.commands.push(
+      `q ${colorOperator(color, "fill")} ${roundedRectPath(x, y, width, height, radius)} f Q`
+    );
+  }
+
+  private fillAndStrokeRoundedRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+    fill: PdfColor,
+    stroke: PdfColor
+  ): void {
+    this.currentPage.commands.push(
+      `q ${colorOperator(fill, "fill")} ${colorOperator(stroke, "stroke")} 0.8 w ${roundedRectPath(
+        x,
+        y,
+        width,
+        height,
+        radius
+      )} B Q`
+    );
+  }
+
   private strokeRect(x: number, y: number, width: number, height: number, color: PdfColor): void {
     this.currentPage.commands.push(
       `q ${colorOperator(color, "stroke")} ${formatNumber(x)} ${formatNumber(y)} ${formatNumber(width)} ${formatNumber(height)} re S Q`
     );
+  }
+
+  private strokeLine(
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    color: PdfColor
+  ): void {
+    this.strokeLineOnPage(this.pages.length - 1, startX, startY, endX, endY, color);
+  }
+
+  private strokeLineOnPage(
+    pageIndex: number,
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    color: PdfColor
+  ): void {
+    this.pages[pageIndex].commands.push(
+      `q ${colorOperator(color, "stroke")} 0.8 w ${formatNumber(startX)} ${formatNumber(startY)} m ${formatNumber(endX)} ${formatNumber(endY)} l S Q`
+    );
+  }
+
+  private renderNestedList(list: PdfListBlock, depth: number): void {
+    const markerIndent = 12 + depth * 16;
+    const continuationIndent = markerIndent + 14;
+    const start = list.start ?? 1;
+
+    list.items.forEach((item, itemIndex) => {
+      let markerRendered = false;
+
+      item.parts.forEach((part) => {
+        if (part.kind === "list") {
+          if (!markerRendered) {
+            this.drawListItem(list.ordered ? `${start + itemIndex}.` : "•", "", markerIndent, {
+              color: this.theme.text,
+              size: this.settings.fontSizePt
+            });
+            markerRendered = true;
+          }
+
+          this.renderNestedList(part.list, depth + 1);
+          return;
+        }
+
+        const marker = list.ordered ? `${start + itemIndex}.` : "•";
+        this.drawListItem(
+          markerRendered ? "" : marker,
+          part.text,
+          markerRendered ? continuationIndent : markerIndent,
+          {
+            color: this.theme.text,
+            size: this.settings.fontSizePt
+          }
+        );
+        markerRendered = true;
+      });
+    });
   }
 
   private get currentPage(): PdfPage {
@@ -668,46 +1401,132 @@ const BOLD_FONT_OBJECTS: EmbeddedFontObjectIds = {
   toUnicode: 12,
   type0: 8
 };
-const MONO_FONT_OBJECTS: EmbeddedFontObjectIds = {
-  cidFont: 14,
-  descriptor: 15,
-  fontFile: 16,
-  toUnicode: 17,
-  type0: 13
-};
-
 function writePdf(document: PdfDocument): Uint8Array {
   const objects: PdfObject[] = [];
   const pageRefs: string[] = [];
+  const structureRefs: string[] = [];
+  const parentTreeEntries: string[] = [];
   const usesMonoFont = document.fonts.hasUsedGlyphs("mono");
+  const usesEmojiFont = document.fonts.hasUsedGlyphs("emoji");
+  const usesSymbolsFont = document.fonts.hasUsedGlyphs("symbols");
+  let nextObjectId = 13;
+  const monoFontObjects = usesMonoFont ? embeddedFontObjectIds(nextObjectId) : undefined;
+  nextObjectId += monoFontObjects === undefined ? 0 : 5;
+  const emojiFontObjects = usesEmojiFont ? embeddedFontObjectIds(nextObjectId) : undefined;
+  nextObjectId += emojiFontObjects === undefined ? 0 : 5;
+  const symbolsFontObjects = usesSymbolsFont ? embeddedFontObjectIds(nextObjectId) : undefined;
+  nextObjectId += symbolsFontObjects === undefined ? 0 : 5;
 
-  objects[0] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objects[0] = "";
   objects[1] = "";
   addEmbeddedFontObjects(objects, document.fonts.snapshot("regular"), REGULAR_FONT_OBJECTS);
   addEmbeddedFontObjects(objects, document.fonts.snapshot("bold"), BOLD_FONT_OBJECTS);
-  if (usesMonoFont) {
-    addEmbeddedFontObjects(objects, document.fonts.snapshot("mono"), MONO_FONT_OBJECTS);
+  if (monoFontObjects !== undefined) {
+    addEmbeddedFontObjects(objects, document.fonts.snapshot("mono"), monoFontObjects);
+  }
+  if (emojiFontObjects !== undefined) {
+    addEmbeddedFontObjects(objects, document.fonts.snapshot("emoji"), emojiFontObjects);
+  }
+  if (symbolsFontObjects !== undefined) {
+    addEmbeddedFontObjects(objects, document.fonts.snapshot("symbols"), symbolsFontObjects);
   }
 
-  let nextObjectId = usesMonoFont ? 18 : 13;
-  const monoFontObjectId = usesMonoFont ? MONO_FONT_OBJECTS.type0 : REGULAR_FONT_OBJECTS.type0;
+  const monoFontObjectId = monoFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
+  const emojiFontObjectId = emojiFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
+  const symbolsFontObjectId = symbolsFontObjects?.type0 ?? REGULAR_FONT_OBJECTS.type0;
+  const imageObjectIds = new Map<string, number>();
 
-  for (const page of document.pages) {
-    const content = new TextEncoder().encode(`${page.commands.join("\n")}\n`);
+  for (const image of document.images) {
+    const imageId = nextObjectId;
+    nextObjectId += 1;
+    imageObjectIds.set(image.name, imageId);
+    objects[imageId - 1] = createStreamObject(image.bytes, {
+      dictionary: [
+        "/Type /XObject",
+        "/Subtype /Image",
+        `/Width ${image.width}`,
+        `/Height ${image.height}`,
+        "/ColorSpace /DeviceRGB",
+        "/BitsPerComponent 8"
+      ],
+      filter: "DCTDecode"
+    });
+  }
+
+  const xObjects = [...imageObjectIds.entries()]
+    .map(([name, id]) => `/${name} ${id} 0 R`)
+    .join(" ");
+  const structureRootId = nextObjectId;
+  const parentTreeId = nextObjectId + 1;
+  const infoId = nextObjectId + 2;
+  nextObjectId += 3;
+
+  objects[infoId - 1] =
+    `<< /Title <FEFF${document.title
+      .split("")
+      .map((unit) => unit.charCodeAt(0).toString(16).padStart(4, "0"))
+      .join("")}> /Creator (Jelluvi) ` + `/Producer (Jelluvi local PDF renderer) >>`;
+
+  for (const [pageIndex, page] of document.pages.entries()) {
+    const annotationIds = page.annotations.flatMap((annotation) => {
+      const safeUrl = sanitizePdfLinkUrl(annotation.url);
+      if (safeUrl === undefined) {
+        return [];
+      }
+
+      const annotationId = nextObjectId;
+      nextObjectId += 1;
+      objects[annotationId - 1] =
+        `<< /Type /Annot /Subtype /Link /Rect [${formatNumber(annotation.x)} ${formatNumber(
+          annotation.y
+        )} ${formatNumber(annotation.x + annotation.width)} ${formatNumber(
+          annotation.y + annotation.height
+        )}] /Border [0 0 0] /A << /S /URI /URI (${escapePdfLiteral(safeUrl)}) >> >>`;
+      return [annotationId];
+    });
+    const content = new TextEncoder().encode(
+      `/Sect <</MCID 0>> BDC\n${page.commands.join("\n")}\nEMC\n`
+    );
     const contentId = nextObjectId;
     const pageId = nextObjectId + 1;
+    const structureElementId = nextObjectId + 2;
 
     objects[contentId - 1] = createStreamObject(content);
     objects[pageId - 1] =
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${formatNumber(document.size.width)} ${formatNumber(document.size.height)}] ` +
-      `/Resources << /Font << /F1 ${REGULAR_FONT_OBJECTS.type0} 0 R /F2 ${BOLD_FONT_OBJECTS.type0} 0 R /F3 ${monoFontObjectId} 0 R >> >> /Contents ${contentId} 0 R >>`;
+      `/Resources << /Font << /F1 ${REGULAR_FONT_OBJECTS.type0} 0 R /F2 ${BOLD_FONT_OBJECTS.type0} 0 R /F3 ${monoFontObjectId} 0 R /F4 ${emojiFontObjectId} 0 R /F5 ${symbolsFontObjectId} 0 R >> ` +
+      `${xObjects.length > 0 ? `/XObject << ${xObjects} >> ` : ""}>> ` +
+      `${annotationIds.length > 0 ? `/Annots [${annotationIds.map((id) => `${id} 0 R`).join(" ")}] ` : ""}` +
+      `/StructParents ${pageIndex} /Contents ${contentId} 0 R >>`;
+    objects[structureElementId - 1] =
+      `<< /Type /StructElem /S /Sect /P ${structureRootId} 0 R /Pg ${pageId} 0 R /K 0 >>`;
     pageRefs.push(`${pageId} 0 R`);
-    nextObjectId += 2;
+    structureRefs.push(`${structureElementId} 0 R`);
+    parentTreeEntries.push(`${pageIndex} [${structureElementId} 0 R]`);
+    nextObjectId += 3;
   }
 
   objects[1] = `<< /Type /Pages /Kids [${pageRefs.join(" ")}] /Count ${pageRefs.length} >>`;
+  objects[structureRootId - 1] =
+    `<< /Type /StructTreeRoot /K [${structureRefs.join(" ")}] ` +
+    `/ParentTree ${parentTreeId} 0 R /ParentTreeNextKey ${document.pages.length} >>`;
+  objects[parentTreeId - 1] = `<< /Nums [${parentTreeEntries.join(" ")}] >>`;
+  objects[0] =
+    `<< /Type /Catalog /Pages 2 0 R /Lang (${escapePdfLiteral(document.language)}) ` +
+    `/MarkInfo << /Marked true >> /StructTreeRoot ${structureRootId} 0 R ` +
+    `/ViewerPreferences << /DisplayDocTitle true >> >>`;
 
-  return serializePdfObjects(objects);
+  return serializePdfObjects(objects, infoId);
+}
+
+function embeddedFontObjectIds(type0: number): EmbeddedFontObjectIds {
+  return {
+    cidFont: type0 + 1,
+    descriptor: type0 + 2,
+    fontFile: type0 + 3,
+    toUnicode: type0 + 4,
+    type0
+  };
 }
 
 function addEmbeddedFontObjects(
@@ -782,10 +1601,15 @@ function unicodeCodePointHex(codePoint: number): string {
 
 function createStreamObject(
   bytes: Uint8Array,
-  options: { readonly filter?: "FlateDecode"; readonly length1?: number } = {}
+  options: {
+    readonly dictionary?: readonly string[];
+    readonly filter?: "DCTDecode" | "FlateDecode";
+    readonly length1?: number;
+  } = {}
 ): Uint8Array {
   const attributes = [
     `/Length ${bytes.length}`,
+    ...(options.dictionary ?? []),
     ...(options.length1 !== undefined ? [`/Length1 ${options.length1}`] : []),
     ...(options.filter !== undefined ? [`/Filter /${options.filter}`] : [])
   ].join(" ");
@@ -797,7 +1621,27 @@ function createStreamObject(
   );
 }
 
-function serializePdfObjects(objects: readonly PdfObject[]): Uint8Array {
+function sanitizePdfLinkUrl(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:"
+      ? url.toString()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function escapePdfLiteral(value: string): string {
+  return value
+    .replace(/\\/gu, "\\\\")
+    .replace(/\(/gu, "\\(")
+    .replace(/\)/gu, "\\)")
+    .replace(/\r/gu, "")
+    .replace(/\n/gu, "");
+}
+
+function serializePdfObjects(objects: readonly PdfObject[], infoId?: number): Uint8Array {
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [
     concatenateBytes(
@@ -829,10 +1673,56 @@ function serializePdfObjects(objects: readonly PdfObject[]): Uint8Array {
     trailer += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
   }
 
-  trailer += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  trailer +=
+    `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R ` +
+    `${infoId !== undefined ? `/Info ${infoId} 0 R ` : ""}>>\nstartxref\n${xrefOffset}\n%%EOF\n`;
   chunks.push(encoder.encode(trailer));
 
   return concatenateBytes(...chunks);
+}
+
+function inferPdfLanguage(text: string): string {
+  const cyrillicCharacters = text.match(/[\p{Script=Cyrillic}]/gu)?.length ?? 0;
+  const latinCharacters = text.match(/[A-Za-z]/gu)?.length ?? 0;
+  return cyrillicCharacters > latinCharacters ? "ru" : "en";
+}
+
+function markdownContainsSourceUrl(markdown: string, sourceUrl: string): boolean {
+  const sourceKey = canonicalSourceUrl(sourceUrl);
+  const urls = [
+    ...markdown.matchAll(/\]\((https?:\/\/[^)\s]+)\)/gu),
+    ...markdown.matchAll(/(?:^|[\s<])(https?:\/\/[^\s<>)]+)/gu)
+  ].map((match) => match[1].replace(/[.,;:!?]+$/u, ""));
+
+  return urls.some((url) => canonicalSourceUrl(url) === sourceKey);
+}
+
+function canonicalSourceUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    parsed.hostname = parsed.hostname.toLowerCase();
+
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (
+        key.toLowerCase().startsWith("utm_") ||
+        ["fbclid", "gclid", "mc_cid", "mc_eid", "ref_src"].includes(key.toLowerCase()) ||
+        (["ref", "source"].includes(key.toLowerCase()) &&
+          /^(?:chatgpt(?:\.com)?|openai)$/iu.test(parsed.searchParams.get(key) ?? ""))
+      ) {
+        parsed.searchParams.delete(key);
+      }
+    }
+
+    parsed.searchParams.sort();
+    if (parsed.pathname.length > 1) {
+      parsed.pathname = parsed.pathname.replace(/\/+$/u, "");
+    }
+
+    return parsed.toString();
+  } catch {
+    return value;
+  }
 }
 
 function concatenateBytes(...chunks: readonly Uint8Array[]): Uint8Array {
@@ -863,72 +1753,6 @@ function resolvePageSize(settings: PdfSettings): PdfPageSize {
   return settings.orientation === "landscape" ? { height: size.width, width: size.height } : size;
 }
 
-function wrapText(
-  text: string,
-  maxWidth: number,
-  fontSize: number,
-  font: PdfFont
-): readonly string[] {
-  const sanitized = normalizePdfText(text);
-  const averageWidth = font === "mono" ? fontSize * 0.6 : fontSize * 0.52;
-  const maxCharacters = Math.max(8, Math.floor(maxWidth / averageWidth));
-  const lines: string[] = [];
-
-  for (const sourceLine of sanitized.split("\n")) {
-    if (font === "mono") {
-      lines.push(...chunkText(sourceLine, maxCharacters));
-      continue;
-    }
-
-    let current = "";
-
-    for (const word of sourceLine.split(/\s+/u)) {
-      if (word.length === 0) {
-        continue;
-      }
-
-      if (word.length > maxCharacters) {
-        if (current.length > 0) {
-          lines.push(current);
-          current = "";
-        }
-
-        lines.push(...chunkText(word, maxCharacters));
-        continue;
-      }
-
-      const next = current.length === 0 ? word : `${current} ${word}`;
-
-      if (next.length > maxCharacters) {
-        lines.push(current);
-        current = word;
-      } else {
-        current = next;
-      }
-    }
-
-    if (current.length > 0) {
-      lines.push(current);
-    }
-  }
-
-  return lines.length > 0 ? lines : [""];
-}
-
-function chunkText(text: string, size: number): readonly string[] {
-  if (text.length <= size) {
-    return [text];
-  }
-
-  const chunks: string[] = [];
-
-  for (let index = 0; index < text.length; index += size) {
-    chunks.push(text.slice(index, index + size));
-  }
-
-  return chunks;
-}
-
 function parseFencedCode(
   lines: readonly string[],
   startIndex: number
@@ -947,6 +1771,31 @@ function parseFencedCode(
     language,
     nextIndex: index < lines.length ? index + 1 : index
   };
+}
+
+function parsePdfDisplayMath(
+  lines: readonly string[],
+  startIndex: number
+): { readonly nextIndex: number; readonly tex: string } {
+  const first = lines[startIndex].trim();
+  const inline = /^\$\$(.*)\$\$$/u.exec(first);
+  if (inline !== null) {
+    return { nextIndex: startIndex + 1, tex: inline[1].trim() };
+  }
+
+  const content = [first.replace(/^\$\$/u, "")];
+  let index = startIndex + 1;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (line.trim().endsWith("$$")) {
+      content.push(line.replace(/\$\$\s*$/u, ""));
+      index += 1;
+      break;
+    }
+    content.push(line);
+    index += 1;
+  }
+  return { nextIndex: index, tex: content.join(" ").trim() };
 }
 
 function isTableStart(lines: readonly string[], index: number): boolean {
@@ -986,7 +1835,47 @@ function parseTableRow(line: string): string[] {
 }
 
 function isListItem(line: string): boolean {
-  return /^\s*(?:[-*]|\d+[.)])\s+/u.test(line);
+  return parsePdfListMarker(line) !== undefined;
+}
+
+function parsePdfListMarker(line: string):
+  | {
+      readonly body: string;
+      readonly indent: number;
+      readonly ordered: boolean;
+      readonly start?: number;
+    }
+  | undefined {
+  const unordered = /^(\s*)[-*]\s+(.+)$/u.exec(line);
+
+  if (unordered !== null) {
+    return {
+      body: unordered[2],
+      indent: countPdfIndentCharacters(unordered[1]),
+      ordered: false
+    };
+  }
+
+  const ordered = /^(\s*)(\d+)[.)]\s+(.+)$/u.exec(line);
+
+  if (ordered === null) {
+    return undefined;
+  }
+
+  return {
+    body: ordered[3],
+    indent: countPdfIndentCharacters(ordered[1]),
+    ordered: true,
+    start: Number.parseInt(ordered[2], 10)
+  };
+}
+
+function countPdfIndent(line: string): number {
+  return countPdfIndentCharacters(/^(\s*)/u.exec(line)?.[1] ?? "");
+}
+
+function countPdfIndentCharacters(value: string): number {
+  return [...value].reduce((total, character) => total + (character === "\t" ? 4 : 1), 0);
 }
 
 function renderImageReference(image: ExportedImageRef): string {
@@ -1011,6 +1900,356 @@ function stripInlineMarkdown(input: string): string {
     .replace(/__([^_]+)__/gu, "$1")
     .replace(/\*([^*]+)\*/gu, "$1")
     .replace(/_([^_]+)_/gu, "$1");
+}
+
+function parsePdfInlineRuns(
+  input: string,
+  inheritedFont: PdfFont = "regular",
+  inheritedUrl?: string
+): readonly PdfInlineRun[] {
+  const runs: PdfInlineRun[] = [];
+  let cursor = 0;
+  let plainStart = 0;
+  const pushPlain = (end: number) => {
+    if (end > plainStart) {
+      runs.push({
+        font: inheritedFont,
+        text: normalizePdfText(input.slice(plainStart, end)),
+        ...(inheritedUrl !== undefined ? { url: inheritedUrl } : {})
+      });
+    }
+  };
+
+  while (cursor < input.length) {
+    if (input[cursor] === "\\" && input[cursor + 1] === "(") {
+      const close = input.indexOf("\\)", cursor + 2);
+      if (close !== -1) {
+        pushPlain(cursor);
+        runs.push({
+          font: "regular",
+          text: normalizeTexForPdf(input.slice(cursor + 2, close)),
+          ...(inheritedUrl !== undefined ? { url: inheritedUrl } : {})
+        });
+        cursor = close + 2;
+        plainStart = cursor;
+        continue;
+      }
+    }
+
+    if (input[cursor] === "`") {
+      const close = input.indexOf("`", cursor + 1);
+      if (close !== -1) {
+        pushPlain(cursor);
+        runs.push({
+          font: "mono",
+          text: input.slice(cursor + 1, close),
+          ...(inheritedUrl !== undefined ? { url: inheritedUrl } : {})
+        });
+        cursor = close + 1;
+        plainStart = cursor;
+        continue;
+      }
+    }
+
+    const strongMarker = input.startsWith("**", cursor)
+      ? "**"
+      : input.startsWith("__", cursor)
+        ? "__"
+        : undefined;
+    if (strongMarker !== undefined) {
+      const close = input.indexOf(strongMarker, cursor + 2);
+      if (close !== -1) {
+        pushPlain(cursor);
+        runs.push(...parsePdfInlineRuns(input.slice(cursor + 2, close), "bold", inheritedUrl));
+        cursor = close + 2;
+        plainStart = cursor;
+        continue;
+      }
+    }
+
+    const emphasisMarker =
+      input[cursor] === "*" && !input.startsWith("**", cursor)
+        ? "*"
+        : input[cursor] === "_" && !input.startsWith("__", cursor)
+          ? "_"
+          : undefined;
+    if (emphasisMarker !== undefined) {
+      const previous = cursor === 0 ? undefined : input[cursor - 1];
+      const next = input[cursor + 1];
+      const canOpen =
+        next !== undefined &&
+        !/\s/u.test(next) &&
+        (emphasisMarker === "*" || previous === undefined || !/[\p{L}\p{N}]/u.test(previous));
+      const close = canOpen ? input.indexOf(emphasisMarker, cursor + 1) : -1;
+      const afterClose = close === -1 ? undefined : input[close + 1];
+      const canClose =
+        close > cursor + 1 &&
+        !/\s/u.test(input[close - 1]) &&
+        (emphasisMarker === "*" || afterClose === undefined || !/[\p{L}\p{N}]/u.test(afterClose));
+
+      if (canClose) {
+        pushPlain(cursor);
+        // The bundled PDF font set has no italic face. Preserve the semantic emphasis and
+        // remove Markdown delimiters while rendering with the inherited readable face.
+        runs.push(
+          ...parsePdfInlineRuns(input.slice(cursor + 1, close), inheritedFont, inheritedUrl)
+        );
+        cursor = close + 1;
+        plainStart = cursor;
+        continue;
+      }
+    }
+
+    if (input[cursor] === "[") {
+      const link = /^\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/u.exec(input.slice(cursor));
+      if (link !== null) {
+        pushPlain(cursor);
+        runs.push(...parsePdfInlineRuns(link[1], inheritedFont, link[2]));
+        cursor += link[0].length;
+        plainStart = cursor;
+        continue;
+      }
+    }
+
+    const autoLink = /^https?:\/\/[^\s<]+/u.exec(input.slice(cursor));
+    if (autoLink !== null) {
+      pushPlain(cursor);
+      const url = autoLink[0].replace(/[),.;:!?]+$/u, "");
+      runs.push({ font: inheritedFont, text: url, url });
+      cursor += url.length;
+      plainStart = cursor;
+      continue;
+    }
+
+    cursor += 1;
+  }
+
+  pushPlain(input.length);
+  return mergePdfInlineRuns(runs);
+}
+
+function mergePdfInlineRuns(runs: readonly PdfInlineRun[]): readonly PdfInlineRun[] {
+  const merged: PdfInlineRun[] = [];
+  runs.forEach((run) => {
+    const previous = merged[merged.length - 1];
+    if (previous?.font === run.font && previous.url === run.url) {
+      merged[merged.length - 1] = { ...previous, text: previous.text + run.text };
+    } else if (run.text.length > 0) {
+      merged.push(run);
+    }
+  });
+  return merged;
+}
+
+function wrapPdfInlineRuns(
+  runs: readonly PdfInlineRun[],
+  maxWidth: number,
+  measure: (run: PdfInlineRun) => number
+): readonly (readonly PdfInlineRun[])[] {
+  const lines: PdfInlineRun[][] = [];
+  let line: PdfInlineRun[] = [];
+  let lineWidth = 0;
+  const flush = () => {
+    while (line[0]?.text.trim().length === 0) {
+      line.shift();
+    }
+    lines.push(mergePdfInlineRuns(line) as PdfInlineRun[]);
+    line = [];
+    lineWidth = 0;
+  };
+
+  for (const run of runs) {
+    for (const segment of run.text.split(/(\n|\s+)/u).filter((value) => value.length > 0)) {
+      if (segment === "\n") {
+        flush();
+        continue;
+      }
+      const piece: PdfInlineRun = { ...run, text: segment };
+      const width = measure(piece);
+      if (line.length > 0 && lineWidth + width > maxWidth && segment.trim().length > 0) {
+        flush();
+      }
+      if (width <= maxWidth || segment.trim().length === 0) {
+        if (line.length > 0 || segment.trim().length > 0) {
+          line.push(piece);
+          lineWidth += width;
+        }
+        continue;
+      }
+
+      let chunk = "";
+      for (const character of segment) {
+        const next = chunk + character;
+        if (chunk.length > 0 && measure({ ...piece, text: next }) > maxWidth) {
+          line.push({ ...piece, text: chunk });
+          flush();
+          chunk = character;
+        } else {
+          chunk = next;
+        }
+      }
+      if (chunk.length > 0) {
+        line.push({ ...piece, text: chunk });
+        lineWidth = measure({ ...piece, text: chunk });
+      }
+    }
+  }
+
+  if (line.length > 0 || lines.length === 0) {
+    flush();
+  }
+  return lines;
+}
+
+function wrapExactText(
+  input: string,
+  maxWidth: number,
+  measure: (value: string) => number
+): readonly string[] {
+  const lines: string[] = [];
+  for (const sourceLine of normalizePdfText(input).split("\n")) {
+    let current = "";
+    const appendCharacters = (value: string) => {
+      for (const character of value) {
+        if (current.length > 0 && measure(current + character) > maxWidth) {
+          lines.push(current);
+          current = character;
+        } else {
+          current += character;
+        }
+      }
+    };
+
+    for (const token of sourceLine.split(/(\s+)/u).filter(Boolean)) {
+      const next = current + token;
+      if (current.trim().length > 0 && measure(next) > maxWidth && token.trim().length > 0) {
+        lines.push(current.trimEnd());
+        current = "";
+        appendCharacters(token.trimStart());
+      } else if (measure(token) > maxWidth && token.trim().length > 0) {
+        appendCharacters(token);
+      } else {
+        current = next;
+      }
+    }
+    lines.push(current.trimEnd());
+  }
+  return lines.length > 0 ? lines : [""];
+}
+
+function normalizeTexForPdf(tex: string): string {
+  return tex
+    .replace(/\\times\b/gu, "×")
+    .replace(/\\cdot\b/gu, "·")
+    .replace(/\\leq?\b/gu, "≤")
+    .replace(/\\geq?\b/gu, "≥")
+    .replace(/\\neq\b/gu, "≠")
+    .replace(/\\pm\b/gu, "±")
+    .replace(/\\%/gu, "%")
+    .replace(/[{}]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function allocateTableColumnWidths(
+  rows: readonly (readonly string[])[],
+  contentWidth: number,
+  fontSize: number,
+  measureText: (value: string) => number = (value) => [...value].length * fontSize * 0.55
+): readonly number[] {
+  const columnCount = Math.max(...rows.map((row) => row.length), 1);
+  const baseMinimum = Math.min(Math.max(fontSize * 4.5, 42), contentWidth / columnCount);
+  const metrics = Array.from({ length: columnCount }, (_value, columnIndex) => {
+    const values = rows.map((row) => stripInlineMarkdown(row[columnIndex] ?? ""));
+    const numeric = values.slice(1).every((value) => value.length === 0 || isNumericPdfCell(value));
+    const longest = Math.max(...values.map((value) => Math.min(48, [...value].length)), 4);
+    const naturalWidth = Math.max(...values.map((value) => measureText(value)), 0) + 10;
+    const longestTokenWidth =
+      Math.max(
+        ...values.flatMap((value) =>
+          value
+            .split(/\s+/u)
+            .filter((token) => token.length > 0)
+            .map((token) => measureText(token))
+        ),
+        0
+      ) + 10;
+    const compact = numeric || longest <= 24;
+    const readableMinimum = Math.min(Math.max(baseMinimum, longestTokenWidth), contentWidth * 0.32);
+    const requiredWidth = compact
+      ? Math.min(Math.max(readableMinimum, naturalWidth), contentWidth * 0.32)
+      : readableMinimum;
+
+    return {
+      requiredWidth,
+      weight: numeric ? Math.max(10, longest * 1.15) : Math.max(8, longest)
+    };
+  });
+  const requiredTotal = metrics.reduce((total, metric) => total + metric.requiredWidth, 0);
+
+  if (requiredTotal >= contentWidth) {
+    const scale = contentWidth / requiredTotal;
+    return metrics.map((metric) => metric.requiredWidth * scale);
+  }
+
+  const remainingWidth = contentWidth - requiredTotal;
+  const totalWeight = metrics.reduce((total, metric) => total + metric.weight, 0);
+  const widths = metrics.map(
+    (metric) => metric.requiredWidth + (remainingWidth * metric.weight) / totalWeight
+  );
+  widths[widths.length - 1] += contentWidth - widths.reduce((total, width) => total + width, 0);
+  return widths;
+}
+
+function isNumericPdfCell(value: string): boolean {
+  return /^\s*(?:[$€£₽₸]\s*)?[+-]?[\d\s.,]+(?:\s*[-–—]\s*(?:[$€£₽₸]\s*)?[\d\s.,]+)?(?:\s*[%$€£₽₸])?\s*$/u.test(
+    value
+  );
+}
+
+function decodeJpegDataUri(
+  dataUri: string | undefined
+): { readonly bytes: Uint8Array; readonly height: number; readonly width: number } | undefined {
+  const match = /^data:image\/jpe?g;base64,([a-z0-9+/=\s]+)$/iu.exec(dataUri ?? "");
+  if (match === null) {
+    return undefined;
+  }
+  try {
+    const binary = globalThis.atob(match[1].replace(/\s+/gu, ""));
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const dimensions = readJpegDimensions(bytes);
+    return dimensions === undefined ? undefined : { bytes, ...dimensions };
+  } catch {
+    return undefined;
+  }
+}
+
+function readJpegDimensions(
+  bytes: Uint8Array
+): { readonly height: number; readonly width: number } | undefined {
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    return undefined;
+  }
+  let offset = 2;
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+    if (length < 2) {
+      return undefined;
+    }
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return {
+        height: (bytes[offset + 5] << 8) | bytes[offset + 6],
+        width: (bytes[offset + 7] << 8) | bytes[offset + 8]
+      };
+    }
+    offset += length + 2;
+  }
+  return undefined;
 }
 
 function normalizeSingleLine(value: string): string {
@@ -1039,11 +2278,57 @@ function fontResource(font: PdfFont): string {
     return "F3";
   }
 
+  if (font === "emoji") {
+    return "F4";
+  }
+
+  if (font === "symbols") {
+    return "F5";
+  }
+
   return "F1";
 }
 
 function colorOperator(color: PdfColor, operation: "fill" | "stroke"): string {
   return `${formatNumber(color.r)} ${formatNumber(color.g)} ${formatNumber(color.b)} ${operation === "fill" ? "rg" : "RG"}`;
+}
+
+function roundedRectPath(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): string {
+  const resolvedRadius = Math.max(0, Math.min(radius, width / 2, height / 2));
+  const controlOffset = resolvedRadius * 0.552_284_75;
+  const right = x + width;
+  const top = y + height;
+
+  return [
+    `${formatNumber(x + resolvedRadius)} ${formatNumber(y)} m`,
+    `${formatNumber(right - resolvedRadius)} ${formatNumber(y)} l`,
+    `${formatNumber(right - resolvedRadius + controlOffset)} ${formatNumber(y)} ${formatNumber(
+      right
+    )} ${formatNumber(y + resolvedRadius - controlOffset)} ${formatNumber(right)} ${formatNumber(
+      y + resolvedRadius
+    )} c`,
+    `${formatNumber(right)} ${formatNumber(top - resolvedRadius)} l`,
+    `${formatNumber(right)} ${formatNumber(top - resolvedRadius + controlOffset)} ${formatNumber(
+      right - resolvedRadius + controlOffset
+    )} ${formatNumber(top)} ${formatNumber(right - resolvedRadius)} ${formatNumber(top)} c`,
+    `${formatNumber(x + resolvedRadius)} ${formatNumber(top)} l`,
+    `${formatNumber(x + resolvedRadius - controlOffset)} ${formatNumber(top)} ${formatNumber(
+      x
+    )} ${formatNumber(top - resolvedRadius + controlOffset)} ${formatNumber(x)} ${formatNumber(
+      top - resolvedRadius
+    )} c`,
+    `${formatNumber(x)} ${formatNumber(y + resolvedRadius)} l`,
+    `${formatNumber(x)} ${formatNumber(y + resolvedRadius - controlOffset)} ${formatNumber(
+      x + resolvedRadius - controlOffset
+    )} ${formatNumber(y)} ${formatNumber(x + resolvedRadius)} ${formatNumber(y)} c`,
+    "h"
+  ].join(" ");
 }
 
 function formatNumber(value: number): string {

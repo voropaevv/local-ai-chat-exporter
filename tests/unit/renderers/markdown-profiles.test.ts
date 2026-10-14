@@ -133,8 +133,7 @@ describe("markdown profiles", () => {
       # Knowledge Base Export
 
       Source: https://chatgpt.com/c/profile-example
-      Exported: 2026-05-31T10:20:30.000Z
-      Completeness: partial
+      Exported: 31 May 2026, 10:20 UTC
 
       ## User 1
 
@@ -179,8 +178,7 @@ describe("markdown profiles", () => {
       | --- | --- |
       | Platform | ChatGPT |
       | Source | https://chatgpt.com/c/profile-example |
-      | Exported | 2026-05-31T10:20:30.000Z |
-      | Completeness | partial |
+      | Exported | 31 May 2026, 10:20 UTC |
 
       > **Warnings**
       > - Scanner did not confirm the top of the conversation.
@@ -241,7 +239,7 @@ describe("markdown profiles", () => {
       | Platform | ChatGPT |
       | Source URL | https://chatgpt.com/c/profile-example |
       | Conversation ID | profile-example |
-      | Exported At | 2026-05-31T10:20:30.000Z |
+      | Exported At | 31 May 2026, 10:20 UTC |
       | Message Count | 2 |
 
       ## Completeness Report

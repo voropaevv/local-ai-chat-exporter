@@ -14,7 +14,8 @@ describe("options app source", () => {
     expect(optionsSource).toContain('title="Export"');
     expect(optionsSource).toContain("toggleDefaultFormat");
     expect(optionsSource).toContain("Theme");
-    expect(optionsSource).toContain('title="Privacy"');
+    expect(optionsSource).toContain('title="Redaction"');
+    expect(optionsSource).not.toContain('title="Privacy"');
     expect(optionsSource).toContain("ContentSettingsControls");
     expect(optionsSource).toContain("PdfSettingsControls");
     expect(optionsSource).toContain("LocalLibraryPanel");

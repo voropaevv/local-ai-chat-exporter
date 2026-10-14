@@ -28,15 +28,21 @@ describe("popup and settings UX source", () => {
 
   test("primary popup exposes one-click actions and all supported local formats", () => {
     const quickActionSource = readSource("src/ui/components/PopupExportPanel.tsx");
+    const formatOptionsSource = readSource("src/ui/popup-format-options.ts");
     const popupSource = readSource("src/ui/PopupApp.tsx");
     const previewSource = readSource("src/ui/PreviewApp.tsx");
 
     expect(quickActionSource).toContain("Download");
     expect(quickActionSource).toContain("Copy MD");
     expect(quickActionSource).toContain("Preview");
-    expect(quickActionSource).toContain("ZIP");
+    expect(quickActionSource).toContain("Bundle as ZIP");
     expect(quickActionSource).toContain("<span>Export</span>");
-    expect(quickActionSource).toContain('["html", "docx", "csv", "png"]');
+    expect(formatOptionsSource).toContain('"html",');
+    expect(formatOptionsSource).toContain('"docx",');
+    expect(formatOptionsSource).toContain('"csv",');
+    expect(formatOptionsSource).toContain('"png"');
+    expect(quickActionSource).not.toContain("More");
+    expect(quickActionSource).not.toContain("Less");
     expect(quickActionSource).not.toContain("Open PDF");
     expect(quickActionSource).not.toContain("<BatchExport");
     expect(popupSource).not.toContain("PDF generation fell back to PDF-ready HTML");
@@ -44,6 +50,9 @@ describe("popup and settings UX source", () => {
     expect(popupSource).not.toContain("AdvancedExportOptions");
     expect(previewSource).toContain("handleOpenPdf");
     expect(previewSource).toContain("MessageSelector");
+    expect(previewSource).toContain("Include visible reasoning");
+    expect(previewSource).toContain("includeReasoning: event.currentTarget.checked");
+    expect(previewSource).toContain('sandbox="allow-popups allow-popups-to-escape-sandbox"');
     expect(previewSource).toContain("saveLocalLibraryRecord");
   });
 
@@ -75,6 +84,8 @@ describe("popup and settings UX source", () => {
     expect(styles).not.toContain(".advanced-drawer");
     expect(styles).not.toContain(".advanced-options-stack");
     expect(styles).toContain(".format-rail");
+    expect(styles).toContain(".bundle-format-row");
+    expect(styles).toContain(".zip-toggle .switch-track");
     expect(styles).toContain(".output-action-grid");
     expect(styles).toContain(".concept-action span");
     expect(styles).toContain("white-space: nowrap;");

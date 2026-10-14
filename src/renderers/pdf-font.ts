@@ -1,10 +1,12 @@
 import { unzlibSync } from "fflate";
 
+import notoEmojiRegularDataUrl from "./fonts/NotoEmoji-Regular.ttf.zlib?inline";
 import notoSansBoldDataUrl from "./fonts/NotoSans-Bold.ttf.zlib?inline";
 import notoSansRegularDataUrl from "./fonts/NotoSans-Regular.ttf.zlib?inline";
 import notoSansMonoRegularDataUrl from "./fonts/NotoSansMono-Regular.ttf.zlib?inline";
+import notoSansSymbolsRegularDataUrl from "./fonts/NotoSansSymbols-Regular.ttf.zlib?inline";
 
-export type PdfFont = "regular" | "bold" | "mono";
+export type PdfFont = "regular" | "bold" | "emoji" | "mono" | "symbols";
 
 export interface PdfFontGlyph {
   readonly glyphId: number;
@@ -24,6 +26,17 @@ export interface PdfEmbeddedFont {
   readonly glyphs: readonly PdfFontGlyph[];
 }
 
+export interface PdfEncodedTextRun {
+  readonly encodedText: string;
+  readonly font: PdfFont;
+  readonly width: number;
+}
+
+export interface PdfFontMetrics {
+  readonly capHeight: number;
+  readonly descent: number;
+}
+
 interface FontTable {
   readonly length: number;
   readonly offset: number;
@@ -37,31 +50,64 @@ interface CmapOffsets {
 export class PdfFontRegistry {
   private readonly usedGlyphs = {
     bold: new Map<number, number>(),
+    emoji: new Map<number, number>(),
     mono: new Map<number, number>(),
-    regular: new Map<number, number>()
+    regular: new Map<number, number>(),
+    symbols: new Map<number, number>()
   };
 
-  encodeText(font: PdfFont, value: string): string {
-    const program = getFontProgram(font);
-    const usedGlyphs = this.usedGlyphs[font];
-    const encoded: string[] = [];
+  encodeTextRuns(font: PdfFont, value: string): readonly PdfEncodedTextRun[] {
+    const runs: Array<{
+      encoded: string[];
+      font: PdfFont;
+      width: number;
+    }> = [];
 
     for (const character of normalizePdfText(value)) {
       const requestedCodePoint = character.codePointAt(0) ?? 0xfffd;
+      const resolvedFont = resolveFontForCodePoint(font, requestedCodePoint);
+      const program = getFontProgram(resolvedFont);
       const resolved = program.resolveGlyph(requestedCodePoint);
+      const usedGlyphs = this.usedGlyphs[resolvedFont];
 
       if (!usedGlyphs.has(resolved.glyphId)) {
         usedGlyphs.set(resolved.glyphId, resolved.unicodeCodePoint);
       }
 
-      encoded.push(resolved.glyphId.toString(16).padStart(4, "0"));
+      const encodedGlyph = resolved.glyphId.toString(16).padStart(4, "0");
+      const width = program.getScaledAdvanceWidth(resolved.glyphId);
+      const currentRun = runs[runs.length - 1];
+
+      if (currentRun?.font === resolvedFont) {
+        currentRun.encoded.push(encodedGlyph);
+        currentRun.width += width;
+      } else {
+        runs.push({
+          encoded: [encodedGlyph],
+          font: resolvedFont,
+          width
+        });
+      }
     }
 
-    return encoded.join("");
+    return runs.map((run) => ({
+      encodedText: run.encoded.join(""),
+      font: run.font,
+      width: run.width
+    }));
   }
 
   hasUsedGlyphs(font: PdfFont): boolean {
     return this.usedGlyphs[font].size > 0;
+  }
+
+  metrics(font: PdfFont): PdfFontMetrics {
+    const program = getFontProgram(font);
+
+    return {
+      capHeight: program.capHeight,
+      descent: program.descent
+    };
   }
 
   snapshot(font: PdfFont): PdfEmbeddedFont {
@@ -166,6 +212,10 @@ class TrueTypeFontProgram {
     return Math.max(1, this.scaleMetric(advanceWidth));
   }
 
+  hasGlyph(codePoint: number): boolean {
+    return this.glyphForCodePoint(codePoint) !== 0;
+  }
+
   resolveGlyph(codePoint: number): { readonly glyphId: number; readonly unicodeCodePoint: number } {
     const glyphId = this.glyphForCodePoint(codePoint);
 
@@ -208,9 +258,37 @@ class TrueTypeFontProgram {
   }
 }
 
+function resolveFontForCodePoint(font: PdfFont, codePoint: number): PdfFont {
+  if (getFontProgram(font).hasGlyph(codePoint)) {
+    return font;
+  }
+
+  // Common arrows in Noto Sans Mono sit unusually close to the baseline. Use the
+  // proportional Noto symbols face for prose so arrows align with digits and text;
+  // actual code blocks continue to use the monospaced glyphs requested by `mono`.
+  if (
+    (font === "regular" || font === "bold") &&
+    getFontProgram("symbols").hasGlyph(codePoint)
+  ) {
+    return "symbols";
+  }
+
+  if (font !== "mono" && getFontProgram("mono").hasGlyph(codePoint)) {
+    return "mono";
+  }
+
+  if (font !== "emoji" && getFontProgram("emoji").hasGlyph(codePoint)) {
+    return "emoji";
+  }
+
+  return font;
+}
+
 let regularFont: TrueTypeFontProgram | undefined;
 let boldFont: TrueTypeFontProgram | undefined;
+let emojiFont: TrueTypeFontProgram | undefined;
 let monoFont: TrueTypeFontProgram | undefined;
+let symbolsFont: TrueTypeFontProgram | undefined;
 
 function getFontProgram(font: PdfFont): TrueTypeFontProgram {
   if (font === "bold") {
@@ -224,6 +302,22 @@ function getFontProgram(font: PdfFont): TrueTypeFontProgram {
       decodeInlineFont(notoSansMonoRegularDataUrl)
     );
     return monoFont;
+  }
+
+  if (font === "emoji") {
+    emojiFont ??= new TrueTypeFontProgram(
+      "NotoEmoji-Regular",
+      decodeInlineFont(notoEmojiRegularDataUrl)
+    );
+    return emojiFont;
+  }
+
+  if (font === "symbols") {
+    symbolsFont ??= new TrueTypeFontProgram(
+      "NotoSansSymbols-Regular",
+      decodeInlineFont(notoSansSymbolsRegularDataUrl)
+    );
+    return symbolsFont;
   }
 
   regularFont ??= new TrueTypeFontProgram(

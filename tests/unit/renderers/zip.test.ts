@@ -178,6 +178,33 @@ describe("renderZip", () => {
     expect(rendered.format).toBe("zip");
     expect(rendered.filename).toBe("ZIP-Export.zip");
   });
+
+  test("export pipeline preserves embedded image assets inside ZIP bundles", () => {
+    const dataImage =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+    const [rendered] = renderConversationFiles(
+      makeConversation({
+        messages: [
+          makeMessage({
+            images: [{ alt: "Exported diagram", dataUri: dataImage, height: 1, width: 1 }],
+            markdown: `![Exported diagram](${dataImage})`,
+            text: `Embedded image ${dataImage}`
+          })
+        ]
+      }),
+      { formats: ["zip"], zipFormats: ["md", "json"] }
+    );
+
+    expect(rendered.bytes).toBeInstanceOf(Uint8Array);
+    const zip = unzipSync(rendered.bytes as Uint8Array);
+    const assetName = Object.keys(zip).find(
+      (name) => name.startsWith("assets/h") && name.endsWith(".png")
+    );
+
+    expect(assetName).toBeDefined();
+    expect(strFromU8(zip["conversation.md"])).not.toContain("data:image");
+    expect(strFromU8(zip["conversation.json"])).not.toContain("data:image");
+  });
 });
 
 describe("renderBatchZip", () => {
@@ -207,7 +234,8 @@ describe("renderBatchZip", () => {
           platform: "chatgpt",
           platformLabel: "ChatGPT",
           title: "First chat",
-          url: "https://chatgpt.com/c/one"
+          url: "https://chatgpt.com/c/one",
+          windowId: 1
         },
         warnings: []
       },
@@ -219,9 +247,23 @@ describe("renderBatchZip", () => {
           platform: "chatgpt",
           platformLabel: "ChatGPT",
           title: "Second chat",
-          url: "https://chatgpt.com/c/two"
+          url: "https://chatgpt.com/c/two",
+          windowId: 1
         },
         warnings: ["Skipped after failure"]
+      },
+      {
+        reason: "batch_cancelled",
+        status: "skipped",
+        tab: {
+          id: 3,
+          platform: "chatgpt",
+          platformLabel: "ChatGPT",
+          title: "Third chat",
+          url: "https://chatgpt.com/c/three",
+          windowId: 1
+        },
+        warnings: []
       }
     ];
 
@@ -241,6 +283,7 @@ describe("renderBatchZip", () => {
             readonly status: "success";
           }
         | { readonly error?: string; readonly status: "failed" }
+        | { readonly reason?: string; readonly status: "skipped" }
       )[];
     };
 
@@ -250,9 +293,7 @@ describe("renderBatchZip", () => {
       "jelluvi-2026-05-31/chatgpt-first-chat-1.md",
       "jelluvi-2026-05-31/manifest.json"
     ]);
-    expect(strFromU8(zip["jelluvi-2026-05-31/chatgpt-first-chat-1.md"])).toBe(
-      "# First\n"
-    );
+    expect(strFromU8(zip["jelluvi-2026-05-31/chatgpt-first-chat-1.md"])).toBe("# First\n");
     expect(manifest.results).toMatchObject([
       {
         files: [
@@ -283,6 +324,15 @@ describe("renderBatchZip", () => {
         title: "Second chat",
         url: "https://chatgpt.com/c/two",
         warnings: ["Skipped after failure"]
+      },
+      {
+        platform: "chatgpt",
+        reason: "batch_cancelled",
+        status: "skipped",
+        tabId: 3,
+        title: "Third chat",
+        url: "https://chatgpt.com/c/three",
+        warnings: []
       }
     ]);
     expect(
@@ -306,7 +356,8 @@ describe("renderBatchZip", () => {
               platform: "chatgpt",
               platformLabel: "ChatGPT",
               title: "Failed chat",
-              url: "https://chatgpt.com/c/failed"
+              url: "https://chatgpt.com/c/failed",
+              windowId: 1
             },
             warnings: []
           }

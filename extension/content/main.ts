@@ -1,26 +1,20 @@
-import { renderConversationFiles, serializeExportError } from "../../src/core/export-options";
+import { serializeExportError } from "../../src/core/export-errors";
 import { scanCurrentConversationExport } from "../../src/content/scan";
-import { copyRenderedFileToClipboard } from "../../src/utils/clipboard";
-import { downloadRenderedFiles } from "../../src/utils/download";
 import { observeConversationChanges } from "./conversation-change-observer";
+import { registerContentListenerOnce } from "./listener-registration";
 import { createContentRequestHandler, isContentRequest } from "./request-handler";
+import { waitForScanLayout } from "./scan-readiness";
 
-const LISTENER_STATE_KEY = "__logThreadContentListenerRegistered";
-
-const contentGlobal = globalThis as typeof globalThis & {
-  [LISTENER_STATE_KEY]?: boolean;
-};
+const contentGlobal = globalThis as unknown as Record<string, unknown>;
 
 const handleContentRequest = createContentRequestHandler({
-  copyRenderedFileToClipboard,
-  downloadRenderedFiles,
   getCurrentUrl: () => globalThis.location.href,
   observeConversationChanges,
-  renderConversationFiles,
-  scanCurrentConversationExport
+  scanCurrentConversationExport,
+  waitForScanReadiness: (signal) => waitForScanLayout(document, signal)
 });
 
-if (contentGlobal[LISTENER_STATE_KEY] !== true) {
+registerContentListenerOnce(contentGlobal, () => {
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
     if (!isContentRequest(message)) {
       return false;
@@ -37,6 +31,4 @@ if (contentGlobal[LISTENER_STATE_KEY] !== true) {
 
     return true;
   });
-
-  contentGlobal[LISTENER_STATE_KEY] = true;
-}
+});

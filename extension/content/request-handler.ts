@@ -1,19 +1,9 @@
 import {
-  ExportPipelineError,
-  getExportedMessageCount,
-  serializeExportError,
-  type ExportOptions,
-  type SerializedExportError
-} from "../../src/core/export-options";
-import {
   CONTENT_CANCEL_SCAN_MESSAGE,
-  CONTENT_EXPORT_MESSAGE,
   CONTENT_GET_CACHED_CONVERSATION_MESSAGE,
   CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE,
   CONTENT_SCAN_MESSAGE,
   type ContentCancelScanRequest,
-  type ContentExportRequest,
-  type ContentExportSuccess,
   type ContentGetCachedConversationRequest,
   type ContentGetScanCacheSummaryRequest,
   type ContentScanRequest,
@@ -22,13 +12,11 @@ import {
   type ScanSummary
 } from "../../src/core/messages";
 import type { ConversationExport } from "../../src/core/schema";
-import type { RenderedBytes, RenderedFile } from "../../src/renderers";
-import type { DownloadResult } from "../../src/utils/download";
+import { ExportPipelineError } from "../../src/core/export-errors";
 
 export type ContentRequest =
   | ContentScanRequest
   | ContentCancelScanRequest
-  | ContentExportRequest
   | ContentGetCachedConversationRequest
   | ContentGetScanCacheSummaryRequest;
 
@@ -36,38 +24,34 @@ export type ContentRequestResult =
   | ScanSummary
   | ScanCacheSummaryResult
   | CachedConversationResult
-  | ContentExportSuccess
   | { readonly cancelled: boolean };
 
 export interface ContentRequestHandlerDependencies {
-  readonly copyRenderedFileToClipboard: (
-    files: readonly RenderedFile<RenderedBytes>[]
-  ) => Promise<unknown>;
-  readonly downloadRenderedFiles: (
-    files: readonly RenderedFile<RenderedBytes>[]
-  ) => Promise<DownloadResult>;
   readonly getCurrentUrl: () => string;
-  readonly observeConversationChanges?: (onChange: () => void) => () => void;
-  readonly renderConversationFiles: (
-    conversation: ConversationExport,
-    options?: Partial<ExportOptions>
-  ) => readonly RenderedFile<RenderedBytes>[];
+  readonly observeConversationChanges?: (
+    onChange: () => void,
+    baselineMessages: ConversationExport["messages"]
+  ) => () => void;
   readonly scanCurrentConversationExport: (options?: {
+    readonly chatGptConversationData?: ContentScanRequest["chatGptConversationData"];
+    readonly chatGptConversationDataWarning?: string;
     readonly signal?: AbortSignal;
   }) => Promise<ConversationExport>;
+  readonly waitForScanReadiness?: (signal?: AbortSignal) => Promise<void>;
 }
 
 export function createContentRequestHandler(
   dependencies: ContentRequestHandlerDependencies
 ): (request: ContentRequest) => Promise<ContentRequestResult> {
   let activeScanController: AbortController | undefined;
+  let activeOperationId: string | undefined;
   let cachedConversation: ConversationExport | undefined;
   let cachedSourceUrl: string | undefined;
   let cachedScanId: string | undefined;
   let cachedConversationDirty = false;
   let stopObservingConversationChanges: (() => void) | undefined;
   let scanSequence = 0;
-  function getValidCachedConversation(): CachedConversationState {
+  function getValidCachedConversation(requestedScanId?: string): CachedConversationState {
     if (
       cachedConversation === undefined ||
       cachedSourceUrl === undefined ||
@@ -76,7 +60,21 @@ export function createContentRequestHandler(
       return { reason: "missing", status: "missing" };
     }
 
-    if (cachedConversationDirty || cachedSourceUrl !== dependencies.getCurrentUrl()) {
+    if (cachedSourceUrl !== dependencies.getCurrentUrl()) {
+      return { reason: "stale", status: "missing" };
+    }
+
+    if (requestedScanId !== undefined) {
+      return requestedScanId === cachedScanId
+        ? {
+            conversation: cachedConversation,
+            scanId: cachedScanId,
+            status: "ready"
+          }
+        : { reason: "missing", status: "missing" };
+    }
+
+    if (cachedConversationDirty) {
       return { reason: "stale", status: "missing" };
     }
 
@@ -87,17 +85,46 @@ export function createContentRequestHandler(
     };
   }
 
-  async function handleContentScanRequest(): Promise<ScanSummary> {
+  async function handleContentScanRequest(request: ContentScanRequest): Promise<ScanSummary> {
+    const expectedSourceUrl = request.expectedSourceUrl ?? dependencies.getCurrentUrl();
+    if (expectedSourceUrl !== dependencies.getCurrentUrl()) {
+      throw new ExportPipelineError(
+        "scan_stale",
+        "The source conversation changed. Start a new export."
+      );
+    }
     activeScanController?.abort();
     stopObservingConversationChanges?.();
     stopObservingConversationChanges = undefined;
     cachedConversationDirty = true;
-    activeScanController = new AbortController();
+    const scanController = new AbortController();
+    activeScanController = scanController;
+    activeOperationId = request.operationId;
 
     try {
+      if (
+        request.chatGptConversationData === undefined &&
+        dependencies.waitForScanReadiness !== undefined
+      ) {
+        await dependencies.waitForScanReadiness(scanController.signal);
+      }
+      assertCurrentScan();
       const conversation = await dependencies.scanCurrentConversationExport({
-        signal: activeScanController.signal
+        ...(request.chatGptConversationData !== undefined
+          ? { chatGptConversationData: request.chatGptConversationData }
+          : {}),
+        ...(request.chatGptConversationDataWarning !== undefined
+          ? { chatGptConversationDataWarning: request.chatGptConversationDataWarning }
+          : {}),
+        signal: scanController.signal
       });
+      assertCurrentScan();
+      if (conversation.sourceUrl !== expectedSourceUrl) {
+        throw new ExportPipelineError(
+          "scan_stale",
+          "The source conversation changed. Start a new export."
+        );
+      }
       const scanId = createScanId(scanSequence);
 
       cachedConversation = conversation;
@@ -107,11 +134,26 @@ export function createContentRequestHandler(
       scanSequence += 1;
       stopObservingConversationChanges = dependencies.observeConversationChanges?.(() => {
         cachedConversationDirty = true;
-      });
+      }, conversation.messages);
 
       return summarizeConversation(conversation, scanId);
     } finally {
-      activeScanController = undefined;
+      if (activeScanController === scanController) {
+        activeScanController = undefined;
+        activeOperationId = undefined;
+      }
+    }
+
+    function assertCurrentScan(): void {
+      if (scanController.signal.aborted || activeScanController !== scanController) {
+        throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+      }
+      if (dependencies.getCurrentUrl() !== expectedSourceUrl) {
+        throw new ExportPipelineError(
+          "scan_stale",
+          "The source conversation changed. Start a new export."
+        );
+      }
     }
   }
 
@@ -132,16 +174,12 @@ export function createContentRequestHandler(
   function handleGetCachedConversationRequest(
     request: ContentGetCachedConversationRequest
   ): CachedConversationResult {
-    const cached = getValidCachedConversation();
+    const cached = getValidCachedConversation(request.scanId);
 
     if (cached.status !== "ready") {
       return cached.reason === "stale"
         ? { hasConversation: false, reason: "stale" }
         : { hasConversation: false };
-    }
-
-    if (request.scanId !== undefined && request.scanId !== cached.scanId) {
-      return { hasConversation: false };
     }
 
     return {
@@ -151,62 +189,17 @@ export function createContentRequestHandler(
     };
   }
 
-  async function handleContentExportRequest(
-    request: ContentExportRequest
-  ): Promise<ContentExportSuccess> {
-    const cached = getValidCachedConversation();
-
-    if (cached.status !== "ready") {
-      if (cached.reason === "stale") {
-        throw new ExportPipelineError(
-          "scan_stale",
-          "The conversation changed. Refresh it before exporting."
-        );
-      }
-
-      throw new ExportPipelineError("scan_required", "Prepare the conversation before exporting.");
-    }
-
-    const exportedMessageCount = getExportedMessageCount(cached.conversation, request.options);
-
-    const files = dependencies.renderConversationFiles(cached.conversation, request.options);
-    let clipboardError: SerializedExportError | undefined;
-
-    if (request.copyToClipboard ?? true) {
-      try {
-        await dependencies.copyRenderedFileToClipboard(files);
-      } catch (error) {
-        clipboardError = serializeExportError(error);
-      }
-    }
-
-    const downloaded =
-      request.delivery === "anchor" && request.download !== false
-        ? (await dependencies.downloadRenderedFiles(files)).downloaded
-        : [];
-    return {
-      ...(clipboardError !== undefined ? { clipboardError } : {}),
-      downloaded,
-      exportedMessageCount,
-      ...(request.delivery === "return_files" ? { files } : {}),
-      messageCount: exportedMessageCount,
-      warnings: [
-        ...cached.conversation.completeness.warnings,
-        ...cached.conversation.completeness.platformWarnings,
-        ...(clipboardError !== undefined ? [clipboardError.message] : [])
-      ]
-    };
-  }
-
   return async function handleContentRequest(
     request: ContentRequest
   ): Promise<ContentRequestResult> {
     if (request.type === CONTENT_SCAN_MESSAGE) {
-      return handleContentScanRequest();
+      return handleContentScanRequest(request);
     }
 
     if (request.type === CONTENT_CANCEL_SCAN_MESSAGE) {
-      activeScanController?.abort();
+      if (request.operationId === undefined || request.operationId === activeOperationId) {
+        activeScanController?.abort();
+      }
       return { cancelled: true };
     }
 
@@ -214,16 +207,12 @@ export function createContentRequestHandler(
       return handleGetScanCacheSummaryRequest();
     }
 
-    if (request.type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE) {
-      return handleGetCachedConversationRequest(request);
-    }
-
-    return handleContentExportRequest(request);
+    return handleGetCachedConversationRequest(request);
   };
 }
 
 function createScanId(sequence: number): string {
-  return `scan-${Date.now().toString(36)}-${sequence.toString(36)}`;
+  return `scan-${sequence.toString(36)}-${crypto.randomUUID()}`;
 }
 
 type CachedConversationState =
@@ -255,19 +244,11 @@ export function isContentRequest(message: unknown): message is ContentRequest {
     return false;
   }
 
-  if (
+  return (
     message.type === CONTENT_SCAN_MESSAGE ||
     message.type === CONTENT_CANCEL_SCAN_MESSAGE ||
     message.type === CONTENT_GET_SCAN_CACHE_SUMMARY_MESSAGE ||
     message.type === CONTENT_GET_CACHED_CONVERSATION_MESSAGE
-  ) {
-    return true;
-  }
-
-  return (
-    message.type === CONTENT_EXPORT_MESSAGE &&
-    (message.delivery === "anchor" || message.delivery === "return_files") &&
-    isRecord(message.options)
   );
 }
 

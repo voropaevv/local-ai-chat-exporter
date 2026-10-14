@@ -2,16 +2,25 @@ import {
   collectChatGptConversation,
   type ChatGptScrollCollectorOptions
 } from "../adapters/chatgpt/scroll-collector";
+import { mergeChatGptConversationMessages } from "../adapters/chatgpt/conversation-data";
+import { extractVisibleChatGptMessages } from "../adapters/chatgpt/extract-visible";
+import { collectModernChatGptTurns } from "../adapters/chatgpt/modern-turns";
+import { collectNumberedClaudeMessages } from "../adapters/claude/collect-numbered";
+import { collectGeminiHistory } from "../adapters/gemini/collect-history";
+import { collectNotebookHistory } from "../adapters/notebooklm/collect-history";
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
 import type { PlatformAdapter } from "../adapters/types";
 import { buildCompletenessReport } from "../core/completeness";
-import { ExportPipelineError } from "../core/export-options";
+import { ExportPipelineError } from "../core/export-errors";
 import { normalizeMessagesWithStats } from "../core/normalize";
-import type { ConversationExport } from "../core/schema";
+import type { ConversationExport, ExportedMessage, CompletenessReport } from "../core/schema";
+import type { ChatGptConversationData } from "../adapters/chatgpt/conversation-data";
 
 export interface ConversationScanOptions extends Omit<ChatGptScrollCollectorOptions, "document"> {
   readonly document?: Document;
   readonly exportedAt?: string;
+  readonly chatGptConversationData?: ChatGptConversationData;
+  readonly chatGptConversationDataWarning?: string;
   readonly hostname?: string;
   readonly href?: string;
   readonly title?: string;
@@ -42,6 +51,86 @@ export async function scanCurrentConversationExport(
     );
   }
 
+  if (
+    rootDocument.title.trim() === "Just a moment..." &&
+    rootDocument.querySelector('[id^="cf-chl-widget-"], #challenge-error-text') !== null
+  ) {
+    throw new ExportPipelineError(
+      "page_not_ready",
+      "The provider verification page is still open. Return to the chat, wait for verification and the conversation to finish loading, then retry export."
+    );
+  }
+
+  if (options.signal?.aborted) {
+    throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+  }
+
+  const packCollected = (
+    messages: readonly ExportedMessage[],
+    completeness: CompletenessReport
+  ): ConversationExport => ({
+    schemaVersion: "1.0",
+    platform: adapter.id,
+    platformLabel: adapter.label,
+    sourceUrl: href,
+    title,
+    exportedAt: options.exportedAt ?? new Date().toISOString(),
+    messageCount: messages.length,
+    messages,
+    completeness
+  });
+
+  if (adapter.id === "claude") {
+    const collected = await collectNumberedClaudeMessages({
+      document: rootDocument,
+      signal: options.signal,
+      maxSteps: options.maxSteps,
+      wait: options.waitForDomSettle
+    });
+    if (collected !== null && collected.messages.length > 0) {
+      return packCollected(
+        collected.messages,
+        buildCompletenessReport({
+          messages: collected.messages,
+          duplicateCount: 0,
+          platformWarnings: [
+            "Claude capture uses its numbered message inventory; unsupported layouts retain visible-only capture."
+          ],
+          reachedTop: collected.complete,
+          reachedBottom: collected.complete,
+          scrollSteps: collected.steps,
+          virtualized: true
+        })
+      );
+    }
+  }
+
+  if (adapter.id === "gemini" || adapter.id === "notebooklm") {
+    const collect = adapter.id === "gemini" ? collectGeminiHistory : collectNotebookHistory;
+    const collected = await collect({
+      document: rootDocument,
+      signal: options.signal,
+      maxSteps: options.maxSteps,
+      wait: options.waitForDomSettle
+    });
+    if (collected !== null && collected.messages.length > 0) {
+      return packCollected(
+        collected.messages,
+        buildCompletenessReport({
+          messages: collected.messages,
+          duplicateCount: 0,
+          reachedTop: collected.reachedTop,
+          reachedBottom: collected.reachedBottom,
+          scrollSteps: collected.steps,
+          virtualized: true,
+          platformWarnings: [
+            `${adapter.label} exposes no independent message total; verify the first and last messages.`
+          ]
+        })
+      );
+    }
+  }
+
   if (adapter.id !== "chatgpt") {
     return scanVisibleAdapterConversation(adapter, {
       exportedAt: options.exportedAt,
@@ -51,8 +140,60 @@ export async function scanCurrentConversationExport(
     });
   }
 
+  if (options.signal?.aborted) {
+    throw new ExportPipelineError("scan_cancelled", "Preparation cancelled.");
+  }
+  const conversationData = options.chatGptConversationData;
+
+  if (conversationData !== undefined) {
+    const visibleMessages = normalizeMessagesWithStats(
+      extractVisibleChatGptMessages(rootDocument)
+    ).messages;
+    const messages = mergeChatGptConversationMessages(conversationData.messages, visibleMessages);
+    const completeness = buildCompletenessReport({
+      duplicateCount: 0,
+      messages,
+      platformWarnings: conversationData.warnings ?? [],
+      scanWarnings: conversationData.warnings ?? [],
+      reachedBottom: true,
+      reachedTop: true,
+      scrollSteps: 0,
+      virtualized: false
+    });
+
+    return {
+      ...packCollected(messages, completeness),
+      title: conversationData.title ?? title,
+      conversationId: getConversationId(href)
+    };
+  }
+
+  const modern = await collectModernChatGptTurns({
+    document: rootDocument,
+    signal: options.signal,
+    maxSteps: options.maxSteps,
+    wait: options.waitForDomSettle
+  });
+  if (modern !== null && modern.messages.length > 0) {
+    return packCollected(modern.messages, {
+      ...buildCompletenessReport({
+        messages: modern.messages,
+        duplicateCount: 0,
+        reachedTop: modern.reachedTop,
+        reachedBottom: modern.reachedBottom,
+        scrollSteps: modern.steps,
+        virtualized: true,
+        platformWarnings: [
+          "ChatGPT DOM traversal has no server total; verify the first and last messages."
+        ]
+      }),
+      // A stable scroll edge also occurs when the provider fails to load history.
+      status: "partial"
+    });
+  }
+
   const result = await collectChatGptConversation({
-    ...options,
+    ...withoutConversationData(options),
     document: rootDocument
   });
 
@@ -65,17 +206,32 @@ export async function scanCurrentConversationExport(
   }
 
   return {
-    schemaVersion: "1.0",
-    platform: adapter.id,
-    platformLabel: adapter.label,
-    sourceUrl: href,
-    title,
+    ...packCollected(result.messages, result.completeness),
     conversationId: getConversationId(href),
-    exportedAt: options.exportedAt ?? new Date().toISOString(),
-    messageCount: result.messages.length,
-    completeness: result.completeness,
-    messages: result.messages
+    completeness:
+      options.chatGptConversationDataWarning === undefined
+        ? result.completeness
+        : {
+            ...result.completeness,
+            status:
+              result.completeness.status === "complete"
+                ? "probably_complete"
+                : result.completeness.status,
+            platformWarnings: [
+              ...result.completeness.platformWarnings,
+              options.chatGptConversationDataWarning
+            ]
+          }
   };
+}
+
+function withoutConversationData(
+  options: ConversationScanOptions
+): Omit<ConversationScanOptions, "chatGptConversationData" | "chatGptConversationDataWarning"> {
+  const collectorOptions = { ...options };
+  delete collectorOptions.chatGptConversationData;
+  delete collectorOptions.chatGptConversationDataWarning;
+  return collectorOptions;
 }
 
 function scanVisibleAdapterConversation(
