@@ -1,6 +1,7 @@
 import type { ExportedMessage } from "../../core/schema";
 import { ExportPipelineError } from "../../core/export-errors";
 import { cleanChatGptNode } from "./clean-chatgpt-node";
+import { findHistoryScroller, isHistoryIndicatorVisible } from "../shared/history-dom";
 
 const roles = { "You said:": "user", "ChatGPT said:": "assistant" } as const;
 
@@ -37,16 +38,7 @@ export async function collectModernChatGptTurns(options: {
     root.querySelector("[data-message-author-role], [data-testid^='conversation-turn-']")
   )
     return null;
-  let scroller: Element = root.scrollingElement ?? root.documentElement;
-  for (let node = initial[0].parentElement; node; node = node.parentElement) {
-    if (
-      node.scrollHeight > node.clientHeight &&
-      /^(auto|scroll|overlay)$/.test(root.defaultView?.getComputedStyle(node).overflowY ?? "")
-    ) {
-      scroller = node;
-      break;
-    }
-  }
+  const scroller = findHistoryScroller(root, initial[0]);
   const originalTop = scroller.scrollTop;
   const reversed = root.defaultView?.getComputedStyle(scroller).flexDirection === "column-reverse";
   const end = () => (reversed ? 0 : Math.max(0, scroller.scrollHeight - scroller.clientHeight));
@@ -138,17 +130,7 @@ export async function collectModernChatGptTurns(options: {
                 element.textContent?.trim() ?? ""
               ));
           if (!loading) return false;
-          for (let node: Element | null = element; node; node = node.parentElement) {
-            const style = root.defaultView?.getComputedStyle(node);
-            if (
-              node.hasAttribute("hidden") ||
-              node.getAttribute("aria-hidden") === "true" ||
-              style?.display === "none" ||
-              style?.visibility === "hidden"
-            )
-              return false;
-          }
-          return true;
+          return isHistoryIndicatorVisible(element, true);
         });
       const fingerprint = JSON.stringify([
         ids,

@@ -1,6 +1,37 @@
 # Release QA — Jelluvi 0.2.14
 
-## Current candidate — 2026-10-12
+## Current candidate — 2026-10-14
+
+Release status: **not ready**. Candidate dist SHA-256:
+`2207d6762fc8258759e7673c255ea07624cfd00f27651268b47979cc36a2e5be`.
+
+- NotebookLM now hydrates older history before a forward collection pass. Shared
+  traversal retains the existing Gemini behavior and content-script size budget.
+  Recycled/replaced Notebook nodes, incomplete pairs, cancellation and navigation
+  cannot establish complete boundaries. Identical repeated turns remain distinct.
+- The export-entrypoint regression fails on the preceding implementation and
+  passes on this candidate. All 688 unit tests and 14 fixture E2E checks pass.
+  Lint, typecheck, provider-drift, icons, brand, preview, build and package checks
+  pass. The content script is 102,398 bytes against the unchanged 102,400 limit.
+- Native Brave cold NotebookLM initially exposed ten pairs. The first export
+  collected 48 of 50 expected messages. A separate reload and manual traversal
+  reproduced the same missing synthetic pair in the source page. All 48 available
+  messages match the export; the original 50-message acceptance remains failed,
+  and the source persistence cause is unresolved.
+- A distinct repeated cold run, after adding one independently observed control
+  pair, exports all 50 currently available messages in order, including multiline
+  Unicode and repeated answers (whitespace-normalized comparison). The source
+  stayed in the background after switching to progress. This is native evidence,
+  not a strict full-duration visibility trace or server-inventory proof.
+- NotebookLM continues to warn about the unavailable independent message total;
+  `probably_complete` is not an unconditional completeness guarantee.
+- The exact 34 runtime files were installed and independently read back on the
+  paired laptop, with the previous build retained for recovery. Browser reload
+  verification remains user-deferred. No remote desktop was used.
+- Full browser/provider coverage, the previously documented ChatGPT DOM fallback
+  and long Perplexity gates, final visual acceptance and publication remain open.
+
+## Previous candidate — 2026-10-12
 
 Release status: **not ready**. Local candidate dist SHA-256:
 `0e4571dfa8e8954fb99649dd2105e73f5de69deb969dc748247c833ce89e264c`.
@@ -449,15 +480,15 @@ The comparison used current primary product/source pages: [ChatGPT Exporter](htt
 [VMSTE](https://github.com/VMSTE/chatgpt-exporter) and [pinguarmy](https://github.com/pinguarmy/ai-chat-exporter).
 This is a feature-gap comparison, not a measured market ranking or a claim of complete parity.
 
-| Capability | Candidate disposition |
-| --- | --- |
-| Selected multi-chat export | Dedicated open-tabs/history picker, search/filter, no automatic selection, ZIP and retry failed |
-| Common local formats | MD, TXT, JSON, CSV, HTML, PDF, DOCX, bounded PNG and ZIP; no export pricing gates |
-| Selected messages and ranges | Existing Preview scopes plus Shift-click range selection |
-| Local organization and privacy | Existing opt-in Library, Markdown profiles, filename settings, redaction and local rendering |
-| Cloud/Notion sync, unattended backups, shared links | Not added implicitly; these introduce separate external-account/data-transfer authority |
+| Capability                                                          | Candidate disposition                                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Selected multi-chat export                                          | Dedicated open-tabs/history picker, search/filter, no automatic selection, ZIP and retry failed   |
+| Common local formats                                                | MD, TXT, JSON, CSV, HTML, PDF, DOCX, bounded PNG and ZIP; no export pricing gates                 |
+| Selected messages and ranges                                        | Existing Preview scopes plus Shift-click range selection                                          |
+| Local organization and privacy                                      | Existing opt-in Library, Markdown profiles, filename settings, redaction and local rendering      |
+| Cloud/Notion sync, unattended backups, shared links                 | Not added implicitly; these introduce separate external-account/data-transfer authority           |
 | Complete support for every competitor provider/media/Canvas feature | Not claimed; five existing providers retain their documented support levels and media limitations |
-| CJK, advanced formulas, complete original-file backups | Existing limitations remain explicit; no unsupported fidelity claim |
+| CJK, advanced formulas, complete original-file backups              | Existing limitations remain explicit; no unsupported fidelity claim                               |
 
 ## Historical candidate checkpoint — 2026-09-11 (0.2.13)
 

@@ -7,6 +7,7 @@ import { extractVisibleChatGptMessages } from "../adapters/chatgpt/extract-visib
 import { collectModernChatGptTurns } from "../adapters/chatgpt/modern-turns";
 import { collectNumberedClaudeMessages } from "../adapters/claude/collect-numbered";
 import { collectGeminiHistory } from "../adapters/gemini/collect-history";
+import { collectNotebookHistory } from "../adapters/notebooklm/collect-history";
 import { getBestAdapter, getSupportedPlatformLabels } from "../adapters/registry";
 import type { PlatformAdapter } from "../adapters/types";
 import { buildCompletenessReport } from "../core/completeness";
@@ -104,8 +105,9 @@ export async function scanCurrentConversationExport(
     }
   }
 
-  if (adapter.id === "gemini") {
-    const collected = await collectGeminiHistory({
+  if (adapter.id === "gemini" || adapter.id === "notebooklm") {
+    const collect = adapter.id === "gemini" ? collectGeminiHistory : collectNotebookHistory;
+    const collected = await collect({
       document: rootDocument,
       signal: options.signal,
       maxSteps: options.maxSteps,
@@ -122,7 +124,7 @@ export async function scanCurrentConversationExport(
           scrollSteps: collected.steps,
           virtualized: true,
           platformWarnings: [
-            "Gemini exposes no independent message total; verify the first and last messages."
+            `${adapter.label} exposes no independent message total; verify the first and last messages.`
           ]
         })
       );
